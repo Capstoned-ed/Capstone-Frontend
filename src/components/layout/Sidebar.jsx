@@ -1,0 +1,310 @@
+import React, { useState } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
+import { ROLES } from '../../constants/roles';
+import { ROUTES } from '../../constants/routes';
+import logoExpanded from '../../assets/RegQuest-Logo-2-cropped.png';
+import logoShrunk from '../../assets/RegQuest-Logo-3-cropped.png';
+
+export default function Sidebar({ isCollapsed, onToggle }) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  const userRole = user?.role;
+
+  // Build role-specific navigation links
+  const getNavLinks = () => {
+    if (userRole === ROLES.STUDENT) {
+      return [
+        {
+          label: 'Home',
+          to: ROUTES.STUDENT.DASHBOARD,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+          ),
+        },
+        {
+          label: 'Request Document',
+          to: ROUTES.STUDENT.NEW_REQUEST,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          ),
+        },
+        {
+          label: 'Track Status',
+          to: ROUTES.STUDENT.REQUESTS,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 4h5.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V17a2 2 0 01-2 2h-4" />
+              <circle cx="8" cy="16" r="3" strokeWidth={2} />
+              <line x1="8" y1="11" x2="8" y2="13" strokeLinecap="round" strokeWidth={2} />
+              <line x1="8" y1="19" x2="8" y2="21" strokeLinecap="round" strokeWidth={2} />
+              <line x1="3" y1="16" x2="5" y2="16" strokeLinecap="round" strokeWidth={2} />
+              <line x1="11" y1="16" x2="13" y2="16" strokeLinecap="round" strokeWidth={2} />
+            </svg>
+          ),
+        },
+      ];
+    }
+
+    if (userRole === ROLES.STAFF || userRole === ROLES.REGISTRAR) {
+      return [
+        {
+          label: 'Home',
+          to: ROUTES.STAFF.DASHBOARD,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+          ),
+        },
+        {
+          label: 'Verification',
+          to: ROUTES.STAFF.VERIFICATION,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          ),
+        },
+        {
+          label: 'Clearances',
+          to: ROUTES.STAFF.CLEARANCES,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          ),
+        },
+        {
+          label: 'Release',
+          to: ROUTES.STAFF.RELEASE,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+            </svg>
+          ),
+        },
+      ];
+    }
+
+    if (userRole === ROLES.ADMIN) {
+      return [
+        {
+          label: 'Home',
+          to: ROUTES.ADMIN.DASHBOARD,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+          ),
+        },
+        {
+          label: 'User Management',
+          to: ROUTES.ADMIN.USERS,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          ),
+        },
+        {
+          label: 'Credentials',
+          to: ROUTES.ADMIN.CREDENTIALS,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+          ),
+        },
+      ];
+    }
+
+    return [];
+  };
+
+  const navLinks = getNavLinks();
+
+  const handleLogout = async () => {
+    setShowUserMenu(false);
+    await logout();
+    navigate(ROUTES.LOGIN);
+  };
+
+  const displayName = user?.username ? user.username : 'Juan De Letchi';
+  const roleDisplay = userRole
+    ? userRole.charAt(0).toUpperCase() + userRole.slice(1)
+    : 'Student';
+
+  return (
+    <aside
+      className={`relative z-30 min-h-screen bg-[#0B0B36] text-white flex flex-col justify-between transition-all duration-300 ease-in-out select-none shadow-xl ${
+        isCollapsed ? 'w-[80px]' : 'w-[270px]'
+      }`}
+    >
+      {/* Top Header Section */}
+      <div>
+        <div className={`pt-8 pb-6 flex items-center ${isCollapsed ? 'flex-col px-2 gap-4' : 'justify-between px-6'}`}>
+          {isCollapsed ? (
+            <>
+              {/* Shrunk Sidebar Logo (RegQuest-Logo-3) */}
+              <div className="flex items-center justify-center">
+                <img
+                  src={logoShrunk}
+                  alt="RegQuest Logo"
+                  className="h-10 w-10 object-contain drop-shadow"
+                />
+              </div>
+              {/* Toggle Button */}
+              <button
+                type="button"
+                onClick={onToggle}
+                title="Expand Sidebar"
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <line x1="9" y1="4" x2="9" y2="20" />
+                </svg>
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Expanded Sidebar Logo (RegQuest-Logo-2) */}
+              <div className="flex items-center">
+                <img
+                  src={logoExpanded}
+                  alt="RegQuest Logo"
+                  className="h-9 w-auto object-contain max-w-[155px]"
+                />
+              </div>
+              {/* Toggle Button */}
+              <button
+                type="button"
+                onClick={onToggle}
+                title="Collapse Sidebar"
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <line x1="9" y1="4" x2="9" y2="20" />
+                </svg>
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Navigation Items (Middle Section) */}
+        <nav className={`mt-4 space-y-4 ${isCollapsed ? 'px-2' : 'px-4'}`}>
+          {navLinks.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              title={isCollapsed ? item.label : undefined}
+              className={({ isActive }) =>
+                `group flex items-center rounded-xl transition-all font-medium ${
+                  isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-4 text-[15px]'
+                } ${
+                  isActive
+                    ? 'bg-white/15 text-white shadow-sm'
+                    : 'text-white/80 hover:text-white hover:bg-white/10'
+                }`
+              }
+            >
+              {item.icon}
+              {!isCollapsed && <span className="truncate">{item.label}</span>}
+            </NavLink>
+          ))}
+        </nav>
+      </div>
+
+      {/* Bottom Section: Notifications & User Profile */}
+      <div className={`pb-6 space-y-4 ${isCollapsed ? 'px-2' : 'px-4'}`}>
+        {/* Notifications Item */}
+        <NavLink
+          to={ROUTES.NOTIFICATIONS}
+          title={isCollapsed ? 'Notifications' : undefined}
+          className={({ isActive }) =>
+            `group flex items-center rounded-xl transition-all font-medium ${
+              isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-4 text-[15px]'
+            } ${
+              isActive
+                ? 'bg-white/15 text-white shadow-sm'
+                : 'text-white/80 hover:text-white hover:bg-white/10'
+            }`
+          }
+        >
+          <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          </svg>
+          {!isCollapsed && <span className="truncate">Notifications</span>}
+        </NavLink>
+
+        {/* User Profile Card */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            title={isCollapsed ? `${displayName} (${roleDisplay})` : 'Account Options'}
+            className={`w-full flex items-center rounded-2xl transition-all text-left ${
+              isCollapsed
+                ? 'justify-center p-2 hover:bg-white/10'
+                : 'px-3 py-2.5 gap-3.5 hover:bg-white/10'
+            }`}
+          >
+            {/* Avatar */}
+            <div className="w-11 h-11 rounded-full bg-[#6B7280] flex items-center justify-center overflow-hidden flex-shrink-0 text-white shadow-inner">
+              <svg className="w-8 h-8 text-slate-200 mt-1" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+              </svg>
+            </div>
+
+            {/* User Info (when expanded) */}
+            {!isCollapsed && (
+              <div className="flex-1 min-w-0">
+                <p className="text-[15px] font-bold text-white truncate leading-tight">
+                  {displayName}
+                </p>
+                <p className="text-xs text-slate-300 font-normal capitalize mt-0.5">
+                  {roleDisplay}
+                </p>
+              </div>
+            )}
+          </button>
+
+          {/* User Options Popover Menu */}
+          {showUserMenu && (
+            <div
+              className={`absolute bottom-full mb-2 bg-[#14144d] border border-white/15 rounded-xl shadow-2xl p-2 z-50 animate-fadeIn ${
+                isCollapsed ? 'left-14 w-48' : 'left-2 right-2'
+              }`}
+            >
+              <div className="px-3 py-2 border-b border-white/10 mb-1">
+                <p className="text-xs text-slate-400 font-medium">Signed in as</p>
+                <p className="text-sm font-semibold text-white truncate">{displayName}</p>
+                <span className="inline-block px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded bg-amber-400/20 text-amber-300 mt-1">
+                  {roleDisplay}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-red-300 hover:text-red-200 hover:bg-red-500/15 rounded-lg transition-colors text-left"
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Sign Out
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </aside>
+  );
+}

@@ -2,29 +2,56 @@ import React from 'react';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function AdminDashboard() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 flex flex-col items-center justify-center">
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 max-w-lg w-full text-center">
-        <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center text-2xl font-bold mb-4">
-          🛡️
+    <div className="space-y-6">
+      {/* Welcome Banner */}
+      <div className="bg-gradient-to-r from-[#0B0B36] to-[#1F1F9C] rounded-2xl p-6 sm:p-8 text-white shadow-md relative overflow-hidden">
+        <div className="relative z-10">
+          <span className="inline-block px-3 py-1 bg-white/10 rounded-full text-xs font-semibold uppercase tracking-wider text-amber-300 mb-3">
+            System Administration
+          </span>
+          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+            Admin Console — Welcome, {user?.username || 'Admin'}!
+          </h2>
+          <p className="text-sm text-slate-200 mt-2 max-w-xl leading-relaxed">
+            Manage institutional users, roles, password resets, and credential template configurations.
+          </p>
         </div>
-        <h1 className="text-2xl font-bold text-slate-900 mb-1">Administrator Portal</h1>
-        <p className="text-sm text-slate-500 mb-6">
-          Logged in as: <strong className="text-slate-800">{user?.username || 'Admin'}</strong> (Role: {user?.role})
-        </p>
-        <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-600 mb-6 text-left space-y-1">
-          <div><strong>User ID:</strong> {user?.userId}</div>
-          <div><strong>Administrative Privileges:</strong> Full System Access (Chunk 12 Users, Chunk 14 Credentials)</div>
-          <div><strong>Token Status:</strong> Active &amp; Valid</div>
+      </div>
+
+      {/* Quick Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-xs flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl font-bold">
+            👥
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Registered Users</p>
+            <p className="text-2xl font-extrabold text-slate-800">4</p>
+          </div>
         </div>
-        <button
-          onClick={logout}
-          className="w-full py-2.5 px-4 rounded-lg bg-red-600 text-white font-medium text-sm hover:bg-red-700 transition-colors shadow-sm"
-        >
-          Sign Out
-        </button>
+
+        <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-xs flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl font-bold">
+            🔐
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Roles</p>
+            <p className="text-2xl font-extrabold text-slate-800">3</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-xs flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl font-bold">
+            📜
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Credentials Managed</p>
+            <p className="text-2xl font-extrabold text-slate-800">8</p>
+          </div>
+        </div>
       </div>
     </div>
   );
