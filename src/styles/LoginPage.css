@@ -1,0 +1,38 @@
+.login-viewport {
+  @apply relative min-h-screen w-full flex items-center justify-center p-4 sm:p-6 lg:p-8 overflow-hidden select-none;
+  background-image: 
+    linear-gradient(225deg, rgba(0, 0, 127, 0.75) 0%, rgba(146, 146, 195, 0.69) 73%, rgba(239, 239, 239, 0.65) 100%),
+    url('../assets/USTP.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Centered Modal Card */
+.login-card {
+  @apply relative z-10 w-full max-w-[850px] md:min-h-[510px] rounded-[26px] overflow-hidden shadow-[0_25px_60px_-15px_rgba(0,0,0,0.55)] flex flex-col md:flex-row bg-white transition-all -translate-y-2 sm:-translate-y-5;
+}
+
+/* Left Welcome Panel (with Deep Blue Linear Gradient Overlay) */
+.login-welcome-panel {
+  @apply w-full md:w-[42%] p-8 sm:p-10 md:p-14 flex flex-col justify-center relative overflow-hidden text-white;
+  background-image:
+    linear-gradient(180deg, rgba(31, 31, 156, 0.80) 0%, rgba(11, 11, 54, 0.95) 100%),
+    url('../assets/USTP.png');
+  background-size: cover;
+  background-position: left center;
+  background-repeat: no-repeat;
+}
+
+.login-welcome-title {
+  @apply text-3xl sm:text-[36px] font-extrabold tracking-wider leading-none uppercase font-sans;
+}
+
+.login-welcome-subtitle {
+  @apply mt-4 text-xs sm:text-[14px] text-white/90 font-normal leading-snug max-w-[190px];
+}
+
+/* Right Form Container */
+.login-form-panel {
+  @apply w-full md:w-[58%] bg-white p-8 sm:p-11 md:p-14 flex flex-col justify-center;
+}

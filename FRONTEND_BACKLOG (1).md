@@ -44,7 +44,7 @@ AI Prompt For Frontend Developer:
 Owner: Frontend Developer
 
 Status:
-* READY
+* COMPLETED
 
 Purpose:
 Implement an Axios-based API client for the frontend and establish a global React Context for Authentication. The API client must handle attaching JWT access tokens to outgoing requests and intercepting 401 errors to attempt token refresh using the refresh token.
@@ -100,7 +100,7 @@ None directly required.
 Required Pages:
 - 403 Forbidden Page
 - 404 Not Found Page
-- Skeleton dashboard pages for Student, Staff, Registrar, and Admin (e.g., `/student/dashboard`).
+- Skeleton dashboard pages for Student, Staff, and Admin (e.g., `/student/dashboard`).
 
 Required Components:
 - `ProtectedRoute`: Wrapper component that redirects unauthenticated users to `/login`.
