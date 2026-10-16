@@ -4,7 +4,7 @@ import LoginForm from '../../components/auth/LoginForm';
 import { useAuth } from '../../hooks/useAuth';
 import { ROLES } from '../../constants/roles';
 import { ROUTES } from '../../constants/routes';
-import '../../styles/LoginPage.css';
+import '../../styles/auth/LoginPage.css';
 
 export default function LoginPage() {
   const navigate = useNavigate();

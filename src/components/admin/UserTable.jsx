@@ -4,7 +4,7 @@ import { ROLES } from '../../constants/roles';
 import useToast from '../../hooks/useToast';
 import UserEditModal from './UserEditModal';
 import UserDeleteDialog from './UserDeleteDialog';
-import '../../styles/UserTable.css';
+import '../../styles/admin/UserTable.css';
 
 export default function UserTable({
   users: propUsers,

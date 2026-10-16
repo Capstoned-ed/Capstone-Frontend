@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ROLES } from '../../constants/roles';
 import StudentEditModal from './StudentEditModal';
-import '../../styles/StudentTableCard.css';
+import '../../styles/admin/StudentTableCard.css';
 
 export default function StudentTableCard({ users = [], onStudentUpdated }) {
   const [selectedStudent, setSelectedStudent] = useState(null);

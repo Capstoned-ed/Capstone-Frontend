@@ -1,0 +1,510 @@
+/* ==========================================================================
+   TRACK STATUS PAGE STYLES
+   Search Input, Estimated Completion Date, & Vertical Status Timeline
+   ========================================================================== */
+
+.track-page-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.track-main-title {
+  font-size: 2rem;
+  font-weight: 900;
+  color: #0b0b36;
+  margin-bottom: 0.5rem;
+}
+
+.track-sub-title {
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+/* Golden Border Search Bar */
+.track-search-wrap {
+  width: 100%;
+  max-width: 24rem;
+  margin: 1.5rem auto 2.5rem auto;
+  position: relative;
+}
+
+.track-search-input {
+  width: 100%;
+  padding: 0.875rem 2.85rem;
+  border-radius: 0.875rem;
+  border: 2px solid #fbbf24;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1e293b;
+  text-align: left;
+  outline: none;
+  box-shadow: 0 2px 4px rgba(251, 191, 36, 0.15);
+  transition: all 0.15s ease;
+}
+
+.track-search-input:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2);
+}
+
+/* Timeline Card */
+.track-timeline-card {
+  width: 100%;
+  max-width: 42rem;
+  background-color: #ffffff;
+  border-radius: 1.5rem;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
+  padding: 2.5rem 2rem;
+  margin: 0 auto;
+}
+
+.track-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #cbd5e1;
+  margin-bottom: 2rem;
+}
+
+.track-card-lbl {
+  font-size: 0.8125rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.track-card-est-title {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-align: right;
+  margin-bottom: 0.125rem;
+}
+
+.track-card-est-date {
+  font-size: 1.375rem;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+/* Timeline Nodes */
+.track-timeline {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  padding-left: 2.5rem;
+}
+
+.track-timeline::before {
+  content: '';
+  position: absolute;
+  left: 1.125rem;
+  top: 1rem;
+  bottom: 1rem;
+  width: 2px;
+  background-color: #e2e8f0;
+}
+
+.track-step-node {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  padding-bottom: 2rem;
+}
+
+.track-step-node:last-child {
+  padding-bottom: 0;
+}
+
+.track-node-icon {
+  position: absolute;
+  left: -2.5rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  background-color: #ffffff;
+  border: 2px solid #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  z-index: 10;
+}
+
+.track-node-icon.active {
+  border-color: #0b0b36;
+  background-color: #0b0b36;
+  color: #ffffff;
+}
+
+.track-node-icon.on-hold {
+  border-color: #f59e0b;
+  background-color: #fef3c7;
+  color: #b45309;
+}
+
+.track-node-content {
+  margin-left: 0.5rem;
+}
+
+.track-node-title {
+  font-size: 0.9375rem;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.track-node-desc {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 0.125rem;
+}
+
+/* ==========================================================================
+   Conditional On Hold Alert Banner
+   ========================================================================== */
+.track-on-hold-banner {
+  width: 100%;
+  max-width: 42rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  background-color: #fffbeb;
+  border: 1.5px solid #fde68a;
+  border-radius: 1.25rem;
+  padding: 1.125rem 1.25rem;
+  margin: 0 auto 1.5rem auto;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.08);
+}
+
+.track-on-hold-icon-box {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  background-color: #fef3c7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.track-on-hold-content {
+  flex: 1;
+}
+
+.track-on-hold-badge {
+  display: inline-block;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.025em;
+  background-color: #fed7aa;
+  color: #c2410c;
+  border: 1px solid #fdba74;
+}
+
+.track-on-hold-title {
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: #92400e;
+}
+
+.track-on-hold-desc {
+  font-size: 0.8125rem;
+  color: #78350f;
+  line-height: 1.45;
+  margin-top: 0.25rem;
+}
+
+/* ==========================================================================
+   Status Pills for TrackStatusPage
+   ========================================================================== */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-pill.pending {
+  background-color: #fef9c3;
+  color: #854d0e;
+}
+
+.status-pill.processing {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+.status-pill.for-release {
+  background-color: #f3e8ff;
+  color: #6b21a8;
+}
+
+.status-pill.claimed {
+  background-color: #bbf7d0;
+  color: #166534;
+}
+
+.status-pill.on-hold {
+  background-color: #ffedd5;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+/* ==========================================================================
+   Dynamic Request Selector Pills
+   ========================================================================== */
+.track-selector-wrap {
+  width: 100%;
+  max-width: 42rem;
+  margin: 0 auto 1.5rem auto;
+}
+
+.track-selector-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 0.625rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.track-selector-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.track-selector-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: 9999px;
+  background-color: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.track-selector-pill:hover {
+  border-color: #f59e0b;
+  background-color: #fffbeb;
+  color: #0b0b36;
+}
+
+.track-selector-pill.active {
+  background-color: #0b0b36;
+  border-color: #f59e0b;
+  color: #ffffff;
+  box-shadow: 0 4px 10px rgba(11, 11, 54, 0.2);
+}
+
+.track-selector-pill-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background-color: #94a3b8;
+}
+
+.track-selector-pill.active .track-selector-pill-dot {
+  background-color: #fbbf24;
+}
+
+/* ==========================================================================
+   Dynamic Search Bar with Actions
+   ========================================================================== */
+.track-search-container {
+  width: 100%;
+  max-width: 30rem;
+  margin: 1.25rem auto 1.75rem auto;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.track-search-icon {
+  position: absolute;
+  left: 1.125rem;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.track-search-clear-btn {
+  position: absolute;
+  right: 1.125rem;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.125rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.track-search-clear-btn:hover {
+  color: #1e293b;
+  background-color: #f1f5f9;
+}
+
+/* ==========================================================================
+   Dynamic Request Info Grid Inside Card
+   ========================================================================== */
+.track-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.875rem 1.25rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  padding: 1.125rem 1.25rem;
+  margin-bottom: 2rem;
+}
+
+@media (min-width: 640px) {
+  .track-info-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.track-info-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.track-info-lbl {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 0.25rem;
+}
+
+.track-info-val {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background-color: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.track-copy-btn:hover {
+  background-color: #e2e8f0;
+  color: #0f172a;
+}
+
+/* ==========================================================================
+   Empty / Not Found States
+   ========================================================================== */
+.track-empty-card {
+  width: 100%;
+  max-width: 42rem;
+  background-color: #ffffff;
+  border-radius: 1.5rem;
+  border: 1.5px dashed #cbd5e1;
+  padding: 3.5rem 2rem;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.track-empty-icon {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 9999px;
+  background-color: #f1f5f9;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.25rem auto;
+}
+
+.track-empty-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #0b0b36;
+  margin-bottom: 0.5rem;
+}
+
+.track-empty-desc {
+  font-size: 0.875rem;
+  color: #64748b;
+  max-width: 24rem;
+  margin: 0 auto 1.5rem auto;
+  line-height: 1.5;
+}
+
+.track-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #0b0b36;
+  font-size: 0.875rem;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+  transition: all 0.2s ease;
+}
+
+.track-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.35);
+}
+
+.track-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.75rem;
+  background-color: #f1f5f9;
+  color: #334155;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  border: 1px solid #cbd5e1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.track-btn-secondary:hover {
+  background-color: #e2e8f0;
+  color: #0f172a;
+}
+
+
