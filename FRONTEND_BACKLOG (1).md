@@ -173,7 +173,7 @@ AI Prompt For Frontend Developer:
 Owner: Full Stack Developer (Frontend Portion)
 
 Status:
-* READY
+* COMPLETED
 
 Purpose:
 Build the Admin/Registrar configuration interface to manage what credential documents are available for students to request, and display a Read-Only list for Students/Staff.
