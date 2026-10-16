@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { saveStoredNotification } from './notifications';
 
 export const STORAGE_KEY = 'regquest_submitted_requests';
 export const STUDENT_REQUESTS_KEY = 'student_my_requests';
@@ -27,7 +28,8 @@ export function getStoredRequests() {
 }
 
 /**
- * Save a newly submitted request into localStorage so it is instantly visible to Admin and Staff.
+ * Save a newly submitted request into localStorage so it is instantly visible to Admin and Staff,
+ * and dynamically trigger notifications for both student and staff/admin.
  */
 export function saveStoredRequest(requestItem) {
   try {
@@ -41,6 +43,41 @@ export function saveStoredRequest(requestItem) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     localStorage.setItem(STUDENT_REQUESTS_KEY, JSON.stringify(updated));
 
+    const trackingCode = requestItem.tracking_number || requestItem.trackingId || requestItem.id || 'REQ';
+    const docTitle = requestItem.document_type || requestItem.credential_type_details?.name || 'Document';
+    const studentName = requestItem.student_name || 'Student';
+
+    // 1. Notification for Student (Personal status & confirmation)
+    saveStoredNotification({
+      event_type: 'REQUEST_CREATED',
+      message: `Your credential request (${trackingCode}) for ${docTitle} has been submitted. Status: Pending.`,
+      related_object_type: 'CredentialRequest',
+      related_object_id: trackingCode,
+      target_user_id: requestItem.user || null,
+      target_username: requestItem.student_name || null,
+      target_student_id: requestItem.student_id || null,
+      target_role: 'student',
+    });
+
+    // 2. Notification for Staff (Operational queue alert)
+    saveStoredNotification({
+      event_type: 'REQUEST_CREATED',
+      message: `Incoming Request: ${studentName} (${requestItem.student_id || 'Student'}) requested ${docTitle} (${trackingCode}).`,
+      related_object_type: 'CredentialRequest',
+      related_object_id: trackingCode,
+      target_roles: ['staff', 'registrar'],
+      target_role: 'staff',
+    });
+
+    // 3. Notification for Admin (Institutional volume audit)
+    saveStoredNotification({
+      event_type: 'REQUEST_CREATED',
+      message: `System Audit: New document request (${trackingCode}) logged for ${studentName} (${docTitle}).`,
+      related_object_type: 'CredentialRequest',
+      related_object_id: trackingCode,
+      target_role: 'admin',
+    });
+
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('regquest_requests_updated', { detail: requestItem }));
     }
@@ -52,11 +89,14 @@ export function saveStoredRequest(requestItem) {
 }
 
 /**
- * Update the status, remarks, or staff assignment of a request in localStorage.
+ * Update the status, remarks, or staff assignment of a request in localStorage,
+ * and dynamically trigger notifications when status updates.
  */
 export function updateStoredRequest(idOrTracking, patch) {
   try {
     const existing = getStoredRequests();
+    let targetMatched = null;
+
     const updated = existing.map((item) => {
       const match =
         item.id === idOrTracking ||
@@ -64,12 +104,52 @@ export function updateStoredRequest(idOrTracking, patch) {
         item.tracking_number === idOrTracking ||
         item.trackingId === idOrTracking;
       if (match) {
-        return { ...item, ...patch };
+        targetMatched = { ...item, ...patch };
+        return targetMatched;
       }
       return item;
     });
+
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     localStorage.setItem(STUDENT_REQUESTS_KEY, JSON.stringify(updated));
+
+    // If status is updated, dynamically notify Student, Staff, and Admin based on their activity
+    if (patch.status && targetMatched) {
+      const trackingCode = targetMatched.tracking_number || targetMatched.trackingId || targetMatched.id;
+      const studentName = targetMatched.student_name || 'Student';
+      const docTitle = targetMatched.document_type || 'Document';
+
+      // 1. Notify Student (Direct status feedback)
+      saveStoredNotification({
+        event_type: 'REQUEST_STATUS_CHANGED',
+        message: `Status update: Your request (${trackingCode}) for ${docTitle} has moved to ${patch.status}.`,
+        related_object_type: 'CredentialRequest',
+        related_object_id: trackingCode,
+        target_user_id: targetMatched.user || null,
+        target_username: targetMatched.student_name || null,
+        target_student_id: targetMatched.student_id || null,
+        target_role: 'student',
+      });
+
+      // 2. Notify Staff (Queue state update)
+      saveStoredNotification({
+        event_type: 'REQUEST_STATUS_CHANGED',
+        message: `Processing Queue: Request ${trackingCode} (${studentName}) transitioned to ${patch.status}.`,
+        related_object_type: 'CredentialRequest',
+        related_object_id: trackingCode,
+        target_roles: ['staff', 'registrar'],
+        target_role: 'staff',
+      });
+
+      // 3. Notify Admin (Workflow audit log)
+      saveStoredNotification({
+        event_type: 'REQUEST_STATUS_CHANGED',
+        message: `Workflow Audit: Request ${trackingCode} (${studentName}) status updated to ${patch.status}.`,
+        related_object_type: 'CredentialRequest',
+        related_object_id: trackingCode,
+        target_role: 'admin',
+      });
+    }
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import useToast from '../../hooks/useToast';
 import requestsApi, { updateStoredRequest } from '../../api/requests';
+import { saveStoredNotification } from '../../api/notifications';
 
 export default function ProcessRequestModal({
   isOpen,
@@ -46,6 +47,26 @@ export default function ProcessRequestModal({
       updateStoredRequest(requestItem.id || targetId, {
         status: newStatus,
         remarks: notes || requestItem.remarks,
+      });
+
+      // Notify the student that their request status has been updated
+      saveStoredNotification({
+        event_type: 'REQUEST_STATUS_CHANGED',
+        message: `Your request (${requestItem.tracking_number || requestItem.id}) status changed to ${newStatus}.`,
+        related_object_type: 'CredentialRequest',
+        related_object_id: requestItem.tracking_number || requestItem.id,
+        target_user_id: requestItem.user || null,
+        target_username: requestItem.student_name || null,
+        target_student_id: requestItem.student_id || null,
+      });
+
+      // Notify Admin and Staff that the request status was updated
+      saveStoredNotification({
+        event_type: 'REQUEST_STATUS_CHANGED',
+        message: `Request ${requestItem.tracking_number || requestItem.id} (${requestItem.student_name || 'Student'}) status was updated to ${newStatus}.`,
+        related_object_type: 'CredentialRequest',
+        related_object_id: requestItem.tracking_number || requestItem.id,
+        target_roles: ['admin', 'staff', 'registrar'],
       });
 
       toast.success(`Request ${requestItem.tracking_number || requestItem.id} updated to ${newStatus}.`);
