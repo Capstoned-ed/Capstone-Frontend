@@ -4,7 +4,7 @@ import PredictedInsightCard from '../../components/admin/PredictedInsightCard';
 import RequestVolumeCard from '../../components/admin/RequestVolumeCard';
 import UserTable from '../../components/admin/UserTable';
 import useDashboardData from '../../hooks/useDashboardData';
-import '../../styles/AdminDashboard.css';
+import '../../styles/admin/AdminDashboard.css';
 
 export default function AdminDashboard() {
   const {

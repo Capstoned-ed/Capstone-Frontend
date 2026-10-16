@@ -1,0 +1,143 @@
+.student-footer-root {
+  width: 100%;
+  background: linear-gradient(180deg, #1F1F9B 0%, #0B0B36 100%);
+  color: #ffffff;
+  padding: 3rem 1.5rem 2rem 1.5rem;
+  margin-top: auto;
+  border-top: none;
+  box-sizing: border-box;
+}
+
+@media (min-width: 640px) {
+  .student-footer-root {
+    padding: 3.5rem 2.5rem 2rem 2.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .student-footer-root {
+    padding: 3.5rem 4rem 2rem 4rem;
+  }
+}
+
+.student-footer-inner {
+  max-width: 80rem;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.student-footer-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  padding-bottom: 2.5rem;
+}
+
+@media (min-width: 768px) {
+  .student-footer-grid {
+    grid-template-columns: 1.4fr 1fr 1fr 1.2fr;
+    gap: 2.5rem;
+  }
+}
+
+.student-footer-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.student-footer-desc {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.9);
+  max-width: 19rem;
+  font-weight: 400;
+  margin: 0;
+}
+
+.student-footer-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 1.25rem 0;
+  letter-spacing: 0.01em;
+}
+
+.student-footer-links {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.student-footer-link {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.85);
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.15s ease, transform 0.15s ease;
+  display: inline-block;
+  font-family: inherit;
+}
+
+.student-footer-link:hover {
+  color: #fbbf24;
+}
+
+.student-footer-address {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.5;
+}
+
+.student-footer-address p {
+  margin: 0;
+}
+
+.student-footer-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: flex-start;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+  padding-top: 1rem;
+}
+
+@media (min-width: 640px) {
+  .student-footer-bottom {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+.student-footer-copyright {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.student-footer-legal-links {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.student-footer-legal-link {
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.student-footer-legal-link:hover {
+  color: #ffffff;
+}

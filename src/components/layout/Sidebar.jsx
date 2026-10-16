@@ -73,17 +73,8 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           ),
         },
         {
-          label: 'Verification',
-          to: ROUTES.STAFF.VERIFICATION,
-          icon: (
-            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          ),
-        },
-        {
-          label: 'Clearances',
-          to: ROUTES.STAFF.CLEARANCES,
+          label: 'Process Requests',
+          to: ROUTES.STAFF.REQUESTS,
           icon: (
             <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -91,26 +82,41 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           ),
         },
         {
-          label: 'Release',
-          to: ROUTES.STAFF.RELEASE,
+          label: 'Calendar & Deadlines',
+          to: `${ROUTES.STAFF.DASHBOARD}#calendar`,
           icon: (
             <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              <rect x="3" y="4" width="18" height="18" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+              <line x1="16" y1="2" x2="16" y2="6" strokeLinecap="round" />
+              <line x1="8" y1="2" x2="8" y2="6" strokeLinecap="round" />
+              <line x1="3" y1="10" x2="21" y2="10" strokeLinecap="round" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01" />
             </svg>
           ),
         },
       ];
 
       if (userRole === ROLES.REGISTRAR) {
-        links.push({
-          label: 'Credential Types',
-          to: ROUTES.REGISTRAR.CREDENTIALS,
-          icon: (
-            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          ),
-        });
+        links.push(
+          {
+            label: 'Batch Staff Assignment',
+            to: ROUTES.ADMIN.REQUESTS,
+            icon: (
+              <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+            ),
+          },
+          {
+            label: 'Credential Types',
+            to: ROUTES.REGISTRAR.CREDENTIALS,
+            icon: (
+              <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            ),
+          }
+        );
       }
 
       return links;
@@ -159,20 +165,20 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           ),
         },
         {
+          label: 'Batch Staff Assignment',
+          to: ROUTES.ADMIN.REQUESTS,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+            </svg>
+          ),
+        },
+        {
           label: 'Credential Types',
           to: ROUTES.ADMIN.CREDENTIALS,
           icon: (
             <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          ),
-        },
-        {
-          label: 'Staff Roles & Team',
-          to: `${ROUTES.ADMIN.DASHBOARD}#users`,
-          icon: (
-            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
           ),
         },
