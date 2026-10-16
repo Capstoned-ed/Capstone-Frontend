@@ -4,7 +4,7 @@ import useToast from '../../hooks/useToast';
 import { ROLES } from '../../constants/roles';
 import UserTable from '../../components/admin/UserTable';
 import StudentTableCard from '../../components/admin/StudentTableCard';
-import '../../styles/UserManagementPage.css';
+import '../../styles/admin/UserManagementPage.css';
 
 export default function UserManagementPage() {
   const toast = useToast();

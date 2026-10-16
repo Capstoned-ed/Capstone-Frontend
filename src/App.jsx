@@ -22,10 +22,11 @@ import LoginPage from './pages/auth/LoginPage';
 import StudentDashboard from './pages/student/StudentDashboard';
 import RequestDocumentPage from './pages/student/RequestDocumentPage';
 import TrackStatusPage from './pages/student/TrackStatusPage';
+import StudentCredentialsPage from './pages/student/StudentCredentialsPage';
 
 // Staff & Registrar Pages
 import StaffDashboard from './pages/staff/StaffDashboard';
-import VerificationPage from './pages/staff/VerificationPage';
+import StaffRequestsPage from './pages/staff/StaffRequestsPage';
 import ClearancesPage from './pages/staff/ClearancesPage';
 import ReleasePage from './pages/staff/ReleasePage';
 
@@ -33,6 +34,7 @@ import ReleasePage from './pages/staff/ReleasePage';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import UserManagementPage from './pages/admin/UserManagementPage';
 import CredentialsPage from './pages/admin/CredentialsPage';
+import AdminRequestsPage from './pages/admin/AdminRequestsPage';
 
 // Shared Pages
 import NotificationsPage from './pages/notifications/NotificationsPage';
@@ -91,15 +93,19 @@ export default function App() {
                 <Route path={ROUTES.STUDENT.DASHBOARD} element={<StudentDashboard />} />
                 <Route path={ROUTES.STUDENT.NEW_REQUEST} element={<RequestDocumentPage />} />
                 <Route path={ROUTES.STUDENT.REQUESTS} element={<TrackStatusPage />} />
+                <Route path={ROUTES.STUDENT.CREDENTIALS} element={<StudentCredentialsPage />} />
               </Route>
 
-              {/* Staff / Registrar Role Routes (Shared Workflow) */}
-              <Route element={<RoleRoute allowedRoles={[ROLES.STAFF, ROLES.REGISTRAR]} />}>
+              {/* Staff / Registrar Role Routes (Shared Workflow, Admin also permitted) */}
+              <Route element={<RoleRoute allowedRoles={[ROLES.STAFF, ROLES.REGISTRAR, ROLES.ADMIN]} />}>
                 <Route path={ROUTES.STAFF.DASHBOARD} element={<StaffDashboard />} />
                 <Route path={ROUTES.REGISTRAR.DASHBOARD} element={<Navigate to={ROUTES.STAFF.DASHBOARD} replace />} />
-                <Route path={ROUTES.STAFF.VERIFICATION} element={<VerificationPage />} />
+                <Route path={ROUTES.STAFF.REQUESTS} element={<StaffRequestsPage />} />
+                <Route path={ROUTES.STAFF.VERIFICATION} element={<StaffRequestsPage />} />
                 <Route path={ROUTES.STAFF.CLEARANCES} element={<ClearancesPage />} />
                 <Route path={ROUTES.STAFF.RELEASE} element={<ReleasePage />} />
+                <Route path={ROUTES.REGISTRAR.CREDENTIALS} element={<CredentialsPage />} />
+                <Route path={ROUTES.REGISTRAR.PROCESSING} element={<AdminRequestsPage />} />
               </Route>
 
               {/* Admin Role Routes */}
@@ -107,6 +113,7 @@ export default function App() {
                 <Route path={ROUTES.ADMIN.DASHBOARD} element={<AdminDashboard />} />
                 <Route path={ROUTES.ADMIN.USERS} element={<UserManagementPage />} />
                 <Route path={ROUTES.ADMIN.CREDENTIALS} element={<CredentialsPage />} />
+                <Route path={ROUTES.ADMIN.REQUESTS} element={<AdminRequestsPage />} />
               </Route>
             </Route>
 

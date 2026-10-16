@@ -11,7 +11,7 @@
   user-select: none;
   background-image: 
     linear-gradient(225deg, rgba(0, 0, 127, 0.75) 0%, rgba(146, 146, 195, 0.69) 73%, rgba(239, 239, 239, 0.65) 100%),
-    url('../assets/USTP.png');
+    url('../../assets/USTP.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -70,7 +70,7 @@
   color: #ffffff;
   background-image:
     linear-gradient(180deg, rgba(31, 31, 156, 0.80) 0%, rgba(11, 11, 54, 0.95) 100%),
-    url('../assets/USTP.png');
+    url('../../assets/USTP.png');
   background-size: cover;
   background-position: left center;
   background-repeat: no-repeat;

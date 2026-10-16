@@ -1,0 +1,9 @@
+/* ==========================================================================
+   STUDENT REQUEST PAGE & TRACK STATUS COMBINED ENTRYPOINT
+   Separated into dedicated modular stylesheets:
+   - RequestDocumentPage.css: 3-step document credential request workflow
+   - TrackStatusPage.css: Tracking status search & vertical progress timeline
+   ========================================================================== */
+
+@import './RequestDocumentPage.css';
+@import './TrackStatusPage.css';

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '../components/layout/Sidebar';
+import StudentFooter from '../components/student/StudentFooter';
 import { useAuth } from '../hooks/useAuth';
 
 export default function MainLayout({ children }) {
@@ -8,6 +9,7 @@ export default function MainLayout({ children }) {
   const location = useLocation();
   const isAdminDashboard = location.pathname === '/admin/dashboard';
   const isAdminView = location.pathname.startsWith('/admin');
+  const isStudentView = location.pathname.startsWith('/student') || user?.role === 'student';
 
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem('regquest_sidebar_collapsed');
@@ -75,8 +77,8 @@ export default function MainLayout({ children }) {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-y-auto">
-        {/* Top Institutional Bar (hidden on admin views to match exact design in screenshot) */}
-        {!isAdminView && (
+        {/* Top Institutional Bar (hidden on admin and student views to match exact design in screenshot) */}
+        {!isAdminView && !isStudentView && (
           <header className="bg-white border-b border-slate-200/80 px-6 py-4 flex items-center justify-between shadow-xs sticky top-0 z-20">
             <div>
               <h1 className="text-lg font-bold text-[#0B0B36] tracking-tight">
@@ -99,9 +101,12 @@ export default function MainLayout({ children }) {
         )}
 
         {/* Page Body Viewport */}
-        <main className={`flex-1 w-full ${isAdminDashboard ? 'p-0' : 'p-6 sm:p-8 max-w-7xl mx-auto'}`}>
+        <main className={`flex-1 w-full ${isAdminDashboard ? 'p-0' : isStudentView ? 'px-4 sm:px-8 pt-4 sm:pt-6 pb-6 max-w-7xl mx-auto' : 'p-6 sm:p-8 max-w-7xl mx-auto'}`}>
           {children ? children : <Outlet />}
         </main>
+
+        {/* Student Footer spanning 100% width and flush to sides and bottom */}
+        {isStudentView && <StudentFooter />}
       </div>
     </div>
   );
