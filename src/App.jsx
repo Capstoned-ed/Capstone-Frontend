@@ -22,6 +22,7 @@ import LoginPage from './pages/auth/LoginPage';
 import StudentDashboard from './pages/student/StudentDashboard';
 import RequestDocumentPage from './pages/student/RequestDocumentPage';
 import TrackStatusPage from './pages/student/TrackStatusPage';
+import StudentCredentialsPage from './pages/student/StudentCredentialsPage';
 
 // Staff & Registrar Pages
 import StaffDashboard from './pages/staff/StaffDashboard';
@@ -91,6 +92,7 @@ export default function App() {
                 <Route path={ROUTES.STUDENT.DASHBOARD} element={<StudentDashboard />} />
                 <Route path={ROUTES.STUDENT.NEW_REQUEST} element={<RequestDocumentPage />} />
                 <Route path={ROUTES.STUDENT.REQUESTS} element={<TrackStatusPage />} />
+                <Route path={ROUTES.STUDENT.CREDENTIALS} element={<StudentCredentialsPage />} />
               </Route>
 
               {/* Staff / Registrar Role Routes (Shared Workflow) */}
@@ -100,6 +102,7 @@ export default function App() {
                 <Route path={ROUTES.STAFF.VERIFICATION} element={<VerificationPage />} />
                 <Route path={ROUTES.STAFF.CLEARANCES} element={<ClearancesPage />} />
                 <Route path={ROUTES.STAFF.RELEASE} element={<ReleasePage />} />
+                <Route path={ROUTES.REGISTRAR.CREDENTIALS} element={<CredentialsPage />} />
               </Route>
 
               {/* Admin Role Routes */}
