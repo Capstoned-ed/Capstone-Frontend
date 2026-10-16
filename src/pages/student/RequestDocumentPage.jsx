@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import requestsApi, { saveStoredRequest } from '../../api/requests';
+import { saveStoredNotification } from '../../api/notifications';
 import credentialTypesApi from '../../api/credentialTypes';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
@@ -337,6 +338,26 @@ export default function RequestDocumentPage() {
       };
 
       saveStoredRequest(requestRecord);
+
+      // Create notification for student that document request has been created
+      saveStoredNotification({
+        event_type: 'REQUEST_CREATED',
+        message: `Your credential request (${trackingCode}) for ${currentDocDetails.title} has been created.`,
+        related_object_type: 'CredentialRequest',
+        related_object_id: trackingCode,
+        target_user_id: user?.userId || user?.id || null,
+        target_username: user?.username || fullName,
+        target_student_id: studentId || null,
+      });
+
+      // Create notification for Admin and Staff
+      saveStoredNotification({
+        event_type: 'REQUEST_CREATED',
+        message: `New credential request submitted by ${fullName} (${studentId || 'Student'}): ${currentDocDetails.title} (${trackingCode}).`,
+        related_object_type: 'CredentialRequest',
+        related_object_id: trackingCode,
+        target_roles: ['admin', 'staff', 'registrar'],
+      });
 
       toast.success('Your credential request was successfully submitted!');
       setCurrentStep(3);

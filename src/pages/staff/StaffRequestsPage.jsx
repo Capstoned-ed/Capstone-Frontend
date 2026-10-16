@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import requestsApi, { updateStoredRequest } from '../../api/requests';
+import { saveStoredNotification } from '../../api/notifications';
 import usersApi from '../../api/users';
 import useToast from '../../hooks/useToast';
 import { StaffProcessModal, StaffRequestsTable, StaffSearchFilter } from '../../components/staff';
@@ -288,6 +289,26 @@ export default function StaffRequestsPage() {
       updateStoredRequest(selectedRequest.id || targetId, {
         status: newStatus,
         remarks: notes,
+      });
+
+      // Notify the student that their request status has been updated
+      saveStoredNotification({
+        event_type: 'REQUEST_STATUS_CHANGED',
+        message: `Your request (${selectedRequest.tracking_number || selectedRequest.id}) status changed to ${newStatus}.`,
+        related_object_type: 'CredentialRequest',
+        related_object_id: selectedRequest.tracking_number || selectedRequest.id,
+        target_user_id: selectedRequest.user || null,
+        target_username: selectedRequest.student_name || null,
+        target_student_id: selectedRequest.student_id || null,
+      });
+
+      // Notify Admin and Staff that the request status was updated
+      saveStoredNotification({
+        event_type: 'REQUEST_STATUS_CHANGED',
+        message: `Request ${selectedRequest.tracking_number || selectedRequest.id} (${selectedRequest.student_name || 'Student'}) status was updated to ${newStatus}.`,
+        related_object_type: 'CredentialRequest',
+        related_object_id: selectedRequest.tracking_number || selectedRequest.id,
+        target_roles: ['admin', 'staff', 'registrar'],
       });
 
       toast.success(`Request ${selectedRequest.tracking_number || selectedRequest.id} updated to ${newStatus}.`);

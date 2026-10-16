@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { NotificationProvider } from './context/NotificationContext';
 import { useAuth } from './hooks/useAuth';
 import { ROUTES } from './constants/routes';
 import { ROLES } from './constants/roles';
@@ -74,7 +75,8 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <ToastProvider>
-          <Routes>
+          <NotificationProvider>
+            <Routes>
             {/* Public Auth Routes */}
             <Route path={ROUTES.LOGIN} element={<LoginPage />} />
             <Route path={ROUTES.FORBIDDEN} element={<ForbiddenPage />} />
@@ -120,7 +122,8 @@ export default function App() {
             {/* Catch-all 404 Route */}
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
-        </ToastProvider>
+        </NotificationProvider>
+      </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

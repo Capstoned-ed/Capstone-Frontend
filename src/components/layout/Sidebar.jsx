@@ -5,9 +5,11 @@ import { ROLES } from '../../constants/roles';
 import { ROUTES } from '../../constants/routes';
 import logoExpanded from '../../assets/RegQuest-Logo-2-cropped.png';
 import logoShrunk from '../../assets/RegQuest-Logo-3-cropped.png';
+import { useNotifications } from '../../context/NotificationContext';
 
 export default function Sidebar({ isCollapsed, onToggle }) {
   const { user, logout } = useAuth();
+  const { unreadCount } = useNotifications();
   const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -265,44 +267,76 @@ export default function Sidebar({ isCollapsed, onToggle }) {
             <NavLink
               key={item.to}
               to={item.to}
-              title={isCollapsed ? item.label : undefined}
+              title={isCollapsed ? (item.badge > 0 ? `${item.label} (${item.badge} unread)` : item.label) : undefined}
               className={({ isActive }) =>
                 `group flex items-center rounded-xl transition-all font-medium ${
                   isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-4 text-[15px]'
                 } ${
                   isActive
-                    ? 'bg-white/15 text-white shadow-sm'
+                    ? 'bg-white/15 text-white shadow-sm font-semibold'
                     : 'text-white/80 hover:text-white hover:bg-white/10'
                 }`
               }
             >
-              {item.icon}
-              {!isCollapsed && <span className="truncate">{item.label}</span>}
+              <div className="relative flex items-center justify-center shrink-0">
+                {item.icon}
+                {isCollapsed && item.badge > 0 && (
+                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950 ring-2 ring-[#0B0B36]">
+                    {item.badge > 99 ? '99+' : item.badge}
+                  </span>
+                )}
+              </div>
+              {!isCollapsed && (
+                <div className="flex-1 flex items-center justify-between min-w-0">
+                  <span className="truncate">{item.label}</span>
+                  {item.badge > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950">
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </span>
+                  )}
+                </div>
+              )}
             </NavLink>
           ))}
         </nav>
       </div>
 
       {/* Bottom Section: Notifications & User Profile */}
-      <div className={`pb-6 space-y-4 ${isCollapsed ? 'px-2' : 'px-4'}`}>
-        {/* Notifications Item */}
+      <div className={`pb-6 space-y-2 ${isCollapsed ? 'px-2' : 'px-4'}`}>
+        {/* Notifications Item (positioned at the top of profile icon) */}
         <NavLink
           to={ROUTES.NOTIFICATIONS}
-          title={isCollapsed ? 'Notifications' : undefined}
+          title={isCollapsed ? (unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications') : undefined}
           className={({ isActive }) =>
             `group flex items-center rounded-xl transition-all font-medium ${
               isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-4 text-[15px]'
             } ${
               isActive
-                ? 'bg-white/15 text-white shadow-sm'
+                ? 'bg-white/15 text-white shadow-sm font-semibold'
                 : 'text-white/80 hover:text-white hover:bg-white/10'
             }`
           }
         >
-          <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-          </svg>
-          {!isCollapsed && <span className="truncate">Notifications</span>}
+          <div className="relative flex items-center justify-center shrink-0">
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            {isCollapsed && unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950 ring-2 ring-[#0B0B36]">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </div>
+          {!isCollapsed && (
+            <div className="flex-1 flex items-center justify-between min-w-0">
+              <span className="truncate">Notifications</span>
+              {unreadCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </div>
+          )}
         </NavLink>
 
         {/* User Profile Card */}
