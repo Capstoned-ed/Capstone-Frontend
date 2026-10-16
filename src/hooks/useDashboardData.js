@@ -46,35 +46,45 @@ export default function useDashboardData() {
         // -------------------------------------------------------------
         const totalRequests = requests.length;
         const statusCounts = {
-          'Clearance Verified': 0,
-          'Request Submitted': 0,
-          'Payment Verified': 0,
-          'Release Schedule Confirmed': 0,
-          'Document Preparation': 0,
-          'Ready for Pickup': 0,
-          'Claimed / Released': 0,
-          'Cancelled': 0,
+          'Pending': 0,
+          'Processing': 0,
+          'For release': 0,
+          'Claimed': 0,
+          'On Hold': 0,
         };
 
         requests.forEach((req) => {
           const s = (req.status || '').toUpperCase();
-          if (s === 'REQUIREMENTS_VERIFICATION') {
-            statusCounts['Clearance Verified']++;
-          } else if (s === 'PENDING') {
-            statusCounts['Request Submitted']++;
-          } else if (s === 'PAYMENT_VERIFIED') {
-            statusCounts['Payment Verified']++;
-          } else if (s === 'READY_FOR_RELEASE') {
-            statusCounts['Release Schedule Confirmed']++;
-            statusCounts['Ready for Pickup']++;
-          } else if (s === 'PROCESSING') {
-            statusCounts['Document Preparation']++;
-          } else if (s === 'RELEASED') {
-            statusCounts['Claimed / Released']++;
-          } else if (s === 'CANCELLED' || s === 'REJECTED' || s === 'REQUIREMENTS_REJECTED') {
-            statusCounts['Cancelled']++;
+          if (s === 'PENDING' || s === 'PENDONG' || s === 'RECEIVED' || s === 'REQUEST SUBMITTED') {
+            statusCounts['Pending']++;
+          } else if (s === 'PROCESSING' || s === 'DOCUMENT_PREPARATION' || s === 'DOCUMENT PREPARATION') {
+            statusCounts['Processing']++;
+          } else if (
+            s === 'READY_FOR_RELEASE' ||
+            s === 'READY FOR RELEASE' ||
+            s === 'READY_FOR_PICKUP' ||
+            s === 'READY FOR PICKUP' ||
+            s === 'FOR_RELEASE' ||
+            s === 'FOR RELEASE'
+          ) {
+            statusCounts['For release']++;
+          } else if (s === 'RELEASED' || s === 'CLAIMED' || s === 'CLAIMED / RELEASED') {
+            statusCounts['Claimed']++;
+          } else if (
+            s === 'REQUIREMENTS_VERIFICATION' ||
+            s === 'CLEARANCE_VERIFIED' ||
+            s === 'PAYMENT_PENDING' ||
+            s === 'PAYMENT_VERIFIED' ||
+            s === 'ON HOLD' ||
+            s === 'ON_HOLD' ||
+            s === 'HOLD' ||
+            s === 'CANCELLED' ||
+            s === 'REJECTED' ||
+            s === 'REQUIREMENTS_REJECTED'
+          ) {
+            statusCounts['On Hold']++;
           } else {
-            statusCounts['Request Submitted']++;
+            statusCounts['Pending']++;
           }
         });
 

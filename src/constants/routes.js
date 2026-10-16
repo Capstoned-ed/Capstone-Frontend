@@ -9,6 +9,7 @@ export const ROUTES = {
   },
   STAFF: {
     DASHBOARD: '/staff/dashboard',
+    REQUESTS: '/staff/requests',
     VERIFICATION: '/staff/verification',
     CLEARANCES: '/staff/clearances',
     PAYMENTS: '/staff/payments',
@@ -18,11 +19,13 @@ export const ROUTES = {
     DASHBOARD: '/registrar/dashboard',
     PROCESSING: '/registrar/processing',
     CREDENTIALS: '/registrar/credentials',
+    REQUESTS: '/admin/requests',
   },
   ADMIN: {
     DASHBOARD: '/admin/dashboard',
     USERS: '/admin/users',
     CREDENTIALS: '/admin/credentials',
+    REQUESTS: '/admin/requests',
   },
   NOTIFICATIONS: '/notifications',
   FORBIDDEN: '/403',
