@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '../components/layout/Sidebar';
 import { useAuth } from '../hooks/useAuth';
 
 export default function MainLayout({ children }) {
   const { user } = useAuth();
+  const location = useLocation();
+  const isAdminDashboard = location.pathname === '/admin/dashboard';
+  const isAdminView = location.pathname.startsWith('/admin');
+
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem('regquest_sidebar_collapsed');
-    return saved !== null ? JSON.parse(saved) : false;
+    if (saved !== null) return JSON.parse(saved);
+    return window.location.pathname.startsWith('/admin');
   });
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -70,29 +75,31 @@ export default function MainLayout({ children }) {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-y-auto">
-        {/* Top Institutional Bar */}
-        <header className="bg-white border-b border-slate-200/80 px-6 py-4 flex items-center justify-between shadow-xs sticky top-0 z-20">
-          <div>
-            <h1 className="text-lg font-bold text-[#0B0B36] tracking-tight">
-              RegQuest Institutional Portal
-            </h1>
-            <p className="text-xs text-slate-500 hidden sm:block">
-              University of Science and Technology of Southern Philippines
-            </p>
-          </div>
-
-          <div className="flex items-center space-x-3">
-            <div className="px-3 py-1 bg-amber-50 border border-amber-200/80 rounded-full flex items-center space-x-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-xs font-semibold text-amber-900 capitalize">
-                {user?.role ? `${user.role} Portal` : 'Active'}
-              </span>
+        {/* Top Institutional Bar (hidden on admin views to match exact design in screenshot) */}
+        {!isAdminView && (
+          <header className="bg-white border-b border-slate-200/80 px-6 py-4 flex items-center justify-between shadow-xs sticky top-0 z-20">
+            <div>
+              <h1 className="text-lg font-bold text-[#0B0B36] tracking-tight">
+                RegQuest Institutional Portal
+              </h1>
+              <p className="text-xs text-slate-500 hidden sm:block">
+                University of Science and Technology of Southern Philippines
+              </p>
             </div>
-          </div>
-        </header>
+
+            <div className="flex items-center space-x-3">
+              <div className="px-3 py-1 bg-amber-50 border border-amber-200/80 rounded-full flex items-center space-x-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span className="text-xs font-semibold text-amber-900 capitalize">
+                  {user?.role ? `${user.role} Portal` : 'Active'}
+                </span>
+              </div>
+            </div>
+          </header>
+        )}
 
         {/* Page Body Viewport */}
-        <main className="flex-1 p-6 sm:p-8 max-w-7xl w-full mx-auto">
+        <main className={`flex-1 w-full ${isAdminDashboard ? 'p-0' : 'p-6 sm:p-8 max-w-7xl mx-auto'}`}>
           {children ? children : <Outlet />}
         </main>
       </div>

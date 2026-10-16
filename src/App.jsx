@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
 import { useAuth } from './hooks/useAuth';
 import { ROUTES } from './constants/routes';
 import { ROLES } from './constants/roles';
@@ -70,47 +71,49 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          {/* Public Auth Routes */}
-          <Route path={ROUTES.LOGIN} element={<LoginPage />} />
-          <Route path={ROUTES.FORBIDDEN} element={<ForbiddenPage />} />
-          <Route path={ROUTES.NOT_FOUND} element={<NotFoundPage />} />
+        <ToastProvider>
+          <Routes>
+            {/* Public Auth Routes */}
+            <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+            <Route path={ROUTES.FORBIDDEN} element={<ForbiddenPage />} />
+            <Route path={ROUTES.NOT_FOUND} element={<NotFoundPage />} />
 
-          {/* Root Role Dispatcher */}
-          <Route path="/" element={<RootRedirect />} />
+            {/* Root Role Dispatcher */}
+            <Route path="/" element={<RootRedirect />} />
 
-          {/* Protected Routes inside Shared MainLayout */}
-          <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-            {/* Shared Authenticated Routes */}
-            <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
+            {/* Protected Routes inside Shared MainLayout */}
+            <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+              {/* Shared Authenticated Routes */}
+              <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
 
-            {/* Student Role Routes */}
-            <Route element={<RoleRoute allowedRoles={[ROLES.STUDENT]} />}>
-              <Route path={ROUTES.STUDENT.DASHBOARD} element={<StudentDashboard />} />
-              <Route path={ROUTES.STUDENT.NEW_REQUEST} element={<RequestDocumentPage />} />
-              <Route path={ROUTES.STUDENT.REQUESTS} element={<TrackStatusPage />} />
+              {/* Student Role Routes */}
+              <Route element={<RoleRoute allowedRoles={[ROLES.STUDENT]} />}>
+                <Route path={ROUTES.STUDENT.DASHBOARD} element={<StudentDashboard />} />
+                <Route path={ROUTES.STUDENT.NEW_REQUEST} element={<RequestDocumentPage />} />
+                <Route path={ROUTES.STUDENT.REQUESTS} element={<TrackStatusPage />} />
+              </Route>
+
+              {/* Staff / Registrar Role Routes (Shared Workflow) */}
+              <Route element={<RoleRoute allowedRoles={[ROLES.STAFF, ROLES.REGISTRAR]} />}>
+                <Route path={ROUTES.STAFF.DASHBOARD} element={<StaffDashboard />} />
+                <Route path={ROUTES.REGISTRAR.DASHBOARD} element={<Navigate to={ROUTES.STAFF.DASHBOARD} replace />} />
+                <Route path={ROUTES.STAFF.VERIFICATION} element={<VerificationPage />} />
+                <Route path={ROUTES.STAFF.CLEARANCES} element={<ClearancesPage />} />
+                <Route path={ROUTES.STAFF.RELEASE} element={<ReleasePage />} />
+              </Route>
+
+              {/* Admin Role Routes */}
+              <Route element={<RoleRoute allowedRoles={[ROLES.ADMIN]} />}>
+                <Route path={ROUTES.ADMIN.DASHBOARD} element={<AdminDashboard />} />
+                <Route path={ROUTES.ADMIN.USERS} element={<UserManagementPage />} />
+                <Route path={ROUTES.ADMIN.CREDENTIALS} element={<CredentialsPage />} />
+              </Route>
             </Route>
 
-            {/* Staff / Registrar Role Routes (Shared Workflow) */}
-            <Route element={<RoleRoute allowedRoles={[ROLES.STAFF, ROLES.REGISTRAR]} />}>
-              <Route path={ROUTES.STAFF.DASHBOARD} element={<StaffDashboard />} />
-              <Route path={ROUTES.REGISTRAR.DASHBOARD} element={<Navigate to={ROUTES.STAFF.DASHBOARD} replace />} />
-              <Route path={ROUTES.STAFF.VERIFICATION} element={<VerificationPage />} />
-              <Route path={ROUTES.STAFF.CLEARANCES} element={<ClearancesPage />} />
-              <Route path={ROUTES.STAFF.RELEASE} element={<ReleasePage />} />
-            </Route>
-
-            {/* Admin Role Routes */}
-            <Route element={<RoleRoute allowedRoles={[ROLES.ADMIN]} />}>
-              <Route path={ROUTES.ADMIN.DASHBOARD} element={<AdminDashboard />} />
-              <Route path={ROUTES.ADMIN.USERS} element={<UserManagementPage />} />
-              <Route path={ROUTES.ADMIN.CREDENTIALS} element={<CredentialsPage />} />
-            </Route>
-          </Route>
-
-          {/* Catch-all 404 Route */}
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+            {/* Catch-all 404 Route */}
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

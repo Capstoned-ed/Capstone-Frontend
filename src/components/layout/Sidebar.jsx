@@ -105,20 +105,42 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           ),
         },
         {
-          label: 'User Management',
-          to: ROUTES.ADMIN.USERS,
+          label: 'Analytics & Trends',
+          to: `${ROUTES.ADMIN.DASHBOARD}#reports`,
           icon: (
             <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
             </svg>
           ),
         },
         {
-          label: 'Credentials',
-          to: ROUTES.ADMIN.CREDENTIALS,
+          label: 'Schedule & Calendar',
+          to: `${ROUTES.ADMIN.DASHBOARD}#volume`,
           icon: (
             <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              <rect x="3" y="4" width="18" height="18" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+              <line x1="16" y1="2" x2="16" y2="6" strokeLinecap="round" />
+              <line x1="8" y1="2" x2="8" y2="6" strokeLinecap="round" />
+              <line x1="3" y1="10" x2="21" y2="10" strokeLinecap="round" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01" />
+            </svg>
+          ),
+        },
+        {
+          label: 'User Management',
+          to: ROUTES.ADMIN.USERS,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+          ),
+        },
+        {
+          label: 'Staff Roles & Team',
+          to: `${ROUTES.ADMIN.DASHBOARD}#users`,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
           ),
         },
