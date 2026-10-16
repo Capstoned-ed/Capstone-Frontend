@@ -86,7 +86,7 @@ AI Prompt For Frontend Developer:
 Owner: Frontend Developer
 
 Status:
-* READY
+* Completed
 
 Purpose:
 Create the foundational application layout (e.g., Sidebar, Navbar) and implement routing security to ensure users can only access views permitted by their role.
@@ -128,7 +128,7 @@ AI Prompt For Frontend Developer:
 Owner: Full Stack Developer (Frontend Portion)
 
 Status:
-* READY
+* COMPLETED
 
 Purpose:
 Build the Admin dashboard interface for provisioning and managing institutional users (Students, Staff, Registrars, Admins) consuming the `/api/users/` backend CRUD endpoints.
