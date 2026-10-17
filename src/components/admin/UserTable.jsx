@@ -113,6 +113,9 @@ export default function UserTable({
 
   // Format user display name from actual backend record
   const formatDisplayName = (user) => {
+    if (user.full_name) {
+      return user.full_name;
+    }
     if (user.first_name && user.last_name) {
       return `${user.first_name} ${user.last_name}`;
     }

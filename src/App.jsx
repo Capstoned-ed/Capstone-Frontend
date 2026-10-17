@@ -28,7 +28,6 @@ import StudentCredentialsPage from './pages/student/StudentCredentialsPage';
 // Staff & Registrar Pages
 import StaffDashboard from './pages/staff/StaffDashboard';
 import StaffRequestsPage from './pages/staff/StaffRequestsPage';
-import ClearancesPage from './pages/staff/ClearancesPage';
 import ReleasePage from './pages/staff/ReleasePage';
 
 // Admin Pages
@@ -93,6 +92,7 @@ export default function App() {
               {/* Student Role Routes */}
               <Route element={<RoleRoute allowedRoles={[ROLES.STUDENT]} />}>
                 <Route path={ROUTES.STUDENT.DASHBOARD} element={<StudentDashboard />} />
+                <Route path={ROUTES.STUDENT.CLEARANCE} element={<Navigate to={ROUTES.STUDENT.NEW_REQUEST} replace />} />
                 <Route path={ROUTES.STUDENT.NEW_REQUEST} element={<RequestDocumentPage />} />
                 <Route path={ROUTES.STUDENT.REQUESTS} element={<TrackStatusPage />} />
                 <Route path={ROUTES.STUDENT.CREDENTIALS} element={<StudentCredentialsPage />} />
@@ -104,7 +104,7 @@ export default function App() {
                 <Route path={ROUTES.REGISTRAR.DASHBOARD} element={<Navigate to={ROUTES.STAFF.DASHBOARD} replace />} />
                 <Route path={ROUTES.STAFF.REQUESTS} element={<StaffRequestsPage />} />
                 <Route path={ROUTES.STAFF.VERIFICATION} element={<StaffRequestsPage />} />
-                <Route path={ROUTES.STAFF.CLEARANCES} element={<ClearancesPage />} />
+                <Route path={ROUTES.STAFF.CLEARANCES} element={<Navigate to={ROUTES.STAFF.REQUESTS} replace />} />
                 <Route path={ROUTES.STAFF.RELEASE} element={<ReleasePage />} />
                 <Route path={ROUTES.REGISTRAR.CREDENTIALS} element={<CredentialsPage />} />
                 <Route path={ROUTES.REGISTRAR.PROCESSING} element={<AdminRequestsPage />} />
