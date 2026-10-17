@@ -19,6 +19,7 @@ export const ROUTES = {
   },
   REGISTRAR: {
     DASHBOARD: '/registrar/dashboard',
+    ANALYTICS: '/admin/analytics',
     CALENDAR: '/registrar/calendar',
     PROCESSING: '/registrar/processing',
     CREDENTIALS: '/registrar/credentials',
@@ -26,6 +27,7 @@ export const ROUTES = {
   },
   ADMIN: {
     DASHBOARD: '/admin/dashboard',
+    ANALYTICS: '/admin/analytics',
     CALENDAR: '/admin/calendar',
     USERS: '/admin/users',
     CREDENTIALS: '/admin/credentials',
