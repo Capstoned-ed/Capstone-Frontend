@@ -23,7 +23,6 @@ import LoginPage from './pages/auth/LoginPage';
 import StudentDashboard from './pages/student/StudentDashboard';
 import RequestDocumentPage from './pages/student/RequestDocumentPage';
 import TrackStatusPage from './pages/student/TrackStatusPage';
-import StudentCredentialsPage from './pages/student/StudentCredentialsPage';
 
 // Staff & Registrar Pages
 import StaffDashboard from './pages/staff/StaffDashboard';
@@ -95,7 +94,7 @@ export default function App() {
                 <Route path={ROUTES.STUDENT.CLEARANCE} element={<Navigate to={ROUTES.STUDENT.NEW_REQUEST} replace />} />
                 <Route path={ROUTES.STUDENT.NEW_REQUEST} element={<RequestDocumentPage />} />
                 <Route path={ROUTES.STUDENT.REQUESTS} element={<TrackStatusPage />} />
-                <Route path={ROUTES.STUDENT.CREDENTIALS} element={<StudentCredentialsPage />} />
+                <Route path={ROUTES.STUDENT.CREDENTIALS} element={<Navigate to={ROUTES.STUDENT.NEW_REQUEST} replace />} />
               </Route>
 
               {/* Staff / Registrar Role Routes (Shared Workflow, Admin also permitted) */}

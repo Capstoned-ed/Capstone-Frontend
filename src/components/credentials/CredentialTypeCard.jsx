@@ -22,7 +22,7 @@ export default function CredentialTypeCard({ credentialType, onRequest }) {
     if (onRequest) {
       onRequest(credentialType);
     } else {
-      navigate(`${ROUTES.STUDENT.NEW_REQUEST}?type=${credentialType.code || credentialType.id}`);
+      navigate(`${ROUTES.STUDENT.NEW_REQUEST}?doc=${encodeURIComponent(credentialType.name)}&type=${encodeURIComponent(credentialType.code || credentialType.id)}`);
     }
   };
 
