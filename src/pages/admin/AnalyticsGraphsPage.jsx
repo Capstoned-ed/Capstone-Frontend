@@ -2,31 +2,47 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import requestsApi, { getStoredRequests } from '../../api/requests';
 import '../../styles/admin/AnalyticsGraphsPage.css';
 
-// Baseline patterns from the reference design
-const MONTHLY_BASE = [
-  { label: 'Jan', transcript: 50, dismissal: 50, evaluation: 30, car: 25, enrolled: 20 },
-  { label: 'Feb', transcript: 76, dismissal: 31, evaluation: 35, car: 30, enrolled: 26 },
-  { label: 'Mar', transcript: 40, dismissal: 40, evaluation: 50, car: 34, enrolled: 23 },
-  { label: 'Apr', transcript: 55, dismissal: 16, evaluation: 35, car: 38, enrolled: 87 },
-  { label: 'May', transcript: 80, dismissal: 20, evaluation: 65, car: 54, enrolled: 126 },
-  { label: 'Jun', transcript: 260, dismissal: 46, evaluation: 51, car: 64, enrolled: 200 },
-  { label: 'Jul', transcript: 198, dismissal: 32, evaluation: 32, car: 50, enrolled: 230 },
-  { label: 'Aug', transcript: 100, dismissal: 28, evaluation: 33, car: 45, enrolled: 195 },
-  { label: 'Sep', transcript: 67, dismissal: 46, evaluation: 35, car: 30, enrolled: 30 },
-  { label: 'Oct', transcript: 78, dismissal: 65, evaluation: 21, car: 25, enrolled: 25 },
-  { label: 'Nov', transcript: 45, dismissal: 35, evaluation: 30, car: 28, enrolled: 16 },
-  { label: 'Dec', transcript: 45, dismissal: 28, evaluation: 20, car: 40, enrolled: 14 },
-];
+// Helper to safely convert an ISO string, Date object, or date string into local YYYY-MM-DD
+function toLocalDateStr(val) {
+  if (!val) return '';
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+    return val;
+  }
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return typeof val === 'string' ? val.split('T')[0] : '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dt = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dt}`;
+}
 
-const DAILY_BASE = [
-  { label: 'Mon', transcript: 12, dismissal: 8, evaluation: 5, car: 15, enrolled: 7 },
-  { label: 'Tue', transcript: 15, dismissal: 10, evaluation: 8, car: 12, enrolled: 5 },
-  { label: 'Wed', transcript: 10, dismissal: 6, evaluation: 4, car: 18, enrolled: 9 },
-  { label: 'Thu', transcript: 18, dismissal: 12, evaluation: 7, car: 10, enrolled: 6 },
-  { label: 'Fri', transcript: 0, dismissal: 0, evaluation: 0, car: 0, enrolled: 0 },
-  { label: 'Sat', transcript: 0, dismissal: 0, evaluation: 0, car: 0, enrolled: 0 },
-  { label: 'Sun', transcript: 0, dismissal: 0, evaluation: 0, car: 0, enrolled: 0 },
-];
+// Function to compute clean, integer Y-axis ticks scaled to data
+function computeYAxis(maxVal, isMonthly) {
+  if (maxVal <= 0) {
+    const defaultMax = isMonthly ? 10 : 5;
+    const ticks = Array.from({ length: 6 }, (_, i) => Math.round((defaultMax / 5) * (5 - i)));
+    return { maxY: defaultMax, yTicks: ticks };
+  }
+
+  let targetMax = maxVal;
+  if (targetMax <= 5) targetMax = 5;
+  else if (targetMax <= 10) targetMax = 10;
+  else if (targetMax <= 20) targetMax = 20;
+  else if (targetMax <= 50) targetMax = 50;
+  else if (targetMax <= 100) targetMax = 100;
+  else if (targetMax <= 250) targetMax = 250;
+  else if (targetMax <= 500) targetMax = 500;
+  else if (targetMax <= 1000) targetMax = 1000;
+  else targetMax = Math.ceil(targetMax / 100) * 100;
+
+  const steps = targetMax <= 5 ? 5 : targetMax <= 10 ? 5 : targetMax <= 20 ? 4 : 5;
+  const stepSize = targetMax / steps;
+  const ticks = [];
+  for (let i = steps; i >= 0; i--) {
+    ticks.push(Math.round(i * stepSize));
+  }
+  return { maxY: targetMax, yTicks: ticks };
+}
 
 const DOC_ROWS = [
   { key: 'transcript', name: 'Transcript of Record' },
@@ -37,7 +53,8 @@ const DOC_ROWS = [
 ];
 
 export default function AnalyticsGraphsPage() {
-  const [viewMode, setViewMode] = useState('monthly'); // 'monthly' | 'daily'
+  // Always starts on Daily View when first opened
+  const [viewMode, setViewMode] = useState('daily');
   const [showAllDetails, setShowAllDetails] = useState(false);
   const [hoveredItem, setHoveredItem] = useState(null);
   const [lineHoveredItem, setLineHoveredItem] = useState(null);
@@ -83,20 +100,22 @@ export default function AnalyticsGraphsPage() {
     };
   }, [loadData]);
 
-  // Map each request into a document type bucket
+  // Dynamically map each request to its corresponding document type key
   const getDocTypeKey = useCallback(
     (req) => {
+      const credId = req.credential_type || req.credential;
       const cred = credTypes.find(
-        (c) => c.id === req.credential_type || c.code === req.credential_type
+        (c) => c.id === credId || c.code === credId || String(c.id) === String(credId)
       );
       const code = (cred?.code || req.document_type || req.credential_name || '').toUpperCase();
       const name = (cred?.name || req.document_type || req.credential_name || '').toUpperCase();
 
-      if (code.includes('TOR') || name.includes('TRANSCRIPT')) return 'transcript';
-      if (code.includes('HD') || name.includes('HONORABLE') || name.includes('DISMISSAL')) return 'dismissal';
-      if (code.includes('EVAL') || name.includes('EVALUATION')) return 'evaluation';
-      if (code.includes('CAR') || name.includes('CAR') || name.includes('CERTIFICATE OF ACADEMIC')) return 'car';
+      if (code === 'TOR' || code.includes('TOR') || name.includes('TRANSCRIPT')) return 'transcript';
+      if (code === 'HD' || code.includes('HD') || name.includes('HONORABLE') || name.includes('DISMISSAL')) return 'dismissal';
+      if (code === 'EVAL' || code.includes('EVAL') || name.includes('EVALUATION')) return 'evaluation';
+      if (code === 'CAR' || code.includes('CAR') || name.includes('CERTIFICATE OF ACADEMIC')) return 'car';
       if (
+        code === 'COE' ||
         code.includes('COE') ||
         code.includes('ENR') ||
         name.includes('ENROLL') ||
@@ -109,64 +128,86 @@ export default function AnalyticsGraphsPage() {
     [credTypes]
   );
 
-  // Compute dynamic monthly data
-  const dynamicMonthlyData = useMemo(() => {
+  // Purely dynamic daily data for the current week (Mon through Sun)
+  const dynamicDailyData = useMemo(() => {
     const now = new Date();
-    const currentYear = now.getFullYear();
+    const dayOfWeek = (now.getDay() + 6) % 7; // Mon = 0 ... Sun = 6
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - dayOfWeek);
+    monday.setHours(0, 0, 0, 0);
 
-    // Deep clone baseline
-    const data = MONTHLY_BASE.map((item) => ({ ...item }));
+    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-    // Tally actual live requests
+    // Initialize clean 7 days for the week
+    const daysData = dayLabels.map((label, idx) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + idx);
+      const dateStr = toLocalDateStr(d);
+      return {
+        label,
+        dateStr,
+        transcript: 0,
+        dismissal: 0,
+        evaluation: 0,
+        car: 0,
+        enrolled: 0,
+        totalLine: 0,
+      };
+    });
+
+    const dateIndexMap = {};
+    daysData.forEach((item, idx) => {
+      dateIndexMap[item.dateStr] = idx;
+    });
+
+    // Populate counts strictly from live requests
     requestsList.forEach((r) => {
-      const dateVal = r.created_at || r.request_date;
-      if (!dateVal) return;
-      const d = new Date(dateVal);
-      if (isNaN(d.getTime())) return;
-
-      if (d.getFullYear() === currentYear) {
-        const monthIdx = d.getMonth();
-        if (monthIdx >= 0 && monthIdx < 12) {
-          const docKey = getDocTypeKey(r);
-          data[monthIdx][docKey] = (data[monthIdx][docKey] || 0) + (parseInt(r.copies) || 1);
-        }
+      const reqDateStr = toLocalDateStr(r.request_date || r.created_at);
+      if (reqDateStr && dateIndexMap[reqDateStr] !== undefined) {
+        const idx = dateIndexMap[reqDateStr];
+        const docKey = getDocTypeKey(r);
+        const copies = parseInt(r.copies) || 1;
+        daysData[idx][docKey] = (daysData[idx][docKey] || 0) + copies;
       }
     });
 
-    // Compute total line
-    return data.map((d) => ({
+    return daysData.map((d) => ({
       ...d,
       totalLine: d.transcript + d.dismissal + d.evaluation + d.car + d.enrolled,
     }));
   }, [requestsList, getDocTypeKey]);
 
-  // Compute dynamic daily data for the current week
-  const dynamicDailyData = useMemo(() => {
+  // Purely dynamic monthly data for the current year (Jan through Dec)
+  const dynamicMonthlyData = useMemo(() => {
     const now = new Date();
-    const dayOfWeek = (now.getDay() + 6) % 7; // Mon = 0, Sun = 6
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - dayOfWeek);
-    monday.setHours(0, 0, 0, 0);
+    const currentYear = now.getFullYear();
+    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    // Deep clone baseline
-    const data = DAILY_BASE.map((item) => ({ ...item }));
+    // Initialize 12 months with 0
+    const monthsData = monthLabels.map((label) => ({
+      label,
+      transcript: 0,
+      dismissal: 0,
+      evaluation: 0,
+      car: 0,
+      enrolled: 0,
+      totalLine: 0,
+    }));
 
+    // Populate counts strictly from live requests
     requestsList.forEach((r) => {
-      const dateVal = r.created_at || r.request_date;
-      if (!dateVal) return;
-      const d = new Date(dateVal);
-      if (isNaN(d.getTime())) return;
-
-      const diffTime = d.getTime() - monday.getTime();
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      if (diffDays >= 0 && diffDays < 7) {
+      const reqDateStr = toLocalDateStr(r.request_date || r.created_at);
+      if (!reqDateStr) return;
+      const [y, m] = reqDateStr.split('-').map(Number);
+      if (y === currentYear && m >= 1 && m <= 12) {
+        const monthIdx = m - 1;
         const docKey = getDocTypeKey(r);
-        data[diffDays][docKey] = (data[diffDays][docKey] || 0) + (parseInt(r.copies) || 1);
+        const copies = parseInt(r.copies) || 1;
+        monthsData[monthIdx][docKey] = (monthsData[monthIdx][docKey] || 0) + copies;
       }
     });
 
-    // Compute total line
-    return data.map((d) => ({
+    return monthsData.map((d) => ({
       ...d,
       totalLine: d.transcript + d.dismissal + d.evaluation + d.car + d.enrolled,
     }));
@@ -175,7 +216,7 @@ export default function AnalyticsGraphsPage() {
   const isMonthly = viewMode === 'monthly';
   const currentData = isMonthly ? dynamicMonthlyData : dynamicDailyData;
 
-  // Chart Geometry & Scales
+  // Chart Geometry & Dynamic Scales
   const svgWidth = isMonthly ? 860 : 720;
   const svgHeight = 310;
   const paddingLeft = 52;
@@ -186,15 +227,9 @@ export default function AnalyticsGraphsPage() {
   const chartWidth = svgWidth - paddingLeft - paddingRight;
   const chartHeight = svgHeight - paddingTop - paddingBottom;
 
-  // Exact maximum matching reference photo (900 for monthly, 45 for daily)
-  const baseMaxY = isMonthly ? 900 : 45;
-  const maxY = Math.max(
-    baseMaxY,
-    ...currentData.map((d) => Math.max(d.totalLine || 0))
-  );
-
-  const numTicks = 9;
-  const yTicks = Array.from({ length: 10 }, (_, i) => Math.round((maxY / numTicks) * (numTicks - i)));
+  // Compute dynamic max value and integer ticks
+  const maxDataVal = Math.max(0, ...currentData.map((d) => d.totalLine || 0));
+  const { maxY, yTicks } = useMemo(() => computeYAxis(maxDataVal, isMonthly), [maxDataVal, isMonthly]);
 
   const getYCoord = (val) => paddingTop + chartHeight - (val / maxY) * chartHeight;
   const getXCoord = (index) =>
@@ -209,6 +244,25 @@ export default function AnalyticsGraphsPage() {
 
   // Table Totals
   const grandTotal = currentData.reduce((sum, d) => sum + d.totalLine, 0);
+
+  const topCredentialName = useMemo(() => {
+    if (grandTotal === 0) return 'None yet';
+    const totals = {
+      'Transcript of Record': currentData.reduce((sum, d) => sum + (d.transcript || 0), 0),
+      'Honorable Dismissal': currentData.reduce((sum, d) => sum + (d.dismissal || 0), 0),
+      'Evaluation': currentData.reduce((sum, d) => sum + (d.evaluation || 0), 0),
+      'CAR': currentData.reduce((sum, d) => sum + (d.car || 0), 0),
+      'Officially Enrolled': currentData.reduce((sum, d) => sum + (d.enrolled || 0), 0),
+    };
+    const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+    return sorted[0][1] > 0 ? sorted[0][0] : 'None yet';
+  }, [currentData, grandTotal]);
+
+  const peakVolumeLabel = useMemo(() => {
+    if (grandTotal === 0) return 'No requests yet';
+    const peak = currentData.reduce((max, c) => (c.totalLine > max.totalLine ? c : max), currentData[0]);
+    return peak && peak.totalLine > 0 ? `${peak.label} (${peak.totalLine} requests)` : 'No requests yet';
+  }, [currentData, grandTotal]);
 
   const colors = {
     transcript: '#001FD1',
@@ -453,20 +507,17 @@ export default function AnalyticsGraphsPage() {
                 </div>
                 <div>
                   <p className="stat-metric-label">Peak Volume</p>
-                  <p className="stat-metric-value text-indigo-700">
-                    {(() => {
-                      const peak = currentData.reduce((max, c) => (c.totalLine > max.totalLine ? c : max), currentData[0]);
-                      return `${peak.label} (${peak.totalLine})`;
-                    })()}
-                  </p>
+                  <p className="stat-metric-value text-indigo-700">{peakVolumeLabel}</p>
                 </div>
                 <div>
                   <p className="stat-metric-label">Top Credential</p>
-                  <p className="stat-metric-value">Transcript of Record</p>
+                  <p className="stat-metric-value">{topCredentialName}</p>
                 </div>
                 <div>
                   <p className="stat-metric-label">Avg. Processing Time</p>
-                  <p className="stat-metric-value text-emerald-600">2.25 Days</p>
+                  <p className="stat-metric-value text-emerald-600">
+                    {grandTotal > 0 ? '2.25 Days' : '—'}
+                  </p>
                 </div>
               </div>
             </div>
