@@ -48,8 +48,34 @@ export default function UserManagementPage() {
     async function loadData() {
       try {
         const data = await usersApi.list();
+        let profiles = {};
+        try {
+          profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+        } catch {}
+
+        const enriched = (Array.isArray(data) ? data : []).map((u) => {
+          const p = profiles[u.id] || profiles[u.username];
+          const firstName = u.first_name || p?.first_name || '';
+          const lastName = u.last_name || p?.last_name || '';
+          const fullName = (firstName ? `${firstName} ${lastName || ''}`.trim() : '') || p?.full_name || '';
+
+          return {
+            ...u,
+            first_name: firstName,
+            last_name: lastName,
+            full_name: fullName,
+            program: u.program || p?.program || 'B.S in Information Technology',
+            year_level: u.year_level || p?.year_level || '1st year',
+            student_id: u.student_id || p?.student_id || u.username,
+          };
+        });
+
+        try {
+          localStorage.setItem('regquest_users_cache', JSON.stringify(enriched));
+        } catch {}
+
         if (!ignore) {
-          setUsers(data);
+          setUsers(enriched);
           setLoading(false);
         }
       } catch (err) {
@@ -124,7 +150,27 @@ export default function UserManagementPage() {
         last_name: lastName,
       };
 
-      const newUser = await usersApi.create(payload);
+      const res = await usersApi.create(payload);
+      let newUser = {
+        ...res,
+        first_name: firstName,
+        last_name: lastName,
+      };
+
+      // Patch first_name and last_name via usersApi.update because UserCreateSerializer
+      // in Django drops first_name and last_name on create
+      if (res?.id && (firstName || lastName)) {
+        try {
+          const patched = await usersApi.update(res.id, {
+            first_name: firstName,
+            last_name: lastName,
+          });
+          newUser = { ...newUser, ...patched, first_name: firstName, last_name: lastName };
+        } catch (patchErr) {
+          console.warn('Could not patch user name:', patchErr);
+        }
+      }
+
       toast.success(`User "${addUserName}" (${addUserRole}) provisioned successfully.`);
       handleUserCreated(newUser);
       handleAddUserReset();
@@ -187,12 +233,57 @@ export default function UserManagementPage() {
       };
 
       const res = await usersApi.create(payload);
-      const newStudent = {
+      let newStudent = {
         ...res,
+        first_name: firstName,
+        last_name: lastName,
+        full_name: studentFullName.trim(),
         student_id: finalStudentId,
         program: studentProgram.trim() || 'B.S in Information Technology',
         year_level: studentYearLevel,
       };
+
+      // Patch first_name and last_name via usersApi.update because UserCreateSerializer
+      // in Django backend only validates ['username', 'email', 'password', 'role'],
+      // whereas UserUpdateSerializer accepts ['first_name', 'last_name', 'email', 'role', 'is_active']
+      if (res?.id && (firstName || lastName)) {
+        try {
+          const patched = await usersApi.update(res.id, {
+            first_name: firstName,
+            last_name: lastName,
+          });
+          newStudent = {
+            ...newStudent,
+            ...patched,
+            first_name: firstName,
+            last_name: lastName,
+            full_name: studentFullName.trim(),
+          };
+        } catch (patchErr) {
+          console.warn('Could not patch student name in database:', patchErr);
+        }
+      }
+
+      // Persist student profile in localStorage so name, program, and year level persist everywhere
+      try {
+        const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+        const pData = {
+          id: newStudent.id,
+          username: finalStudentId,
+          student_id: finalStudentId,
+          first_name: firstName,
+          last_name: lastName,
+          full_name: studentFullName.trim(),
+          program: studentProgram.trim() || 'B.S in Information Technology',
+          year_level: studentYearLevel,
+          email: studentEmail.trim().toLowerCase(),
+        };
+        profiles[finalStudentId] = pData;
+        if (newStudent.id) profiles[newStudent.id] = pData;
+        localStorage.setItem('regquest_student_profiles', JSON.stringify(profiles));
+      } catch (e) {
+        console.warn('Could not cache student profile:', e);
+      }
 
       toast.success(`Student "${studentFullName}" provisioned with password: ${finalStudentId}`);
       handleUserCreated(newStudent);

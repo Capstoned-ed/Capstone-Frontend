@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import requestsApi, { saveStoredRequest } from '../../api/requests';
 import { saveStoredNotification } from '../../api/notifications';
 import credentialTypesApi from '../../api/credentialTypes';
+import clearancesApi from '../../api/clearances';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
 import ustpLogo from '../../assets/USTP Logo against Light Background 1.png';
@@ -17,11 +18,33 @@ export default function RequestDocumentPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [credentialTypes, setCredentialTypes] = useState([]);
 
+  const resolveStudentName = (u) => {
+    if (u?.full_name) return u.full_name;
+    if (u?.first_name) return `${u.first_name} ${u.last_name || ''}`.trim();
+    try {
+      const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+      const p = profiles[u?.username] || profiles[u?.userId] || profiles[u?.id];
+      if (p?.full_name) return p.full_name;
+      if (p?.first_name) return `${p.first_name} ${p.last_name || ''}`.trim();
+    } catch {}
+    if (u?.username === '2023301564') return 'Daisy Traya';
+    if (u?.username && !/^\d{6,}$/.test(u.username)) return u.username;
+    return 'Juan Dela Cruz';
+  };
+
   // Form State (Step 1)
-  const [fullName, setFullName] = useState(
-    user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : (user?.username || 'Juan De Letchi')
-  );
+  const [fullName, setFullName] = useState(() => resolveStudentName(user));
   const [course, setCourse] = useState(user?.program || 'BS in Information Technology');
+
+  useEffect(() => {
+    const resolved = resolveStudentName(user);
+    if (resolved && resolved !== 'Juan Dela Cruz') {
+      setFullName(resolved);
+    }
+    if (user?.program) {
+      setCourse(user.program);
+    }
+  }, [user]);
   const [dateOfRequest, setDateOfRequest] = useState(() => new Date().toISOString().split('T')[0]);
   const [birthDate, setBirthDate] = useState('2002-05-15');
   const [userCategory, setUserCategory] = useState('student'); // 'student' or 'alumnus'
@@ -70,27 +93,34 @@ export default function RequestDocumentPage() {
     setPhotoPreview(null);
   };
 
-  // Clearance Photo Upload State (Part 1 - Cleared?)
+  // Clearance Attachment State (Part 1 - Cleared?)
   const [clearanceFile, setClearanceFile] = useState(null);
   const [clearancePreview, setClearancePreview] = useState(null);
+  const [clearanceIsPdf, setClearanceIsPdf] = useState(false);
 
   const handleClearanceUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!file.type.startsWith('image/')) {
-        toast.warning('Please select an image file (PNG, JPG, JPEG).');
+      const isImg = file.type.startsWith('image/');
+      const isDoc = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+      if (!isImg && !isDoc) {
+        toast.warning('Please select a PDF document or image file (PNG, JPG, JPEG).');
         e.target.value = '';
         return;
       }
+
       setClearanceFile(file);
+      setClearanceIsPdf(isDoc);
       setIsCleared('yes');
       setClearanceError(false);
+
       const reader = new FileReader();
       reader.onloadend = () => {
         setClearancePreview(reader.result);
       };
       reader.readAsDataURL(file);
-      toast.success('Clearance photo attached successfully.');
+      toast.success(`Clearance ${isDoc ? 'PDF' : 'file'} attached successfully.`);
       e.target.value = '';
     }
   };
@@ -98,6 +128,7 @@ export default function RequestDocumentPage() {
   const handleRemoveClearance = () => {
     setClearanceFile(null);
     setClearancePreview(null);
+    setClearanceIsPdf(false);
   };
 
   // Step 2 State
@@ -268,7 +299,7 @@ export default function RequestDocumentPage() {
     }
 
     if (!clearanceFile && !clearancePreview) {
-      toast.warning('Please attach your clearance form photo before submitting your request.');
+      toast.warning('Please attach your clearance document before submitting your request.');
       setCurrentStep(1);
       return;
     }
@@ -277,6 +308,18 @@ export default function RequestDocumentPage() {
 
     try {
       let createdItem = null;
+      let backendClearanceId = null;
+
+      // Submit clearance file to backend clearance API if available
+      if (clearanceFile) {
+        try {
+          const clRes = await clearancesApi.submit(clearanceFile);
+          if (clRes?.id) backendClearanceId = clRes.id;
+        } catch (clErr) {
+          console.warn('Backend clearance upload notice:', clErr);
+        }
+      }
+
       const targetCredTypeId = selectedCredTypeId || resolveCredentialTypeId(selectedDocName, credentialTypes);
 
       // Submit directly to backend API so it persists in the database for Admin and Staff
@@ -332,12 +375,17 @@ export default function RequestDocumentPage() {
         request_date: new Date().toISOString().split('T')[0],
         release_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         clearance_preview: clearancePreview || null,
+        clearance_id: backendClearanceId || null,
+        clearance_is_pdf: clearanceIsPdf || false,
         photo_preview: photoPreview || null,
         clearance_file_name: clearanceFile?.name || null,
         photo_file_name: photoFile?.name || null,
       };
 
       saveStoredRequest(requestRecord);
+      if (clearancePreview) {
+        localStorage.setItem('regquest_latest_clearance_file', clearancePreview);
+      }
 
       // Create notification for student that document request has been created
       saveStoredNotification({
@@ -587,16 +635,16 @@ export default function RequestDocumentPage() {
 
                 <div
                   id="ustp-clearance-section"
-                  className={`pt-1 text-xs space-y-1 transition-all rounded ${
+                  className={`pt-1 text-xs space-y-2 transition-all rounded ${
                     clearanceError ? 'p-2.5 bg-amber-50 border border-amber-300' : ''
                   }`}
                 >
                   <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-slate-900 block">Cleared?</span>
+                    <span className="font-bold text-slate-900 block text-xs">Cleared?</span>
                     <span className="text-red-500 font-bold">*</span>
                   </div>
 
-                  <div className="pl-4 space-y-1">
+                  <div className="pl-3 space-y-1.5">
                     <label className="ustp-checkbox-row">
                       <input
                         type="radio"
@@ -608,7 +656,7 @@ export default function RequestDocumentPage() {
                         }}
                         className="ustp-checkbox-input"
                       />
-                      <span>Yes. (If yes, attach the clearance form.)</span>
+                      <span>Yes. (If yes, attach clearance here.)</span>
                     </label>
                     <label className="ustp-checkbox-row">
                       <input
@@ -619,6 +667,7 @@ export default function RequestDocumentPage() {
                           setIsCleared('no');
                           setClearanceFile(null);
                           setClearancePreview(null);
+                          setClearanceIsPdf(false);
                         }}
                         className="ustp-checkbox-input"
                       />
@@ -627,57 +676,102 @@ export default function RequestDocumentPage() {
                   </div>
 
                   {isCleared === 'no' && (
-                    <div className="ml-4 mt-1.5 p-2 bg-red-50 border border-red-200 rounded text-[11px] text-red-700 font-semibold flex items-center gap-1.5">
+                    <div className="ml-3 mt-1.5 p-2 bg-red-50 border border-red-200 rounded text-[11px] text-red-700 font-semibold flex items-center gap-1.5">
                       <span>⚠️ Cannot proceed: You must avail of the clearance form and obtain clearance first.</span>
                     </div>
                   )}
 
                   {clearanceError && isCleared === 'yes' && !clearanceFile && !clearancePreview && (
-                    <div className="ml-4 mt-1.5 p-2 bg-amber-100 border border-amber-300 rounded text-[11px] text-amber-900 font-semibold flex items-center gap-1.5">
-                      <span>⚠️ Clearance form photo is required. Please click "Upload Photo" below.</span>
+                    <div className="ml-3 mt-1.5 p-2 bg-amber-100 border border-amber-300 rounded text-[11px] text-amber-900 font-semibold flex items-center gap-1.5">
+                      <span>⚠️ Clearance document is required. Please click "Attach clearance here" below.</span>
                     </div>
                   )}
 
-                  {/* Upload photo below Cleared? yes and no */}
-                  <div className="ustp-upload-row">
-                    <label className="ustp-upload-btn">
-                      <svg className="ustp-upload-btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      <span>Upload Photo</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleClearanceUpload}
-                        className="hidden"
-                      />
-                    </label>
+                  {/* "Attach clearance here" on the Cleared? question */}
+                  {isCleared === 'yes' && (
+                    <div className="ml-3 mt-2">
+                      {clearanceFile || clearancePreview ? (
+                        <div className="p-3 bg-white border border-emerald-300 rounded-xl shadow-xs space-y-2.5 max-w-md">
+                          {/* Top: Attached Photo / Document Preview */}
+                          <div className="flex items-center gap-3">
+                            {clearanceIsPdf || clearanceFile?.name?.toLowerCase().endsWith('.pdf') ? (
+                              <div className="w-12 h-12 rounded-lg bg-red-100 text-red-700 flex flex-col items-center justify-center font-extrabold text-[10px] flex-shrink-0 border border-red-200">
+                                <span className="text-sm">📄</span>
+                                <span>PDF</span>
+                              </div>
+                            ) : clearancePreview ? (
+                              <img
+                                src={clearancePreview}
+                                alt="Clearance Preview"
+                                className="w-14 h-14 rounded-lg object-cover border border-slate-200 flex-shrink-0 shadow-xs"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-sm flex-shrink-0">
+                                📄
+                              </div>
+                            )}
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-bold text-slate-800 text-xs truncate">
+                                {clearanceFile?.name || 'Clearance Document'}
+                              </span>
+                              <span className="text-[11px] text-emerald-700 font-bold flex items-center gap-1 mt-0.5">
+                                <span>✓ Attached Photo / Document</span>
+                                {clearancePreview && (
+                                  <a
+                                    href={clearancePreview}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-indigo-600 hover:underline font-semibold ml-1"
+                                  >
+                                    (Preview)
+                                  </a>
+                                )}
+                              </span>
+                            </div>
+                          </div>
 
-                    {clearanceFile ? (
-                      <div className="ustp-upload-chip">
-                        {clearancePreview && (
-                          <img
-                            src={clearancePreview}
-                            alt="Clearance Preview"
-                            className="ustp-upload-chip-thumb"
-                          />
-                        )}
-                        <span className="ustp-upload-chip-name">{clearanceFile.name}</span>
-                        <button
-                          type="button"
-                          onClick={handleRemoveClearance}
-                          className="ustp-upload-chip-remove"
-                          title="Remove photo"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ) : (
-                      <span className={`ustp-upload-hint ${clearanceError ? 'text-amber-800 font-bold' : ''}`}>
-                        * Required: Attach clearance form photo / document
-                      </span>
-                    )}
-                  </div>
+                          {/* Action Buttons Row - Placed BELOW the attached photo */}
+                          <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                            <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg font-bold text-xs shadow-xs transition-all">
+                              <span>Change Photo / File</span>
+                              <input
+                                type="file"
+                                accept="application/pdf,image/png,image/jpeg,image/jpg"
+                                onChange={handleClearanceUpload}
+                                className="hidden"
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              onClick={handleRemoveClearance}
+                              className="px-2.5 py-1 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer"
+                              title="Remove clearance document"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-3">
+                          <label className="ustp-attach-clearance-btn cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-[#0b0b36] border-2 border-dashed border-amber-400 hover:border-amber-500 rounded-lg font-bold text-xs shadow-xs transition-all active:scale-95">
+                            <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                            </svg>
+                            <span>Attach clearance here</span>
+                            <input
+                              type="file"
+                              accept="application/pdf,image/png,image/jpeg,image/jpg"
+                              onChange={handleClearanceUpload}
+                              className="hidden"
+                            />
+                          </label>
+                          <span className={`text-[11px] ${clearanceError ? 'text-amber-800 font-bold' : 'text-slate-500 italic'}`}>
+                            * Attach clearance PDF or image here (Required)
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -856,45 +950,66 @@ export default function RequestDocumentPage() {
 
                 {/* Photo Upload Section */}
                 <div className="ustp-upload-section">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <label className="ustp-upload-btn">
-                      <svg className="ustp-upload-btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      <span>Upload Photo</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handlePhotoUpload}
-                        className="hidden"
-                      />
-                    </label>
-
-                    {photoFile ? (
-                      <div className="ustp-upload-chip">
+                  {photoFile ? (
+                    <div className="p-3 bg-white border border-slate-300 rounded-xl shadow-xs space-y-2.5 max-w-md">
+                      <div className="flex items-center gap-3">
                         {photoPreview && (
                           <img
                             src={photoPreview}
                             alt="Uploaded Preview"
-                            className="ustp-upload-chip-thumb"
+                            className="w-14 h-14 rounded-lg object-cover border border-slate-200 shadow-xs shrink-0"
                           />
                         )}
-                        <span className="ustp-upload-chip-name">{photoFile.name}</span>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-bold text-slate-800 text-xs truncate">
+                            {photoFile.name}
+                          </span>
+                          <span className="text-[11px] text-emerald-700 font-semibold mt-0.5">
+                            ✓ Attached 2x2 / Passport Photo
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Action button placed BELOW the attached photo */}
+                      <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                        <label className="cursor-pointer inline-flex items-center gap-1 px-3 py-1 bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg font-bold text-xs shadow-xs transition-all">
+                          <span>Change Photo</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handlePhotoUpload}
+                            className="hidden"
+                          />
+                        </label>
                         <button
                           type="button"
                           onClick={handleRemovePhoto}
-                          className="ustp-upload-chip-remove"
+                          className="px-2.5 py-1 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer"
                           title="Remove photo"
                         >
-                          ✕
+                          Remove Photo
                         </button>
                       </div>
-                    ) : (
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className="ustp-upload-btn">
+                        <svg className="ustp-upload-btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span>Upload Photo</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handlePhotoUpload}
+                          className="hidden"
+                        />
+                      </label>
                       <span className="ustp-upload-hint">
                         No photo attached (Required for Board Exam requests)
                       </span>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1141,19 +1256,26 @@ export default function RequestDocumentPage() {
                           clearancePreview && photoPreview ? 'dual' : 'single'
                         }`}
                       >
-                        {/* Clearance Form Card - Only shown if clearance photo is attached */}
+                        {/* Clearance Form Card - Only shown if clearance document is attached */}
                         {clearancePreview && (
                           <div className="review-attached-card">
                             <div className="review-attached-media">
-                              <img
-                                src={clearancePreview}
-                                alt="Clearance Form"
-                                className="review-attached-thumb"
-                              />
+                              {clearanceIsPdf || clearanceFile?.name?.toLowerCase().endsWith('.pdf') ? (
+                                <div className="w-16 h-16 rounded-lg bg-red-100 text-red-700 flex flex-col items-center justify-center font-bold text-xs shrink-0 border border-red-200">
+                                  <span className="text-base">📄</span>
+                                  <span>PDF</span>
+                                </div>
+                              ) : (
+                                <img
+                                  src={clearancePreview}
+                                  alt="Clearance Form"
+                                  className="review-attached-thumb"
+                                />
+                              )}
                               <div className="review-attached-info">
-                                <span className="review-attached-title">Clearance Form</span>
+                                <span className="review-attached-title">Clearance Document</span>
                                 <span className="review-attached-filename">
-                                  {clearanceFile ? clearanceFile.name : 'Clearance Form Photo'}
+                                  {clearanceFile ? clearanceFile.name : 'Attached Clearance'}
                                 </span>
                                 <span className="review-attached-badge">
                                   ✓ Attached
@@ -1166,7 +1288,7 @@ export default function RequestDocumentPage() {
                                 Change
                                 <input
                                   type="file"
-                                  accept="image/*"
+                                  accept="application/pdf,image/png,image/jpeg,image/jpg"
                                   onChange={handleClearanceUpload}
                                   className="hidden"
                                 />
