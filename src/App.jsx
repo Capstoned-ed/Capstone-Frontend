@@ -28,6 +28,7 @@ import StudentProfilePage from './pages/student/StudentProfilePage';
 // Staff & Registrar Pages
 import StaffDashboard from './pages/staff/StaffDashboard';
 import StaffRequestsPage from './pages/staff/StaffRequestsPage';
+import ProcessingCalendarPage from './pages/staff/ProcessingCalendarPage';
 import ReleasePage from './pages/staff/ReleasePage';
 
 // Admin Pages
@@ -35,6 +36,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import UserManagementPage from './pages/admin/UserManagementPage';
 import CredentialsPage from './pages/admin/CredentialsPage';
 import AdminRequestsPage from './pages/admin/AdminRequestsPage';
+import AdminProcessingCalendarPage from './pages/admin/ProcessingCalendarPage';
 
 // Shared Pages
 import NotificationsPage from './pages/notifications/NotificationsPage';
@@ -102,7 +104,9 @@ export default function App() {
               {/* Staff / Registrar Role Routes (Shared Workflow, Admin also permitted) */}
               <Route element={<RoleRoute allowedRoles={[ROLES.STAFF, ROLES.REGISTRAR, ROLES.ADMIN]} />}>
                 <Route path={ROUTES.STAFF.DASHBOARD} element={<StaffDashboard />} />
+                <Route path={ROUTES.STAFF.CALENDAR} element={<ProcessingCalendarPage />} />
                 <Route path={ROUTES.REGISTRAR.DASHBOARD} element={<Navigate to={ROUTES.STAFF.DASHBOARD} replace />} />
+                <Route path={ROUTES.REGISTRAR.CALENDAR} element={<Navigate to={ROUTES.STAFF.CALENDAR} replace />} />
                 <Route path={ROUTES.STAFF.REQUESTS} element={<StaffRequestsPage />} />
                 <Route path={ROUTES.STAFF.VERIFICATION} element={<StaffRequestsPage />} />
                 <Route path={ROUTES.STAFF.CLEARANCES} element={<Navigate to={ROUTES.STAFF.REQUESTS} replace />} />
@@ -114,6 +118,7 @@ export default function App() {
               {/* Admin Role Routes */}
               <Route element={<RoleRoute allowedRoles={[ROLES.ADMIN]} />}>
                 <Route path={ROUTES.ADMIN.DASHBOARD} element={<AdminDashboard />} />
+                <Route path={ROUTES.ADMIN.CALENDAR} element={<AdminProcessingCalendarPage />} />
                 <Route path={ROUTES.ADMIN.USERS} element={<UserManagementPage />} />
                 <Route path={ROUTES.ADMIN.CREDENTIALS} element={<CredentialsPage />} />
                 <Route path={ROUTES.ADMIN.REQUESTS} element={<AdminRequestsPage />} />
