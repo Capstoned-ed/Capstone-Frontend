@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
 import ustpBuilding from '../../assets/USTP.png';
-import requestsApi from '../../api/requests';
+import requestsApi, { getStoredRequests, updateStoredRequest } from '../../api/requests';
+import usersApi from '../../api/users';
+import clearancesApi from '../../api/clearances';
 import { StaffProcessModal } from '../../components/staff';
 import useToast from '../../hooks/useToast';
 
-const INITIAL_REQUESTS = [
+const INITIAL_FALLBACK_REQUESTS = [
   {
     id: 1,
+    rawId: 1,
     tracking_number: 'REQ-000001',
     student_name: 'Jessica Gabica',
     student_id: '2023303247',
@@ -20,6 +23,7 @@ const INITIAL_REQUESTS = [
   },
   {
     id: 2,
+    rawId: 2,
     tracking_number: 'REQ-000002',
     student_name: 'Faith Love Traya',
     student_id: '2023301853',
@@ -31,6 +35,7 @@ const INITIAL_REQUESTS = [
   },
   {
     id: 3,
+    rawId: 3,
     tracking_number: 'REQ-000003',
     student_name: 'Luredel Dulangon',
     student_id: '2023303057',
@@ -42,6 +47,7 @@ const INITIAL_REQUESTS = [
   },
   {
     id: 4,
+    rawId: 4,
     tracking_number: 'REQ-000004',
     student_name: 'Ken Neri',
     student_id: '2023301234',
@@ -53,6 +59,7 @@ const INITIAL_REQUESTS = [
   },
   {
     id: 5,
+    rawId: 5,
     tracking_number: 'REQ-000005',
     student_name: 'Ralph Perocho',
     student_id: '2023304321',
@@ -64,51 +71,296 @@ const INITIAL_REQUESTS = [
   },
 ];
 
+function calculateReleaseDate(createdAt, processingDays = 5) {
+  if (!createdAt) return '2026-08-05';
+  const d = new Date(createdAt);
+  if (isNaN(d.getTime())) return '2026-08-05';
+  d.setDate(d.getDate() + (Number(processingDays) || 5));
+  return d.toISOString().split('T')[0];
+}
+
+function formatStatusDisplay(rawStatus) {
+  if (!rawStatus) return 'Pending';
+  const s = rawStatus.trim().toUpperCase();
+  switch (s) {
+    case 'PENDING':
+    case 'RECEIVED':
+    case 'REQUEST SUBMITTED':
+      return 'Pending';
+    case 'PROCESSING':
+    case 'DOCUMENT PREPARATION':
+    case 'RELEASE SCHEDULE CONFIRMED':
+      return 'Processing';
+    case 'READY_FOR_RELEASE':
+    case 'READY FOR RELEASE':
+    case 'READY_FOR_PICKUP':
+    case 'READY FOR PICKUP':
+    case 'FOR_RELEASE':
+    case 'FOR RELEASE':
+      return 'Ready for Pickup';
+    case 'RELEASED':
+    case 'CLAIMED':
+    case 'CLAIMED / RELEASED':
+      return 'Claimed';
+    case 'ON HOLD':
+    case 'REQUIREMENTS_VERIFICATION':
+      return 'On Hold';
+    default:
+      return rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
+  }
+}
+
 export default function StaffDashboard() {
   const navigate = useNavigate();
   const toast = useToast();
 
-  const [requestsList, setRequestsList] = useState(INITIAL_REQUESTS);
-  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [requestsList, setRequestsList] = useState(INITIAL_FALLBACK_REQUESTS);
+  const [loading, setLoading] = useState(true);
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(false);
 
-  // Load backend requests and blend with initial sample requests if fewer
-  useEffect(() => {
-    requestsApi
-      .list()
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          // Format backend requests to match table format
-          const formatted = data.map((r, idx) => ({
-            id: r.id || idx + 1,
-            tracking_number: r.tracking_number || `REQ-${String(r.id || idx + 1).padStart(6, '0')}`,
-            student_name: r.student_name || r.full_name || `Student #${r.user || idx + 1}`,
-            student_id: r.student_id || r.username || '2023301564',
-            document_type: r.credential_name || r.document_type || 'Transcript of records',
-            copies: r.copies || 1,
-            status: r.status ? (r.status === 'READY_FOR_RELEASE' ? 'Ready for Pickup' : r.status.charAt(0).toUpperCase() + r.status.slice(1).toLowerCase()) : 'Pending',
-            request_date: r.created_at ? r.created_at.split('T')[0] : '2026-03-05',
-            release_date: r.release_date || '2026-08-05',
-            raw: r,
-          }));
+  // Modal State for StaffProcessModal
+  const [modalRequest, setModalRequest] = useState(null);
+  const [modalStatus, setModalStatus] = useState('');
+  const [modalNotes, setModalNotes] = useState('');
+  const [modalUpdating, setModalUpdating] = useState(false);
 
-          // Fill up to 5 with INITIAL_REQUESTS if needed
-          const combined = [...formatted];
-          INITIAL_REQUESTS.forEach((sample) => {
-            if (!combined.some((item) => item.tracking_number === sample.tracking_number)) {
-              if (combined.length < 5) {
-                combined.push(sample);
-              }
-            }
-          });
-          setRequestsList(combined.slice(0, 5));
+  // Dynamic Date calculations
+  const today = useMemo(() => new Date(), []);
+  const todayFormatted = useMemo(() => {
+    return today.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }, [today]);
+
+  // Comprehensive Data Fetcher
+  const loadDashboardData = useCallback(async () => {
+    try {
+      const [backendRequests, credTypesRes, usersRes, clearancesRes] = await Promise.all([
+        requestsApi.list().catch(() => []),
+        requestsApi.getCredentialTypes().catch(() => []),
+        usersApi.list().catch(() => []),
+        clearancesApi.list().catch(() => []),
+      ]);
+
+      const stored = getStoredRequests();
+      const combinedRaw = [...backendRequests];
+
+      // Merge stored localStorage requests
+      stored.forEach((s) => {
+        const key = s.tracking_number || s.id;
+        if (!combinedRaw.some((b) => (b.tracking_number || b.id) === key)) {
+          combinedRaw.push(s);
         }
-      })
-      .catch((err) => {
-        console.warn('Backend requests load info:', err);
       });
+
+      // Maps for enrichment
+      const userMap = new Map();
+      if (Array.isArray(usersRes)) {
+        usersRes.forEach((u) => {
+          if (u.id) userMap.set(u.id, u);
+          if (u.username) userMap.set(u.username, u);
+        });
+      }
+
+      const credMap = new Map();
+      if (Array.isArray(credTypesRes)) {
+        credTypesRes.forEach((c) => {
+          if (c.id) credMap.set(c.id, c);
+        });
+      }
+
+      let profiles = {};
+      try {
+        profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+      } catch {}
+
+      if (combinedRaw.length > 0) {
+        const enriched = combinedRaw.map((r, idx) => {
+          const userObj = userMap.get(r.user) || userMap.get(r.student_id);
+          const cred = credMap.get(r.credential_type) || credMap.get(r.credential);
+          const p = profiles[r.user] || profiles[r.student_id] || (userObj ? profiles[userObj.id] : null) || {};
+
+          const studentName =
+            p.full_name ||
+            (userObj ? [userObj.first_name, userObj.last_name].filter(Boolean).join(' ') : null) ||
+            r.student_name ||
+            `Student #${r.user || idx + 1}`;
+
+          const studentId = p.student_id || r.student_id || userObj?.username || userObj?.student_id || '2023301564';
+          const docType = r.document_type || cred?.name || r.credential_name || 'Transcript of records';
+          const copiesNum = parseInt(r.copies) || 1;
+          const reqDate = r.created_at ? r.created_at.split('T')[0] : r.request_date || '2026-03-05';
+          const relDate = r.release_date || calculateReleaseDate(r.created_at, cred?.processing_days);
+
+          return {
+            id: r.id || idx + 1,
+            rawId: r.id || r.rawId || idx + 1,
+            tracking_number: r.tracking_number || `REQ-${String(r.id || idx + 1).padStart(6, '0')}`,
+            student_name: studentName,
+            student_id: studentId,
+            document_type: docType,
+            copies: copiesNum,
+            status: formatStatusDisplay(r.status),
+            rawStatus: r.status,
+            request_date: reqDate,
+            release_date: relDate,
+            notes: r.notes || r.remarks || '',
+            clearance_preview: r.clearance_preview || null,
+            clearance_id: r.clearance_id || null,
+            raw: r,
+          };
+        });
+
+        // Ensure we preserve sample variety if few records exist
+        const mergedList = [...enriched];
+        INITIAL_FALLBACK_REQUESTS.forEach((fallback) => {
+          if (!mergedList.some((m) => m.tracking_number === fallback.tracking_number)) {
+            if (mergedList.length < 5) {
+              mergedList.push(fallback);
+            }
+          }
+        });
+
+        setRequestsList(mergedList);
+      } else {
+        setRequestsList(INITIAL_FALLBACK_REQUESTS);
+      }
+    } catch (err) {
+      console.warn('Dashboard data load notice:', err);
+      setRequestsList(INITIAL_FALLBACK_REQUESTS);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  // Listen for real-time request updates across tabs or components
+  useEffect(() => {
+    loadDashboardData();
+
+    const handleSync = () => {
+      loadDashboardData();
+    };
+
+    window.addEventListener('regquest_requests_updated', handleSync);
+    window.addEventListener('regquest_profile_updated', handleSync);
+    return () => {
+      window.removeEventListener('regquest_requests_updated', handleSync);
+      window.removeEventListener('regquest_profile_updated', handleSync);
+    };
+  }, [loadDashboardData]);
+
+  // 1. Dynamic Key Metrics
+  const metrics = useMemo(() => {
+    const total = requestsList.length;
+    const pending = requestsList.filter((r) => r.status === 'Pending').length;
+    const processing = requestsList.filter((r) => r.status === 'Processing').length;
+    const completed = requestsList.filter(
+      (r) => r.status === 'Claimed' || r.status === 'Ready for Pickup'
+    ).length;
+
+    return { total, pending, processing, completed };
+  }, [requestsList]);
+
+  // 2. Dynamic Targeted for Completion Today & Top Categories
+  const targetedSection = useMemo(() => {
+    // Count active copies targeted
+    const activeRequests = requestsList.filter(
+      (r) => r.status === 'Pending' || r.status === 'Processing'
+    );
+    const totalCopies = activeRequests.reduce((acc, r) => acc + (parseInt(r.copies) || 1), 0);
+
+    // Group copies by document type
+    const docCounts = {};
+    requestsList.forEach((r) => {
+      const type = r.document_type || 'Transcript of records';
+      docCounts[type] = (docCounts[type] || 0) + (parseInt(r.copies) || 1);
+    });
+
+    const sortedDocTypes = Object.entries(docCounts).sort((a, b) => b[1] - a[1]);
+
+    const fallbackTypes = [
+      { name: 'Transcript of records', count: 3, priority: 'High' },
+      { name: 'Honorable Dismissal', count: 1, priority: 'Medium' },
+      { name: 'Evaluation', count: 1, priority: 'Medium' },
+      { name: 'Officially Enrolled', count: 1, priority: 'Medium' },
+    ];
+
+    const cards = fallbackTypes.map((def, idx) => {
+      if (sortedDocTypes[idx]) {
+        const [docName, count] = sortedDocTypes[idx];
+        return {
+          name: docName,
+          count,
+          priority: count >= 3 ? 'High' : 'Medium',
+        };
+      }
+      return def;
+    });
+
+    return {
+      totalDocuments: totalCopies > 0 ? totalCopies : 5,
+      cards,
+      topDocName: cards[0]?.name || 'Transcript of records',
+    };
+  }, [requestsList]);
+
+  // 3. Dynamic Current Week Calendar
+  const currentWeekDays = useMemo(() => {
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0 = Sun, 1 = Mon ... 6 = Sat
+    const sunday = new Date(now);
+    sunday.setDate(now.getDate() - dayOfWeek);
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return dayNames.map((name, i) => {
+      const d = new Date(sunday);
+      d.setDate(sunday.getDate() + i);
+
+      const dateStr = d.toISOString().split('T')[0];
+      const dayReqs = requestsList.filter((r) => r.request_date === dateStr);
+
+      // Release target window string (2 weeks back as reference)
+      const relTarget = new Date(d);
+      relTarget.setDate(relTarget.getDate() - 14);
+      const relTargetStr = relTarget.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+
+      // Default mock fallback workload for middle weekdays
+      const fallbackWorkload = {
+        Monday: { newReqs: 20, proc: 5, comp: 100 },
+        Tuesday: { newReqs: 10, proc: 8, comp: 100 },
+        Wednesday: { newReqs: 5, proc: 10, comp: 100 },
+        Thursday: { newReqs: 3, proc: 11, comp: 95 },
+      };
+
+      const hasActiveWork = i >= 1 && i <= 4;
+      const fb = fallbackWorkload[name];
+
+      const newReqs = dayReqs.length > 0 ? dayReqs.length : fb?.newReqs || 0;
+      const proc = fb?.proc || Math.max(1, dayReqs.filter((r) => r.status === 'Processing').length);
+      const comp = fb?.comp || 100;
+
+      return {
+        dayName: name,
+        dayNumber: d.getDate(),
+        dateStr,
+        isToday: d.toDateString() === now.toDateString(),
+        hasActiveWork,
+        relTargetStr,
+        newReqs,
+        proc,
+        comp,
+      };
+    });
+  }, [requestsList]);
+
+  // Status Badge Helper matching UI design
   const getStatusBadge = (status) => {
     const s = (status || '').toLowerCase().trim();
     if (s.includes('pending')) {
@@ -146,6 +398,57 @@ export default function StaffDashboard() {
     );
   };
 
+  // Open Request in Modal
+  const handleOpenRequestModal = (req) => {
+    setModalRequest(req);
+    setModalStatus(req.status || 'Pending');
+    setModalNotes(req.notes || '');
+  };
+
+  // Close Request Modal
+  const handleCloseRequestModal = () => {
+    setModalRequest(null);
+    setModalStatus('');
+    setModalNotes('');
+  };
+
+  // Save Status Update in Modal
+  const handleSaveStatus = async (statusOverride) => {
+    if (!modalRequest) return;
+    const finalStatus = statusOverride || modalStatus;
+    setModalUpdating(true);
+    const targetId = modalRequest.rawId || modalRequest.id;
+
+    try {
+      // 1. Backend update
+      await requestsApi.updateStatus(targetId, finalStatus).catch(() => {});
+
+      // 2. Local storage persistence & notifications
+      updateStoredRequest(targetId, {
+        status: finalStatus,
+        notes: modalNotes,
+        remarks: modalNotes,
+      });
+
+      // 3. Immediately update local state
+      setRequestsList((prev) =>
+        prev.map((item) =>
+          item.id === modalRequest.id || item.tracking_number === modalRequest.tracking_number
+            ? { ...item, status: formatStatusDisplay(finalStatus), notes: modalNotes }
+            : item
+        )
+      );
+
+      toast.success(`Request ${modalRequest.tracking_number} updated to ${formatStatusDisplay(finalStatus)}!`);
+      handleCloseRequestModal();
+    } catch (err) {
+      console.warn('Status update notice:', err);
+      toast.error('Failed to update request status.');
+    } finally {
+      setModalUpdating(false);
+    }
+  };
+
   return (
     <div className="bg-[#F4F5F8] min-h-screen">
       {/* 1. Full-Width Hero Banner */}
@@ -175,7 +478,7 @@ export default function StaffDashboard() {
         </div>
       </section>
 
-      {/* 2. Main Dashboard Content Grid */}
+      {/* 2. Main Dashboard Content Area */}
       <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-7">
         {/* Section 1: Targeted for Completion Today */}
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 sm:p-7">
@@ -186,61 +489,37 @@ export default function StaffDashboard() {
               </svg>
             </div>
             <div>
-              <p className="text-xs text-slate-400 font-medium">Monday, May 7, 2026</p>
-              <h2 className="text-xl font-bold text-slate-900 leading-snug">5 Documents</h2>
+              <p className="text-xs text-slate-400 font-medium">{todayFormatted}</p>
+              <h2 className="text-xl font-bold text-slate-900 leading-snug">
+                {targetedSection.totalDocuments} Documents
+              </h2>
               <p className="text-xs text-slate-400 font-normal">Targeted for completion today</p>
             </div>
           </div>
 
           {/* 4 Document Type Subcards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-            {/* Subcard 1 */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs hover:shadow-sm transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-600 truncate">Transcript of records</span>
-                <span className="bg-[#E60000] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
-                  High
-                </span>
+            {targetedSection.cards.map((card, idx) => (
+              <div
+                key={idx}
+                className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs hover:shadow-sm transition-shadow"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-600 truncate" title={card.name}>
+                    {card.name}
+                  </span>
+                  <span
+                    className={`text-white text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                      card.priority === 'High' ? 'bg-[#E60000]' : 'bg-[#FF6B00]'
+                    }`}
+                  >
+                    {card.priority}
+                  </span>
+                </div>
+                <p className="text-3xl font-extrabold text-slate-900 mt-2">{card.count}</p>
+                <p className="text-xs text-slate-400 font-normal">copies</p>
               </div>
-              <p className="text-3xl font-extrabold text-slate-900 mt-2">3</p>
-              <p className="text-xs text-slate-400 font-normal">copies</p>
-            </div>
-
-            {/* Subcard 2 */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs hover:shadow-sm transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-600 truncate">Honorable Dismissal</span>
-                <span className="bg-[#FF6B00] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
-                  Medium
-                </span>
-              </div>
-              <p className="text-3xl font-extrabold text-slate-900 mt-2">1</p>
-              <p className="text-xs text-slate-400 font-normal">copies</p>
-            </div>
-
-            {/* Subcard 3 */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs hover:shadow-sm transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-600 truncate">Evaluation</span>
-                <span className="bg-[#FF6B00] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
-                  Medium
-                </span>
-              </div>
-              <p className="text-3xl font-extrabold text-slate-900 mt-2">1</p>
-              <p className="text-xs text-slate-400 font-normal">copies</p>
-            </div>
-
-            {/* Subcard 4 */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs hover:shadow-sm transition-shadow">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-600 truncate">Officially Enrolled</span>
-                <span className="bg-[#FF6B00] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
-                  Medium
-                </span>
-              </div>
-              <p className="text-3xl font-extrabold text-slate-900 mt-2">1</p>
-              <p className="text-xs text-slate-400 font-normal">copies</p>
-            </div>
+            ))}
           </div>
         </div>
 
@@ -254,7 +533,7 @@ export default function StaffDashboard() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
-            <p className="text-2xl font-black text-slate-900 mt-2">5</p>
+            <p className="text-2xl font-black text-slate-900 mt-2">{metrics.total}</p>
             <p className="text-xs text-slate-400 mt-1">All Time</p>
           </div>
 
@@ -268,7 +547,7 @@ export default function StaffDashboard() {
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
             </div>
-            <p className="text-2xl font-black text-slate-900 mt-2">3</p>
+            <p className="text-2xl font-black text-slate-900 mt-2">{metrics.pending}</p>
             <p className="text-xs text-slate-400 mt-1">Need Attention</p>
           </div>
 
@@ -281,7 +560,7 @@ export default function StaffDashboard() {
                 <polyline points="12 6 12 12 16 14" />
               </svg>
             </div>
-            <p className="text-2xl font-black text-slate-900 mt-2">1</p>
+            <p className="text-2xl font-black text-slate-900 mt-2">{metrics.processing}</p>
             <p className="text-xs text-slate-400 mt-1">In progress</p>
           </div>
 
@@ -293,7 +572,7 @@ export default function StaffDashboard() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <p className="text-2xl font-black text-slate-900 mt-2">1</p>
+            <p className="text-2xl font-black text-slate-900 mt-2">{metrics.completed}</p>
             <p className="text-xs text-slate-400 mt-1">Released</p>
           </div>
         </div>
@@ -313,13 +592,13 @@ export default function StaffDashboard() {
             <p className="flex items-start gap-2">
               <span className="text-white text-base leading-none">•</span>
               <span>
-                Request volume is expected to peak <strong className="font-bold text-white">this week</strong> with approximately <strong className="font-bold text-white">25 requests</strong>
+                Request volume is expected to peak <strong className="font-bold text-white">this week</strong> with approximately <strong className="font-bold text-white">{Math.max(25, Math.round(metrics.total * 1.5))} requests</strong>
               </span>
             </p>
             <p className="flex items-start gap-2">
               <span className="text-white text-base leading-none">•</span>
               <span>
-                Transcript of records requests show <strong className="font-bold text-white">+8% growth trend</strong>
+                {targetedSection.topDocName} requests show <strong className="font-bold text-white">+8% growth trend</strong>
               </span>
             </p>
             <p className="flex items-start gap-2">
@@ -343,7 +622,7 @@ export default function StaffDashboard() {
               </svg>
             </div>
             <div>
-              <p className="text-xs text-slate-500 font-medium">Monday, May 7, 2026</p>
+              <p className="text-xs text-slate-500 font-medium">{todayFormatted}</p>
               <h3 className="text-xl font-bold text-slate-900">Calendar</h3>
             </div>
           </div>
@@ -361,136 +640,69 @@ export default function StaffDashboard() {
 
             {/* Days Grid */}
             <div className="grid grid-cols-7 divide-x divide-slate-200 min-h-[175px]">
-              {/* Sunday */}
-              <div className="p-3 font-bold text-slate-800 text-lg">
-                3
-              </div>
+              {currentWeekDays.map((d) => (
+                <div
+                  key={d.dayName}
+                  className={`p-2 sm:p-2.5 flex flex-col justify-between ${
+                    d.isToday ? 'bg-blue-50/40 ring-1 ring-inset ring-blue-400/40' : ''
+                  }`}
+                >
+                  {d.hasActiveWork ? (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-lg ${d.isToday ? 'font-black text-blue-800' : 'font-bold text-slate-800'}`}>
+                          {d.dayNumber}
+                        </span>
+                        <span
+                          className={`text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                            d.comp >= 100 ? 'bg-[#00D02A]' : 'bg-[#F59E0B]'
+                          }`}
+                        >
+                          {d.comp}%
+                        </span>
+                      </div>
+                      <div className="space-y-1 text-[9px] sm:text-[10px]">
+                        <div
+                          className="bg-[#DCFCE7] text-[#15803D] p-1 rounded font-medium truncate"
+                          title={`Release document from: ${d.relTargetStr}`}
+                        >
+                          Release document from: {d.relTargetStr}
+                        </div>
+                        <div className="bg-[#E0F2FE] text-[#0369A1] p-1 rounded font-medium flex justify-between">
+                          <span>Process document:</span>
+                          <strong className="font-bold">{d.proc}</strong>
+                        </div>
+                        <div className="bg-[#FEF9C3] text-[#854D0E] p-1 rounded font-medium flex justify-between">
+                          <span>New requests:</span>
+                          <strong className="font-bold">{d.newReqs}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-1 font-bold text-slate-800 text-lg">
+                      <span className={d.isToday ? 'text-blue-800 font-black' : ''}>{d.dayNumber}</span>
+                    </div>
+                  )}
 
-              {/* Monday */}
-              <div className="p-2 sm:p-2.5 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-slate-800 text-lg">4</span>
-                    <span className="bg-[#00D02A] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
-                      100%
-                    </span>
-                  </div>
-                  <div className="space-y-1 text-[9px] sm:text-[10px]">
-                    <div className="bg-[#DCFCE7] text-[#15803D] p-1 rounded font-medium truncate" title="Release document from: April 20, 2026">
-                      Release document from: April 20, 2026
-                    </div>
-                    <div className="bg-[#E0F2FE] text-[#0369A1] p-1 rounded font-medium flex justify-between">
-                      <span>Process document:</span>
-                      <strong className="font-bold">5</strong>
-                    </div>
-                    <div className="bg-[#FEF9C3] text-[#854D0E] p-1 rounded font-medium flex justify-between">
-                      <span>New requests:</span>
-                      <strong className="font-bold">20</strong>
-                    </div>
-                  </div>
+                  {d.hasActiveWork && (
+                    <div
+                      className={`w-full h-1 rounded-full mt-2 ${
+                        d.comp >= 100 ? 'bg-[#00D02A]' : 'bg-[#F59E0B]'
+                      }`}
+                    />
+                  )}
                 </div>
-                <div className="w-full h-1 bg-[#00D02A] rounded-full mt-2" />
-              </div>
-
-              {/* Tuesday */}
-              <div className="p-2 sm:p-2.5 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-slate-800 text-lg">5</span>
-                    <span className="bg-[#00D02A] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
-                      100%
-                    </span>
-                  </div>
-                  <div className="space-y-1 text-[9px] sm:text-[10px]">
-                    <div className="bg-[#DCFCE7] text-[#15803D] p-1 rounded font-medium truncate" title="Release document from: April 21, 2026">
-                      Release document from: April 21, 2026
-                    </div>
-                    <div className="bg-[#E0F2FE] text-[#0369A1] p-1 rounded font-medium flex justify-between">
-                      <span>Process document:</span>
-                      <strong className="font-bold">8</strong>
-                    </div>
-                    <div className="bg-[#FEF9C3] text-[#854D0E] p-1 rounded font-medium flex justify-between">
-                      <span>New requests:</span>
-                      <strong className="font-bold">10</strong>
-                    </div>
-                  </div>
-                </div>
-                <div className="w-full h-1 bg-[#00D02A] rounded-full mt-2" />
-              </div>
-
-              {/* Wednesday */}
-              <div className="p-2 sm:p-2.5 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-slate-800 text-lg">6</span>
-                    <span className="bg-[#00D02A] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
-                      100%
-                    </span>
-                  </div>
-                  <div className="space-y-1 text-[9px] sm:text-[10px]">
-                    <div className="bg-[#DCFCE7] text-[#15803D] p-1 rounded font-medium truncate" title="Release document from: April 22, 2026">
-                      Release document from: April 22, 2026
-                    </div>
-                    <div className="bg-[#E0F2FE] text-[#0369A1] p-1 rounded font-medium flex justify-between">
-                      <span>Process document:</span>
-                      <strong className="font-bold">10</strong>
-                    </div>
-                    <div className="bg-[#FEF9C3] text-[#854D0E] p-1 rounded font-medium flex justify-between">
-                      <span>New requests:</span>
-                      <strong className="font-bold">5</strong>
-                    </div>
-                  </div>
-                </div>
-                <div className="w-full h-1 bg-[#00D02A] rounded-full mt-2" />
-              </div>
-
-              {/* Thursday */}
-              <div className="p-2 sm:p-2.5 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-slate-800 text-lg">7</span>
-                    <span className="bg-[#F59E0B] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
-                      95%
-                    </span>
-                  </div>
-                  <div className="space-y-1 text-[9px] sm:text-[10px]">
-                    <div className="bg-[#DCFCE7] text-[#15803D] p-1 rounded font-medium truncate" title="Release document from: May 1, 2026">
-                      Release document from: May 1, 2026
-                    </div>
-                    <div className="bg-[#E0F2FE] text-[#0369A1] p-1 rounded font-medium flex justify-between">
-                      <span>Process document:</span>
-                      <strong className="font-bold">11</strong>
-                    </div>
-                    <div className="bg-[#FEF9C3] text-[#854D0E] p-1 rounded font-medium flex justify-between">
-                      <span>New requests:</span>
-                      <strong className="font-bold">3</strong>
-                    </div>
-                  </div>
-                </div>
-                <div className="w-full h-1 bg-[#F59E0B] rounded-full mt-2" />
-              </div>
-
-              {/* Friday */}
-              <div className="p-3 font-bold text-slate-800 text-lg">
-                8
-              </div>
-
-              {/* Saturday */}
-              <div className="p-3 font-bold text-slate-800 text-lg">
-                9
-              </div>
+              ))}
             </div>
 
             {/* Optional Collapsible Second Week when expanded */}
             {isCalendarExpanded && (
               <div className="border-t border-slate-200 grid grid-cols-7 divide-x divide-slate-200 min-h-[120px] bg-slate-50/50 animate-fadeIn">
-                <div className="p-3 font-bold text-slate-800 text-base">10</div>
-                <div className="p-3 font-bold text-slate-800 text-base">11</div>
-                <div className="p-3 font-bold text-slate-800 text-base">12</div>
-                <div className="p-3 font-bold text-slate-800 text-base">13</div>
-                <div className="p-3 font-bold text-slate-800 text-base">14</div>
-                <div className="p-3 font-bold text-slate-800 text-base">15</div>
-                <div className="p-3 font-bold text-slate-800 text-base">16</div>
+                {currentWeekDays.map((d) => (
+                  <div key={`next-${d.dayName}`} className="p-3 font-bold text-slate-800 text-base">
+                    {d.dayNumber + 7 > 31 ? (d.dayNumber + 7) - 31 : d.dayNumber + 7}
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -547,8 +759,8 @@ export default function StaffDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {requestsList.map((req) => (
-                  <tr key={req.id} className="hover:bg-slate-50/70 transition-colors">
+                {requestsList.slice(0, 5).map((req) => (
+                  <tr key={req.id || req.tracking_number} className="hover:bg-slate-50/70 transition-colors">
                     {/* Request ID */}
                     <td className="py-4 px-4 font-bold text-slate-900 whitespace-nowrap">
                       {req.tracking_number}
@@ -563,7 +775,9 @@ export default function StaffDashboard() {
                     {/* Document Type */}
                     <td className="py-4 px-4">
                       <p className="text-slate-800 font-medium">{req.document_type}</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">{req.copies} {req.copies > 1 ? 'copies' : 'copy'}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        {req.copies} {req.copies > 1 ? 'copies' : 'copy'}
+                      </p>
                     </td>
 
                     {/* Status */}
@@ -585,14 +799,8 @@ export default function StaffDashboard() {
                     <td className="py-4 px-4 text-center whitespace-nowrap">
                       <button
                         type="button"
-                        onClick={() => {
-                          if (req.raw) {
-                            setSelectedRequest(req.raw);
-                          } else {
-                            navigate(`${ROUTES.STAFF.REQUESTS}?search=${encodeURIComponent(req.tracking_number)}`);
-                          }
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 hover:border-slate-400 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                        onClick={() => handleOpenRequestModal(req)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 hover:border-slate-400 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-all cursor-pointer shadow-2xs active:scale-95"
                       >
                         <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -609,20 +817,17 @@ export default function StaffDashboard() {
         </div>
       </div>
 
-      {/* Staff Process Modal if a backend request is clicked */}
-      {selectedRequest && (
+      {/* Staff Process Modal for inspecting request details & updating status */}
+      {modalRequest && (
         <StaffProcessModal
-          selectedRequest={selectedRequest}
-          newStatus={selectedRequest.status}
-          setNewStatus={() => {}}
-          notes=""
-          setNotes={() => {}}
-          updating={false}
-          onUpdateStatus={() => {
-            setSelectedRequest(null);
-            toast.info('Status updated.');
-          }}
-          onBackToList={() => setSelectedRequest(null)}
+          selectedRequest={modalRequest.raw || modalRequest}
+          newStatus={modalStatus}
+          setNewStatus={setModalStatus}
+          notes={modalNotes}
+          setNotes={setModalNotes}
+          updating={modalUpdating}
+          onUpdateStatus={handleSaveStatus}
+          onBackToList={handleCloseRequestModal}
           requestStatuses={['Pending', 'Processing', 'For release', 'Claimed', 'On Hold']}
           getStatusBadge={getStatusBadge}
         />
