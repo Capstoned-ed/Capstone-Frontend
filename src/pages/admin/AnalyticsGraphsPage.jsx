@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import requestsApi, { getStoredRequests } from '../../api/requests';
+import requestsApi, { getStoredRequests, isDummyStudentRequest } from '../../api/requests';
 import '../../styles/admin/AnalyticsGraphsPage.css';
 
 // Helper to safely convert an ISO string, Date object, or date string into local YYYY-MM-DD
@@ -80,7 +80,7 @@ export default function AnalyticsGraphsPage() {
         }
       });
 
-      setRequestsList(combined);
+      setRequestsList(combined.filter((r) => !isDummyStudentRequest(r)));
       setCredTypes(Array.isArray(typesRes) ? typesRes : []);
     } catch (err) {
       console.warn('Analytics data load notice:', err);

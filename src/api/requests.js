@@ -5,21 +5,53 @@ export const STORAGE_KEY = 'regquest_submitted_requests';
 export const STUDENT_REQUESTS_KEY = 'student_my_requests';
 
 /**
+ * Filter out any mock/dummy requests for student #1 to #4
+ */
+export function isDummyStudentRequest(item) {
+  if (!item) return false;
+  const name = String(item.student_name || item.student || '').trim().toLowerCase();
+  const id = String(item.student_id || item.studentId || '').trim().toLowerCase();
+  const tracking = String(item.tracking_number || item.trackingId || item.id || '').trim().toLowerCase();
+  return (
+    /^student\s*#?\s*[1-4]$/i.test(name) ||
+    /^student\s*#?\s*[1-4]$/i.test(id) ||
+    /^student\s*#?\s*[1-4]$/i.test(tracking) ||
+    /student\s*#?\s*[1-4]\b/i.test(name)
+  );
+}
+
+/**
  * Retrieve stored/submitted requests across student, staff, and admin.
  */
 export function getStoredRequests() {
   try {
     const primary = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
     const student = JSON.parse(localStorage.getItem(STUDENT_REQUESTS_KEY) || '[]');
+    const legacy = JSON.parse(localStorage.getItem('regquest_stored_requests') || '[]');
 
     const map = new Map();
-    [...primary, ...student].forEach((item) => {
-      if (!item) return;
+    [...primary, ...student, ...legacy].forEach((item) => {
+      if (!item || isDummyStudentRequest(item)) return;
       const key = item.tracking_number || item.trackingId || item.id;
       if (key && !map.has(key)) {
         map.set(key, item);
       }
     });
+
+    // Clean up any dummy student #1 to #4 items from localStorage
+    const cleanPrimary = primary.filter((item) => !isDummyStudentRequest(item));
+    if (cleanPrimary.length !== primary.length) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanPrimary));
+    }
+    const cleanStudent = student.filter((item) => !isDummyStudentRequest(item));
+    if (cleanStudent.length !== student.length) {
+      localStorage.setItem(STUDENT_REQUESTS_KEY, JSON.stringify(cleanStudent));
+    }
+    const cleanLegacy = legacy.filter((item) => !isDummyStudentRequest(item));
+    if (cleanLegacy.length !== legacy.length) {
+      localStorage.setItem('regquest_stored_requests', JSON.stringify(cleanLegacy));
+    }
+
     return Array.from(map.values());
   } catch (err) {
     console.warn('Failed to load stored requests:', err);
@@ -221,7 +253,7 @@ export const requestsApi = {
       }
     });
 
-    return combined;
+    return combined.filter((r) => !isDummyStudentRequest(r));
   },
 
   /**

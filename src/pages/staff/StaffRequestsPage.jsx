@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import requestsApi, { updateStoredRequest } from '../../api/requests';
+import requestsApi, { updateStoredRequest, isDummyStudentRequest } from '../../api/requests';
 import { saveStoredNotification } from '../../api/notifications';
 import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
@@ -193,7 +193,9 @@ export default function StaffRequestsPage() {
 
   // Formatted requests
   const requests = useMemo(() => {
-    return rawRequests.map((r, idx) => {
+    return rawRequests
+      .filter((r) => !isDummyStudentRequest(r))
+      .map((r, idx) => {
       const user = userMap.get(r.user);
       const cred = credTypeMap.get(r.credential_type);
 
@@ -265,7 +267,7 @@ export default function StaffRequestsPage() {
 
       const studentName = !isStudentNameId
         ? r.student_name
-        : (userFullName || profileName || fallbackKnownName || r.student_name || `Student #${r.user || idx + 1}`);
+        : (userFullName || profileName || fallbackKnownName || r.student_name || user?.username || 'Student');
 
       const studentId =
         (r.student_id && /^\d+$/.test(r.student_id))

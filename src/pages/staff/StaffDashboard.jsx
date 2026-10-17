@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
 import ustpBuilding from '../../assets/USTP.png';
-import requestsApi, { getStoredRequests, updateStoredRequest } from '../../api/requests';
+import requestsApi, { getStoredRequests, updateStoredRequest, isDummyStudentRequest } from '../../api/requests';
 import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
 import { StaffProcessModal } from '../../components/staff';
@@ -118,7 +118,9 @@ export default function StaffDashboard() {
       } catch {}
 
       if (combinedRaw.length > 0) {
-        const enriched = combinedRaw.map((r, idx) => {
+        const enriched = combinedRaw
+          .filter((r) => !isDummyStudentRequest(r))
+          .map((r, idx) => {
           const userObj = userMap.get(r.user) || userMap.get(r.student_id);
           const cred = credMap.get(r.credential_type) || credMap.get(r.credential);
           const p = profiles[r.user] || profiles[r.student_id] || (userObj ? profiles[userObj.id] : null) || {};
@@ -127,7 +129,8 @@ export default function StaffDashboard() {
             p.full_name ||
             (userObj ? [userObj.first_name, userObj.last_name].filter(Boolean).join(' ') : null) ||
             r.student_name ||
-            `Student #${r.user || idx + 1}`;
+            userObj?.username ||
+            'Student';
 
           const studentId = p.student_id || r.student_id || userObj?.username || userObj?.student_id || '—';
           const docType = r.document_type || cred?.name || r.credential_name || 'Document Request';
