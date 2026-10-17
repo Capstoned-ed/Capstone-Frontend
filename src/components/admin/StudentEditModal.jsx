@@ -38,15 +38,28 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
 
       const updated = await usersApi.update(student.id, payload);
       // Merge local extended profile info including edited student ID
+      const fullName = `${formData.first_name.trim()} ${formData.last_name.trim()}`.trim();
       const merged = {
         ...updated,
         student_id: formData.student_id.trim() || student.username,
         username: formData.student_id.trim() || student.username,
+        first_name: formData.first_name.trim(),
+        last_name: formData.last_name.trim(),
+        full_name: fullName || formData.first_name.trim() || student.username,
         program: formData.program,
         year_level: formData.year_level,
       };
 
-      toast.success(`Student profile for "${merged.username}" updated successfully.`);
+      // Also persist student profile in localStorage
+      try {
+        const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+        const pKey = merged.student_id || merged.username;
+        profiles[pKey] = merged;
+        if (merged.id) profiles[merged.id] = merged;
+        localStorage.setItem('regquest_student_profiles', JSON.stringify(profiles));
+      } catch {}
+
+      toast.success(`Student profile for "${fullName || merged.username}" updated successfully.`);
       if (onStudentUpdated) {
         onStudentUpdated(merged);
       }

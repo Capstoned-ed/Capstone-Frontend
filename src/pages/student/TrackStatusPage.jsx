@@ -139,6 +139,8 @@ export default function TrackStatusPage() {
       if (r.user && currentUserId && String(r.user) === String(currentUserId)) return true;
       if (r.student_id && currentStudentId && String(r.student_id) === String(currentStudentId)) return true;
       if (r.student_name && user?.username && r.student_name.toLowerCase().includes(user.username.toLowerCase())) return true;
+      if (r.student_name && user?.full_name && r.student_name.toLowerCase().includes(user.full_name.toLowerCase())) return true;
+      if (r.student_name && user?.first_name && r.student_name.toLowerCase().includes(user.first_name.toLowerCase())) return true;
       return false;
     });
 

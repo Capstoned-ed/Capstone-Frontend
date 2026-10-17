@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
 import credentialTypesApi from '../../api/credentialTypes';
+import clearancesApi from '../../api/clearances';
 import CredentialTypeCard from '../../components/credentials/CredentialTypeCard';
 import '../../styles/CredentialTypes.css';
 
@@ -11,6 +12,7 @@ export default function StudentDashboard() {
   const navigate = useNavigate();
 
   const [credentials, setCredentials] = useState([]);
+  const [clearance, setClearance] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -18,9 +20,16 @@ export default function StudentDashboard() {
     async function loadData() {
       try {
         setLoading(true);
-        const data = await credentialTypesApi.list();
+        const [credsData, clearanceList] = await Promise.all([
+          credentialTypesApi.list().catch(() => []),
+          clearancesApi.list().catch(() => []),
+        ]);
+
         if (!ignore) {
-          setCredentials(data.filter((t) => t.is_active));
+          setCredentials(credsData.filter((t) => t.is_active));
+          if (Array.isArray(clearanceList) && clearanceList.length > 0) {
+            setClearance(clearanceList[0]);
+          }
         }
       } catch (err) {
         console.error('Failed to load credentials for dashboard:', err);
@@ -43,7 +52,7 @@ export default function StudentDashboard() {
             Student Portal
           </span>
           <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            Welcome back, {user?.first_name || user?.username || 'Student'}!
+            Welcome back, {user?.full_name || user?.first_name || user?.username || 'Student'}!
           </h2>
           <p className="text-sm text-slate-200 mt-2 max-w-xl leading-relaxed">
             Manage your document requests, clearance submissions, and track processing statuses in real-time.
@@ -51,9 +60,10 @@ export default function StudentDashboard() {
           <div className="mt-5 flex flex-wrap gap-3">
             <button
               onClick={() => navigate(ROUTES.STUDENT.NEW_REQUEST)}
-              className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs sm:text-sm rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer"
+              className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs sm:text-sm rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer flex items-center gap-1.5"
             >
-              + Request New Document
+              <span>+</span>
+              <span>Request New Document</span>
             </button>
             <button
               onClick={() => navigate(ROUTES.STUDENT.CREDENTIALS)}
@@ -77,19 +87,54 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl font-bold">
-            ⏳
+        {/* Dynamic Clearance Stat Card */}
+        <div
+          onClick={() => navigate(ROUTES.STUDENT.NEW_REQUEST)}
+          className={`rounded-xl p-5 border shadow-xs flex items-center gap-4 cursor-pointer transition-all hover:scale-[1.01] active:scale-98 ${
+            clearance?.status === 'APPROVED'
+              ? 'bg-emerald-50/40 border-emerald-200 hover:border-emerald-300'
+              : clearance?.status === 'REJECTED'
+              ? 'bg-rose-50/40 border-rose-200 hover:border-rose-300'
+              : 'bg-white border-slate-200 hover:border-amber-300'
+          }`}
+          title="Attach clearance during document request"
+        >
+          <div
+            className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold ${
+              clearance?.status === 'APPROVED'
+                ? 'bg-emerald-100 text-emerald-700'
+                : clearance?.status === 'REJECTED'
+                ? 'bg-rose-100 text-rose-700'
+                : 'bg-amber-50 text-amber-600'
+            }`}
+          >
+            {clearance?.status === 'APPROVED' ? '✅' : clearance?.status === 'REJECTED' ? '❌' : '⏳'}
           </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">In Clearance</p>
-            <p className="text-2xl font-extrabold text-slate-800">1</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Clearance Status</p>
+            <p
+              className={`text-sm sm:text-base font-extrabold truncate mt-0.5 ${
+                clearance?.status === 'APPROVED'
+                  ? 'text-emerald-700'
+                  : clearance?.status === 'REJECTED'
+                  ? 'text-rose-700'
+                  : 'text-amber-800'
+              }`}
+            >
+              {clearance?.status === 'APPROVED'
+                ? 'Approved & Cleared'
+                : clearance?.status === 'REJECTED'
+                ? 'Rejected (Action Req.)'
+                : clearance?.status === 'PENDING'
+                ? 'Pending Review'
+                : 'Not Yet Submitted'}
+            </p>
           </div>
         </div>
 
         <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-xs flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl font-bold">
-            ✅
+            🎓
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Completed</p>
