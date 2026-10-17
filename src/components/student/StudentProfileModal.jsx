@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
@@ -11,15 +12,24 @@ export default function StudentProfileModal({ isOpen, onClose }) {
   const [requestsList, setRequestsList] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
 
-  // Close on ESC
+  // Lock body scroll and close on ESC
   useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+
     const handleKeyDown = (e) => {
       if (e.key === 'Escape' && isOpen) {
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isOpen, onClose]);
 
   // Load requests when modal opens
@@ -65,14 +75,14 @@ export default function StudentProfileModal({ isOpen, onClose }) {
   const academicProgram = user?.program || 'B.S. in Information Technology';
   const yearLevel = user?.year_level || '1st year';
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-md p-4 md:p-6 animate-fadeIn"
       onClick={onClose}
     >
       <div
-        className="relative bg-[#F8F9FA] border border-slate-200/90 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col md:flex-row overflow-hidden text-slate-800"
-        style={{ minHeight: '480px' }}
+        className="relative bg-[#F8F9FA] border border-slate-200/90 rounded-2xl w-full max-w-5xl shadow-2xl flex flex-col md:flex-row overflow-hidden text-slate-800"
+        style={{ minHeight: '520px' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Left Navigation Panel */}
@@ -316,6 +326,7 @@ export default function StudentProfileModal({ isOpen, onClose }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
