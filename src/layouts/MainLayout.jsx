@@ -10,6 +10,7 @@ export default function MainLayout({ children }) {
   const location = useLocation();
   const isAdminDashboard = location.pathname === '/admin/dashboard';
   const isStudentDashboard = location.pathname === '/student/dashboard' || location.pathname === '/student';
+  const isStaffDashboard = location.pathname === '/staff/dashboard' || location.pathname === '/staff' || location.pathname === '/registrar/dashboard';
   const isStudentView = location.pathname.startsWith('/student') || user?.role === 'student';
 
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -82,7 +83,7 @@ export default function MainLayout({ children }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-y-auto">
         {/* Page Body Viewport */}
-        <main className={`flex-1 w-full ${isAdminDashboard || isStudentDashboard ? 'p-0 max-w-none' : isStudentView ? 'px-4 sm:px-8 pt-4 sm:pt-6 pb-6 max-w-7xl mx-auto' : 'p-6 sm:p-8 max-w-7xl mx-auto'}`}>
+        <main className={`flex-1 w-full ${isAdminDashboard || isStudentDashboard || isStaffDashboard ? 'p-0 max-w-none' : isStudentView ? 'px-4 sm:px-8 pt-4 sm:pt-6 pb-6 max-w-7xl mx-auto' : 'p-6 sm:p-8 max-w-7xl mx-auto'}`}>
           {children ? children : <Outlet />}
         </main>
 
