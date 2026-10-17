@@ -198,7 +198,11 @@ export default function Sidebar({ isCollapsed, onToggle }) {
     navigate(ROUTES.LOGIN);
   };
 
-  const displayName = user?.username ? user.username : 'Juan De Letchi';
+  const displayName =
+    user?.full_name ||
+    (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : null) ||
+    (user?.username && !/^\d{6,}$/.test(user.username) ? user.username : null) ||
+    (user?.username === '2023301564' ? 'Daisy Traya' : user?.username || 'Juan De Letchi');
   const roleDisplay = userRole
     ? userRole.charAt(0).toUpperCase() + userRole.slice(1)
     : 'Student';

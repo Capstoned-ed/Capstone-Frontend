@@ -217,7 +217,7 @@ AI Prompt For Frontend Developer:
 Owner: Frontend Developer
 
 Status:
-* READY
+* COMPLETED
 
 Purpose:
 Build a UI notification center (bell icon dropdown and/or dedicated page) to display system notifications to the authenticated user.
@@ -260,7 +260,7 @@ AI Prompt For Frontend Developer:
 Owner: Full Stack Developer (Frontend Portion)
 
 Status:
-* READY
+* COMPLETED
 
 Purpose:
 Build the interfaces for students to upload their clearance documents and for Staff/Admins to review and approve/reject them.

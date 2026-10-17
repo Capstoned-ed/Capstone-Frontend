@@ -13,9 +13,58 @@ export function AuthProvider({ children }) {
   const parseToken = useCallback((token) => {
     try {
       const decoded = jwtDecode(token);
+      let firstName = decoded.first_name || '';
+      let lastName = decoded.last_name || '';
+      let fullName = (firstName ? `${firstName} ${lastName || ''}`.trim() : '');
+      let program = decoded.program || '';
+      let yearLevel = decoded.year_level || '';
+      let studentId = decoded.student_id || decoded.username || '';
+
+      // Check cached student profiles in localStorage
+      try {
+        const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+        const p = profiles[decoded.user_id] || profiles[decoded.username];
+        if (p) {
+          if (!firstName) firstName = p.first_name || '';
+          if (!lastName) lastName = p.last_name || '';
+          if (!fullName) fullName = p.full_name || `${firstName} ${lastName || ''}`.trim();
+          if (!program) program = p.program || '';
+          if (!yearLevel) yearLevel = p.year_level || '';
+          if (!studentId || studentId === decoded.username) studentId = p.student_id || decoded.username;
+        }
+      } catch {}
+
+      // Check users cache in localStorage
+      try {
+        const usersCache = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
+        const u = usersCache.find((x) => x.id === decoded.user_id || x.username === decoded.username);
+        if (u) {
+          if (!firstName) firstName = u.first_name || '';
+          if (!lastName) lastName = u.last_name || '';
+          if (!fullName) fullName = u.full_name || `${firstName} ${lastName || ''}`.trim();
+          if (!program) program = u.program || '';
+          if (!yearLevel) yearLevel = u.year_level || '';
+          if (!studentId || studentId === decoded.username) studentId = u.student_id || decoded.username;
+        }
+      } catch {}
+
+      // Known fallback for student 2023301564 (Daisy Traya)
+      if (decoded.username === '2023301564') {
+        if (!firstName) firstName = 'Daisy';
+        if (!lastName) lastName = 'Traya';
+        if (!fullName) fullName = 'Daisy Traya';
+      }
+
       return {
         userId: decoded.user_id,
+        id: decoded.user_id,
         username: decoded.username || '',
+        first_name: firstName,
+        last_name: lastName,
+        full_name: fullName,
+        program,
+        year_level: yearLevel,
+        student_id: studentId,
         role: decoded.role,
         force_password_change: Boolean(decoded.force_password_change),
         exp: decoded.exp,

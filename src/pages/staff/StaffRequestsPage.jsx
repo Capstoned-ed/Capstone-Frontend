@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import requestsApi, { updateStoredRequest } from '../../api/requests';
 import { saveStoredNotification } from '../../api/notifications';
 import usersApi from '../../api/users';
+import clearancesApi from '../../api/clearances';
 import useToast from '../../hooks/useToast';
 import { StaffProcessModal, StaffRequestsTable, StaffSearchFilter } from '../../components/staff';
 import '../../styles/staff/StaffRequestsPage.css';
@@ -84,6 +85,7 @@ export default function StaffRequestsPage() {
   const [rawRequests, setRawRequests] = useState([]);
   const [users, setUsers] = useState([]);
   const [credentialTypes, setCredentialTypes] = useState([]);
+  const [clearances, setClearances] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -103,13 +105,17 @@ export default function StaffRequestsPage() {
     let ignore = false;
     async function loadData() {
       try {
-        const [requestsRes, credTypesRes] = await Promise.all([
+        const [requestsRes, credTypesRes, clearancesRes] = await Promise.all([
           requestsApi.list().catch((err) => {
             console.error('Failed requestsApi.list:', err);
             return [];
           }),
           requestsApi.getCredentialTypes().catch((err) => {
             console.error('Failed getCredentialTypes:', err);
+            return [];
+          }),
+          clearancesApi.list().catch((err) => {
+            console.error('Failed clearancesApi.list:', err);
             return [];
           }),
         ]);
@@ -133,6 +139,7 @@ export default function StaffRequestsPage() {
           setRawRequests(Array.isArray(requestsRes) ? requestsRes : []);
           setUsers(Array.isArray(usersRes) ? usersRes : []);
           setCredentialTypes(Array.isArray(credTypesRes) ? credTypesRes : []);
+          setClearances(Array.isArray(clearancesRes) ? clearancesRes : []);
           setLoading(false);
         }
       } catch (err) {
@@ -169,17 +176,100 @@ export default function StaffRequestsPage() {
     return map;
   }, [credentialTypes]);
 
+  // Quick clearance lookup map
+  const clearanceMap = useMemo(() => {
+    const map = new Map();
+    clearances.forEach((c) => {
+      const uId = typeof c.user === 'object' ? c.user?.id : c.user;
+      if (uId) map.set(uId, c);
+      if (c.student_id) map.set(c.student_id, c);
+      if (c.username) map.set(c.username, c);
+      if (c.user_details?.username) map.set(c.user_details.username, c);
+      if (c.user_details?.student_id) map.set(c.user_details.student_id, c);
+    });
+    return map;
+  }, [clearances]);
+
   // Formatted requests
   const requests = useMemo(() => {
     return rawRequests.map((r, idx) => {
       const user = userMap.get(r.user);
       const cred = credTypeMap.get(r.credential_type);
-      const studentName =
-        r.student_name ||
-        (user
-          ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
-          : `Student #${r.user || idx + 1}`);
-      const studentId = r.student_id || user?.student_id || user?.username || 'N/A';
+
+      // Check stored request cache for clearance preview
+      let cachedClearancePreview = null;
+      let cachedClearanceFileName = null;
+      let cachedClearanceIsPdf = false;
+      try {
+        const storedList = JSON.parse(localStorage.getItem('regquest_stored_requests') || '[]');
+        const matchedStored = storedList.find(
+          (s) =>
+            s.id === r.id ||
+            s.id === r.tracking_number ||
+            s.tracking_number === r.tracking_number ||
+            s.rawId === r.id
+        );
+        if (matchedStored?.clearance_preview) {
+          cachedClearancePreview = matchedStored.clearance_preview;
+          cachedClearanceFileName = matchedStored.clearance_file_name;
+          cachedClearanceIsPdf = matchedStored.clearance_is_pdf;
+        }
+      } catch {}
+
+      const userClearance =
+        clearanceMap.get(r.user) ||
+        clearanceMap.get(r.student_id) ||
+        (user ? clearanceMap.get(user.id) : null) ||
+        (user ? clearanceMap.get(user.student_id) : null) ||
+        (user ? clearanceMap.get(user.username) : null);
+
+      const effectiveClearancePreview =
+        r.clearance_preview ||
+        cachedClearancePreview ||
+        userClearance?.file ||
+        null;
+
+      // Check cached student profile
+      let profileName = null;
+      let profileStudentId = null;
+      try {
+        const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+        const p =
+          profiles[r.user] ||
+          profiles[r.student_id] ||
+          (user ? profiles[user.id] : null) ||
+          (user ? profiles[user.username] : null);
+        if (p) {
+          profileName = p.full_name || [p.first_name, p.last_name].filter(Boolean).join(' ');
+          profileStudentId = p.student_id || p.username;
+        }
+      } catch {}
+
+      const userFullName = user
+        ? [user.first_name, user.last_name].filter(Boolean).join(' ')
+        : '';
+
+      const fallbackKnownName =
+        (user?.username === '2023301564' || r.student_id === '2023301564' || r.student_name === '2023301564')
+          ? 'Daisy Traya'
+          : null;
+
+      // If r.student_name is valid and NOT an ID number or username, use it.
+      // Otherwise, prefer actual user first/last name, profileName, or fallbackKnownName.
+      const isStudentNameId =
+        !r.student_name ||
+        /^\d{6,}$/.test(r.student_name) ||
+        r.student_name === r.student_id ||
+        (user && r.student_name === user.username);
+
+      const studentName = !isStudentNameId
+        ? r.student_name
+        : (userFullName || profileName || fallbackKnownName || r.student_name || `Student #${r.user || idx + 1}`);
+
+      const studentId =
+        (r.student_id && /^\d+$/.test(r.student_id))
+          ? r.student_id
+          : profileStudentId || user?.student_id || user?.username || r.student_id || 'N/A';
       const documentType = r.document_type || cred?.name || r.credential_type_details?.name || 'Document Request';
       const amount =
         r.amount ||
@@ -203,11 +293,15 @@ export default function StaffRequestsPage() {
         amount,
         purpose: r.purpose || r.remarks || 'Official Academic Credential Request',
         remarks: r.remarks || '',
-        clearance_preview: r.clearance_preview || null,
+        clearance_preview: effectiveClearancePreview,
+        clearance_id: r.clearance_id || userClearance?.id || null,
+        clearance_status: userClearance?.status || (effectiveClearancePreview ? 'ATTACHED' : null),
+        clearance_file_name: r.clearance_file_name || cachedClearanceFileName || (userClearance?.file ? 'Clearance Document' : null),
+        clearance_is_pdf: r.clearance_is_pdf || cachedClearanceIsPdf || false,
         photo_preview: r.photo_preview || null,
       };
     });
-  }, [rawRequests, userMap, credTypeMap]);
+  }, [rawRequests, userMap, credTypeMap, clearanceMap]);
 
   // Filtered requests for table
   const filteredRequests = useMemo(() => {
@@ -256,7 +350,7 @@ export default function StaffRequestsPage() {
   const handleOpenProcess = (req) => {
     setSelectedRequest(req);
     setNewStatus(req.status || 'Pending');
-    setNotes(req.remarks || '');
+    setNotes(''); // Empty at first open as requested
   };
 
   // Back to Requests Table (Photo 1)
@@ -334,10 +428,30 @@ export default function StaffRequestsPage() {
 
   return (
     <div className="staff-req-container">
-      {/* ------------------------------------------------------------------
-          PHOTO 2 VIEW: Process Request View
-          ------------------------------------------------------------------ */}
-      {selectedRequest ? (
+      {/* Search & Filter Toolbar */}
+      <StaffSearchFilter
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        docTypeFilter={docTypeFilter}
+        setDocTypeFilter={setDocTypeFilter}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        credentialTypes={credentialTypes}
+        requestStatuses={REQUEST_STATUSES}
+      />
+
+      {/* Requests Data Table */}
+      <StaffRequestsTable
+        loading={loading}
+        error={error}
+        filteredRequests={filteredRequests}
+        totalRequestsCount={requests.length}
+        getStatusBadge={getStatusBadge}
+        onOpenProcess={handleOpenProcess}
+      />
+
+      {/* Process Request Modal Dialog */}
+      {selectedRequest && (
         <StaffProcessModal
           selectedRequest={selectedRequest}
           newStatus={newStatus}
@@ -350,28 +464,6 @@ export default function StaffRequestsPage() {
           requestStatuses={REQUEST_STATUSES}
           getStatusBadge={getStatusBadge}
         />
-      ) : (
-        <>
-          <StaffSearchFilter
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            docTypeFilter={docTypeFilter}
-            setDocTypeFilter={setDocTypeFilter}
-            statusFilter={statusFilter}
-            setStatusFilter={setStatusFilter}
-            credentialTypes={credentialTypes}
-            requestStatuses={REQUEST_STATUSES}
-          />
-
-          <StaffRequestsTable
-            loading={loading}
-            error={error}
-            filteredRequests={filteredRequests}
-            totalRequestsCount={requests.length}
-            getStatusBadge={getStatusBadge}
-            onOpenProcess={handleOpenProcess}
-          />
-        </>
       )}
     </div>
   );

@@ -154,9 +154,9 @@ export default function NotificationItem({
     }
     if (related_object_type === 'StudentClearance') {
       if (user?.role === ROLES.STAFF || user?.role === ROLES.REGISTRAR || user?.role === ROLES.ADMIN) {
-        return { label: 'Review Clearances →', path: ROUTES.STAFF.CLEARANCES };
+        return { label: 'View Requests →', path: ROUTES.STAFF.REQUESTS };
       }
-      return { label: 'View Clearance →', path: ROUTES.STUDENT.NEW_REQUEST };
+      return { label: 'Request Document →', path: ROUTES.STUDENT.NEW_REQUEST };
     }
     return null;
   };
