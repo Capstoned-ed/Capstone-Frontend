@@ -8,73 +8,10 @@ import clearancesApi from '../../api/clearances';
 import { StaffProcessModal } from '../../components/staff';
 import useToast from '../../hooks/useToast';
 
-const INITIAL_FALLBACK_REQUESTS = [
-  {
-    id: 1,
-    rawId: 1,
-    tracking_number: 'REQ-000001',
-    student_name: 'Jessica Gabica',
-    student_id: '2023303247',
-    document_type: 'Transcript of records',
-    copies: 2,
-    status: 'Pending',
-    request_date: '2026-03-05',
-    release_date: '2026-08-05',
-  },
-  {
-    id: 2,
-    rawId: 2,
-    tracking_number: 'REQ-000002',
-    student_name: 'Faith Love Traya',
-    student_id: '2023301853',
-    document_type: 'Honorable Dismissal',
-    copies: 1,
-    status: 'Ready for Pickup',
-    request_date: '2026-03-05',
-    release_date: '2026-08-05',
-  },
-  {
-    id: 3,
-    rawId: 3,
-    tracking_number: 'REQ-000003',
-    student_name: 'Luredel Dulangon',
-    student_id: '2023303057',
-    document_type: 'Evaluation',
-    copies: 1,
-    status: 'Processing',
-    request_date: '2026-03-05',
-    release_date: '2026-08-05',
-  },
-  {
-    id: 4,
-    rawId: 4,
-    tracking_number: 'REQ-000004',
-    student_name: 'Ken Neri',
-    student_id: '2023301234',
-    document_type: 'Transcript of records',
-    copies: 1,
-    status: 'Claimed',
-    request_date: '2026-03-05',
-    release_date: '2026-08-05',
-  },
-  {
-    id: 5,
-    rawId: 5,
-    tracking_number: 'REQ-000005',
-    student_name: 'Ralph Perocho',
-    student_id: '2023304321',
-    document_type: 'Officially enrolled',
-    copies: 1,
-    status: 'Pending',
-    request_date: '2026-03-05',
-    release_date: '2026-08-05',
-  },
-];
-
 function calculateReleaseDate(createdAt, processingDays = 5) {
-  if (!createdAt) return '2026-08-05';
+  if (!createdAt) return 'N/A';
   const d = new Date(createdAt);
-  if (isNaN(d.getTime())) return '2026-08-05';
+  if (isNaN(d.getTime())) return 'N/A';
   d.setDate(d.getDate() + (Number(processingDays) || 5));
   return d.toISOString().split('T')[0];
 }
@@ -97,7 +34,7 @@ function formatStatusDisplay(rawStatus) {
     case 'READY FOR PICKUP':
     case 'FOR_RELEASE':
     case 'FOR RELEASE':
-      return 'Ready for Pickup';
+      return 'For Release';
     case 'RELEASED':
     case 'CLAIMED':
     case 'CLAIMED / RELEASED':
@@ -106,7 +43,8 @@ function formatStatusDisplay(rawStatus) {
     case 'REQUIREMENTS_VERIFICATION':
       return 'On Hold';
     default:
-      return rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
+      if (s === 'FOR RELEASE' || s === 'FOR_RELEASE') return 'For Release';
+      return rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
   }
 }
 
@@ -114,9 +52,11 @@ export default function StaffDashboard() {
   const navigate = useNavigate();
   const toast = useToast();
 
-  const [requestsList, setRequestsList] = useState(INITIAL_FALLBACK_REQUESTS);
+  const [requestsList, setRequestsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(false);
+  const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
 
   // Modal State for StaffProcessModal
   const [modalRequest, setModalRequest] = useState(null);
@@ -189,10 +129,10 @@ export default function StaffDashboard() {
             r.student_name ||
             `Student #${r.user || idx + 1}`;
 
-          const studentId = p.student_id || r.student_id || userObj?.username || userObj?.student_id || '2023301564';
-          const docType = r.document_type || cred?.name || r.credential_name || 'Transcript of records';
+          const studentId = p.student_id || r.student_id || userObj?.username || userObj?.student_id || '—';
+          const docType = r.document_type || cred?.name || r.credential_name || 'Document Request';
           const copiesNum = parseInt(r.copies) || 1;
-          const reqDate = r.created_at ? r.created_at.split('T')[0] : r.request_date || '2026-03-05';
+          const reqDate = r.created_at ? r.created_at.split('T')[0] : r.request_date || new Date().toISOString().split('T')[0];
           const relDate = r.release_date || calculateReleaseDate(r.created_at, cred?.processing_days);
 
           return {
@@ -214,23 +154,13 @@ export default function StaffDashboard() {
           };
         });
 
-        // Ensure we preserve sample variety if few records exist
-        const mergedList = [...enriched];
-        INITIAL_FALLBACK_REQUESTS.forEach((fallback) => {
-          if (!mergedList.some((m) => m.tracking_number === fallback.tracking_number)) {
-            if (mergedList.length < 5) {
-              mergedList.push(fallback);
-            }
-          }
-        });
-
-        setRequestsList(mergedList);
+        setRequestsList(enriched);
       } else {
-        setRequestsList(INITIAL_FALLBACK_REQUESTS);
+        setRequestsList([]);
       }
     } catch (err) {
       console.warn('Dashboard data load notice:', err);
-      setRequestsList(INITIAL_FALLBACK_REQUESTS);
+      setRequestsList([]);
     } finally {
       setLoading(false);
     }
@@ -255,18 +185,33 @@ export default function StaffDashboard() {
   // 1. Dynamic Key Metrics
   const metrics = useMemo(() => {
     const total = requestsList.length;
-    const pending = requestsList.filter((r) => r.status === 'Pending').length;
-    const processing = requestsList.filter((r) => r.status === 'Processing').length;
-    const completed = requestsList.filter(
-      (r) => r.status === 'Claimed' || r.status === 'Ready for Pickup'
-    ).length;
+    const pending = requestsList.filter((r) => {
+      const s = (r.status || '').toLowerCase();
+      return s.includes('pending') || s.includes('received');
+    }).length;
+    const processing = requestsList.filter((r) => {
+      const s = (r.status || '').toLowerCase();
+      return s.includes('processing') || s.includes('preparation');
+    }).length;
+    const onHold = requestsList.filter((r) => {
+      const s = (r.status || '').toLowerCase();
+      return s.includes('hold') || s.includes('verification');
+    }).length;
+    const forRelease = requestsList.filter((r) => {
+      const s = (r.status || '').toLowerCase();
+      return s.includes('release') || s.includes('pickup') || s.includes('ready');
+    }).length;
+    const completed = requestsList.filter((r) => {
+      const s = (r.status || '').toLowerCase();
+      return s.includes('claimed') || s === 'completed';
+    }).length;
 
-    return { total, pending, processing, completed };
+    return { total, pending, processing, onHold, forRelease, completed };
   }, [requestsList]);
 
   // 2. Dynamic Targeted for Completion Today & Top Categories
   const targetedSection = useMemo(() => {
-    // Count active copies targeted
+    // Only count active requests targeted for completion today (Pending & Processing)
     const activeRequests = requestsList.filter(
       (r) => r.status === 'Pending' || r.status === 'Processing'
     );
@@ -274,45 +219,121 @@ export default function StaffDashboard() {
 
     // Group copies by document type
     const docCounts = {};
-    requestsList.forEach((r) => {
-      const type = r.document_type || 'Transcript of records';
+    activeRequests.forEach((r) => {
+      const type = r.document_type || 'Document Request';
       docCounts[type] = (docCounts[type] || 0) + (parseInt(r.copies) || 1);
     });
 
     const sortedDocTypes = Object.entries(docCounts).sort((a, b) => b[1] - a[1]);
 
-    const fallbackTypes = [
-      { name: 'Transcript of records', count: 3, priority: 'High' },
-      { name: 'Honorable Dismissal', count: 1, priority: 'Medium' },
-      { name: 'Evaluation', count: 1, priority: 'Medium' },
-      { name: 'Officially Enrolled', count: 1, priority: 'Medium' },
-    ];
-
-    const cards = fallbackTypes.map((def, idx) => {
-      if (sortedDocTypes[idx]) {
-        const [docName, count] = sortedDocTypes[idx];
-        return {
-          name: docName,
-          count,
-          priority: count >= 3 ? 'High' : 'Medium',
-        };
-      }
-      return def;
-    });
+    // ONLY include documents that actually have requests!
+    const cards = sortedDocTypes.map(([docName, count]) => ({
+      name: docName,
+      count,
+      priority: count >= 3 ? 'High' : 'Medium',
+    }));
 
     return {
-      totalDocuments: totalCopies > 0 ? totalCopies : 5,
+      totalDocuments: totalCopies,
       cards,
-      topDocName: cards[0]?.name || 'Transcript of records',
+      topDocName: cards[0]?.name || 'None',
     };
   }, [requestsList]);
 
-  // 3. Dynamic Current Week Calendar
+  // 3. Dynamic Weekly Schedule & Calendar Data using Batch Processing Model
+  // - Requests submitted on the same date are grouped into one batch
+  // - Processing starts tomorrow and is divided across scheduled processing days
+  // - Expected release date is reserved for releasing documents only (0 processing)
+  // - Completion percentage is only displayed on the expected release date of the batch
+  const batchSchedule = useMemo(() => {
+    const batchesByDate = {};
+    requestsList.forEach((r) => {
+      const dateKey = r.request_date || (r.created_at ? r.created_at.split('T')[0] : null);
+      if (!dateKey) return;
+      if (!batchesByDate[dateKey]) {
+        batchesByDate[dateKey] = [];
+      }
+      batchesByDate[dateKey].push(r);
+    });
+
+    const newRequestsCountMap = {}; // dateStr -> new requests submitted
+    const dailyProcessingMap = {};  // dateStr -> requests scheduled for processing
+    const releaseBatchesMap = {};   // dateStr -> array of batches releasing on this date
+
+    const addDays = (dateStr, numDays) => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const d = new Date(year, month - 1, day);
+      d.setDate(d.getDate() + numDays);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dt = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dt}`;
+    };
+
+    const daysBetween = (startStr, endStr) => {
+      const [y1, m1, d1] = startStr.split('-').map(Number);
+      const [y2, m2, d2] = endStr.split('-').map(Number);
+      const t1 = new Date(y1, m1 - 1, d1).getTime();
+      const t2 = new Date(y2, m2 - 1, d2).getTime();
+      return Math.round((t2 - t1) / (1000 * 60 * 60 * 24));
+    };
+
+    Object.entries(batchesByDate).forEach(([reqDate, reqs]) => {
+      const totalInBatch = reqs.length;
+      newRequestsCountMap[reqDate] = (newRequestsCountMap[reqDate] || 0) + totalInBatch;
+
+      // Batch release date: from requests or reqDate + 5 days
+      const firstWithRelDate = reqs.find((r) => r.release_date && r.release_date > reqDate);
+      const releaseDate = firstWithRelDate ? firstWithRelDate.release_date : addDays(reqDate, 5);
+
+      // Processing days are the days strictly between reqDate and releaseDate
+      const diffDays = daysBetween(reqDate, releaseDate);
+      const numProcessingDays = Math.max(1, diffDays - 1);
+
+      // Divide requests across scheduled processing days
+      const baseQuota = Math.floor(totalInBatch / numProcessingDays);
+      const remainder = totalInBatch % numProcessingDays;
+
+      for (let i = 0; i < numProcessingDays; i++) {
+        const procDate = addDays(reqDate, i + 1);
+        const dailyQuota = baseQuota + (i < remainder ? 1 : 0);
+        dailyProcessingMap[procDate] = (dailyProcessingMap[procDate] || 0) + dailyQuota;
+      }
+
+      // Batch completion: how many requests in this batch have already been processed
+      // (status is 'For Release', 'Claimed', or 'Released')
+      const processedCount = reqs.filter((r) => {
+        const s = (r.status || '').toLowerCase();
+        return s.includes('release') || s.includes('pickup') || s.includes('ready') || s.includes('claim');
+      }).length;
+
+      if (!releaseBatchesMap[releaseDate]) {
+        releaseBatchesMap[releaseDate] = [];
+      }
+      releaseBatchesMap[releaseDate].push({
+        requestDate: reqDate,
+        totalRequests: totalInBatch,
+        processedCount,
+        requests: reqs,
+      });
+    });
+
+    return {
+      newRequestsCountMap,
+      dailyProcessingMap,
+      releaseBatchesMap,
+    };
+  }, [requestsList]);
+
+  // Dynamic Weekly Schedule & Calendar Data
   const currentWeekDays = useMemo(() => {
     const now = new Date();
-    const dayOfWeek = now.getDay(); // 0 = Sun, 1 = Mon ... 6 = Sat
-    const sunday = new Date(now);
-    sunday.setDate(now.getDate() - dayOfWeek);
+    const baseDate = new Date(now);
+    baseDate.setDate(baseDate.getDate() + (currentWeekOffset * 7));
+
+    const dayOfWeek = baseDate.getDay(); // 0 = Sun, 1 = Mon ... 6 = Sat
+    const sunday = new Date(baseDate);
+    sunday.setDate(baseDate.getDate() - dayOfWeek);
 
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     return dayNames.map((name, i) => {
@@ -320,45 +341,135 @@ export default function StaffDashboard() {
       d.setDate(sunday.getDate() + i);
 
       const dateStr = d.toISOString().split('T')[0];
-      const dayReqs = requestsList.filter((r) => r.request_date === dateStr);
 
-      // Release target window string (2 weeks back as reference)
-      const relTarget = new Date(d);
-      relTarget.setDate(relTarget.getDate() - 14);
-      const relTargetStr = relTarget.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
+      // 1. New requests submitted today
+      const newReqs = batchSchedule.newRequestsCountMap[dateStr] || 0;
 
-      // Default mock fallback workload for middle weekdays
-      const fallbackWorkload = {
-        Monday: { newReqs: 20, proc: 5, comp: 100 },
-        Tuesday: { newReqs: 10, proc: 8, comp: 100 },
-        Wednesday: { newReqs: 5, proc: 10, comp: 100 },
-        Thursday: { newReqs: 3, proc: 11, comp: 95 },
-      };
+      // 2. Scheduled requests to process today (divided from previous batches, 0 on release date)
+      const proc = batchSchedule.dailyProcessingMap[dateStr] || 0;
 
-      const hasActiveWork = i >= 1 && i <= 4;
-      const fb = fallbackWorkload[name];
+      // 3. Batches scheduled for release today
+      const releasingBatches = batchSchedule.releaseBatchesMap[dateStr] || [];
+      const isReleaseDate = releasingBatches.length > 0;
+      const releases = releasingBatches.reduce((sum, b) => sum + b.totalRequests, 0);
 
-      const newReqs = dayReqs.length > 0 ? dayReqs.length : fb?.newReqs || 0;
-      const proc = fb?.proc || Math.max(1, dayReqs.filter((r) => r.status === 'Processing').length);
-      const comp = fb?.comp || 100;
+      // Target release reference date string (only on release date)
+      let relTargetStr = '';
+      let comp = null;
+
+      if (isReleaseDate) {
+        const primaryBatch = releasingBatches[0];
+        const [y, m, dayNum] = primaryBatch.requestDate.split('-').map(Number);
+        const originDate = new Date(y, m - 1, dayNum);
+        relTargetStr = originDate.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        });
+
+        // Overall completion progress of the batch
+        const totalReqs = releasingBatches.reduce((sum, b) => sum + b.totalRequests, 0);
+        const totalProc = releasingBatches.reduce((sum, b) => sum + b.processedCount, 0);
+        comp = totalReqs > 0 ? Math.round((totalProc / totalReqs) * 100) : 100;
+      }
+
+      // Has active work if requests exist on this day
+      const hasActiveWork = newReqs > 0 || proc > 0 || isReleaseDate;
 
       return {
         dayName: name,
         dayNumber: d.getDate(),
         dateStr,
+        dateObj: d,
         isToday: d.toDateString() === now.toDateString(),
         hasActiveWork,
+        isReleaseDate,
         relTargetStr,
         newReqs,
         proc,
+        releases,
         comp,
       };
     });
-  }, [requestsList]);
+  }, [batchSchedule, currentWeekOffset]);
+
+  // Calendar Header Info (Month, Year, and Date Range)
+  const calendarHeaderLabel = useMemo(() => {
+    if (currentWeekDays.length === 0) return { monthYear: 'Calendar', range: '' };
+    const first = currentWeekDays[0].dateObj;
+    const last = currentWeekDays[6].dateObj;
+    const monthYear = first.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const range = `${first.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${last.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    return { monthYear, range };
+  }, [currentWeekDays]);
+
+  // Dynamic Full Month Grid (When View All is expanded)
+  const fullMonthWeeks = useMemo(() => {
+    if (!isCalendarExpanded || currentWeekDays.length === 0) return [];
+    const now = new Date();
+    const activeMidDate = currentWeekDays[3].dateObj;
+    const year = activeMidDate.getFullYear();
+    const month = activeMidDate.getMonth();
+
+    const firstOfMonth = new Date(year, month, 1);
+    const startOffset = firstOfMonth.getDay(); // 0 = Sun
+    const startGridDate = new Date(firstOfMonth);
+    startGridDate.setDate(firstOfMonth.getDate() - startOffset);
+
+    const weeks = [];
+    for (let w = 0; w < 5; w++) {
+      const week = [];
+      for (let dIdx = 0; dIdx < 7; dIdx++) {
+        const day = new Date(startGridDate);
+        day.setDate(startGridDate.getDate() + (w * 7 + dIdx));
+
+        const dateStr = day.toISOString().split('T')[0];
+        const isCurrentMonth = day.getMonth() === month;
+
+        const newReqs = batchSchedule.newRequestsCountMap[dateStr] || 0;
+        const proc = batchSchedule.dailyProcessingMap[dateStr] || 0;
+        const releasingBatches = batchSchedule.releaseBatchesMap[dateStr] || [];
+        const isReleaseDate = releasingBatches.length > 0;
+        const releases = releasingBatches.reduce((sum, b) => sum + b.totalRequests, 0);
+
+        let comp = null;
+        if (isReleaseDate) {
+          const totalReqs = releasingBatches.reduce((sum, b) => sum + b.totalRequests, 0);
+          const totalProc = releasingBatches.reduce((sum, b) => sum + b.processedCount, 0);
+          comp = totalReqs > 0 ? Math.round((totalProc / totalReqs) * 100) : 100;
+        }
+
+        const hasWork = newReqs > 0 || proc > 0 || isReleaseDate;
+
+        week.push({
+          dayNumber: day.getDate(),
+          dateStr,
+          isCurrentMonth,
+          isToday: day.toDateString() === now.toDateString(),
+          hasWork,
+          isReleaseDate,
+          newReqs,
+          releases,
+          proc,
+          comp,
+        });
+      }
+      weeks.push(week);
+    }
+    return weeks;
+  }, [isCalendarExpanded, currentWeekDays, batchSchedule]);
+
+  // Dynamic filtered requests when a calendar day is clicked
+  const displayedRequests = useMemo(() => {
+    if (!selectedCalendarDate) return requestsList;
+    const matched = requestsList.filter((r) => {
+      if (r.request_date === selectedCalendarDate) return true;
+      if (r.release_date === selectedCalendarDate) return true;
+      if (r.request_date < selectedCalendarDate && r.release_date > selectedCalendarDate) return true;
+      return false;
+    });
+    return matched.length > 0 ? matched : [];
+  }, [requestsList, selectedCalendarDate]);
 
   // Status Badge Helper matching UI design
   const getStatusBadge = (status) => {
@@ -370,10 +481,10 @@ export default function StaffDashboard() {
         </span>
       );
     }
-    if (s.includes('pickup') || s.includes('release') || s.includes('ready')) {
+    if (s.includes('release') || s.includes('pickup') || s.includes('ready')) {
       return (
         <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-[#DCFCE7] text-[#166534] shadow-2xs">
-          Ready for Pickup
+          For Release
         </span>
       );
     }
@@ -391,6 +502,13 @@ export default function StaffDashboard() {
         </span>
       );
     }
+    if (s.includes('hold')) {
+      return (
+        <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-[#FFE4E6] text-[#BE123C] shadow-2xs">
+          On Hold
+        </span>
+      );
+    }
     return (
       <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
         {status}
@@ -401,7 +519,12 @@ export default function StaffDashboard() {
   // Open Request in Modal
   const handleOpenRequestModal = (req) => {
     setModalRequest(req);
-    setModalStatus(req.status || 'Pending');
+    const currentStatus = req.status || 'Pending';
+    const normalizedStatus =
+      currentStatus.toLowerCase().includes('release') || currentStatus.toLowerCase().includes('pickup')
+        ? 'For Release'
+        : currentStatus;
+    setModalStatus(normalizedStatus);
     setModalNotes(req.notes || '');
   };
 
@@ -415,16 +538,31 @@ export default function StaffDashboard() {
   // Save Status Update in Modal
   const handleSaveStatus = async (statusOverride) => {
     if (!modalRequest) return;
-    const finalStatus = statusOverride || modalStatus;
+    const finalStatus = (typeof statusOverride === 'string' ? statusOverride : modalStatus) || 'Pending';
     setModalUpdating(true);
     const targetId = modalRequest.rawId || modalRequest.id;
 
+    const backendStatusMap = {
+      'Pending': 'PENDING',
+      'Processing': 'PROCESSING',
+      'For Release': 'READY_FOR_RELEASE',
+      'For release': 'READY_FOR_RELEASE',
+      'Claimed': 'RELEASED',
+      'On Hold': 'REQUIREMENTS_VERIFICATION',
+    };
+
     try {
-      // 1. Backend update
-      await requestsApi.updateStatus(targetId, finalStatus).catch(() => {});
+      // 1. Backend update if numeric backend id
+      if (typeof targetId === 'number') {
+        const backendStatus = backendStatusMap[finalStatus] || finalStatus.toUpperCase().replace(/\s+/g, '_');
+        await requestsApi.transition(targetId, {
+          status: backendStatus,
+          remarks: modalNotes || '',
+        }).catch(() => {});
+      }
 
       // 2. Local storage persistence & notifications
-      updateStoredRequest(targetId, {
+      updateStoredRequest(modalRequest.id || targetId, {
         status: finalStatus,
         notes: modalNotes,
         remarks: modalNotes,
@@ -491,42 +629,50 @@ export default function StaffDashboard() {
             <div>
               <p className="text-xs text-slate-400 font-medium">{todayFormatted}</p>
               <h2 className="text-xl font-bold text-slate-900 leading-snug">
-                {targetedSection.totalDocuments} Documents
+                {targetedSection.totalDocuments} {targetedSection.totalDocuments === 1 ? 'Document' : 'Documents'}
               </h2>
               <p className="text-xs text-slate-400 font-normal">Targeted for completion today</p>
             </div>
           </div>
 
-          {/* 4 Document Type Subcards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-            {targetedSection.cards.map((card, idx) => (
-              <div
-                key={idx}
-                className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs hover:shadow-sm transition-shadow"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-slate-600 truncate" title={card.name}>
-                    {card.name}
-                  </span>
-                  <span
-                    className={`text-white text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                      card.priority === 'High' ? 'bg-[#E60000]' : 'bg-[#FF6B00]'
-                    }`}
-                  >
-                    {card.priority}
-                  </span>
+          {/* Document Type Subcards */}
+          {targetedSection.cards.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+              {targetedSection.cards.map((card, idx) => (
+                <div
+                  key={idx}
+                  className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs hover:shadow-sm transition-shadow"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-slate-600 truncate" title={card.name}>
+                      {card.name}
+                    </span>
+                    <span
+                      className={`text-white text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                        card.priority === 'High' ? 'bg-[#E60000]' : 'bg-[#FF6B00]'
+                      }`}
+                    >
+                      {card.priority}
+                    </span>
+                  </div>
+                  <p className="text-3xl font-extrabold text-slate-900 mt-2">{card.count}</p>
+                  <p className="text-xs text-slate-400 font-normal">
+                    {card.count > 1 ? 'copies' : 'copy'}
+                  </p>
                 </div>
-                <p className="text-3xl font-extrabold text-slate-900 mt-2">{card.count}</p>
-                <p className="text-xs text-slate-400 font-normal">copies</p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200/60 text-slate-500 text-xs text-center font-medium">
+              No active document requests targeted for today.
+            </div>
+          )}
         </div>
 
-        {/* Section 2: 4 Key Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        {/* Section 2: 6 Key Metric Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
           {/* Total Requests */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 hover:shadow-md transition-shadow">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-5 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-800">Total Requests</span>
               <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -538,7 +684,7 @@ export default function StaffDashboard() {
           </div>
 
           {/* Pending */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 border-l-4 border-l-orange-400 shadow-sm p-5 hover:shadow-md transition-shadow">
+          <div className="bg-white rounded-2xl border border-slate-200/90 border-l-4 border-l-orange-400 shadow-sm p-4 sm:p-5 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-800">Pending</span>
               <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -552,7 +698,7 @@ export default function StaffDashboard() {
           </div>
 
           {/* Processing */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 border-l-4 border-l-blue-500 shadow-sm p-5 hover:shadow-md transition-shadow">
+          <div className="bg-white rounded-2xl border border-slate-200/90 border-l-4 border-l-blue-500 shadow-sm p-4 sm:p-5 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-800">Processing</span>
               <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -564,11 +710,37 @@ export default function StaffDashboard() {
             <p className="text-xs text-slate-400 mt-1">In progress</p>
           </div>
 
+          {/* On Hold */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 border-l-4 border-l-rose-500 shadow-sm p-4 sm:p-5 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800">On Hold</span>
+              <svg className="w-5 h-5 text-rose-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="10" y1="15" x2="10" y2="9" />
+                <line x1="14" y1="15" x2="14" y2="9" />
+              </svg>
+            </div>
+            <p className="text-2xl font-black text-slate-900 mt-2">{metrics.onHold}</p>
+            <p className="text-xs text-slate-400 mt-1">Requires Review</p>
+          </div>
+
+          {/* For Release */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 border-l-4 border-l-emerald-500 shadow-sm p-4 sm:p-5 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800">For Release</span>
+              <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            </div>
+            <p className="text-2xl font-black text-slate-900 mt-2">{metrics.forRelease}</p>
+            <p className="text-xs text-slate-400 mt-1">Ready for Pickup</p>
+          </div>
+
           {/* Completed Today */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 border-l-4 border-l-emerald-500 shadow-sm p-5 hover:shadow-md transition-shadow">
+          <div className="bg-white rounded-2xl border border-slate-200/90 border-l-4 border-l-teal-600 shadow-sm p-4 sm:p-5 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-800">Completed Today</span>
-              <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
@@ -589,41 +761,114 @@ export default function StaffDashboard() {
           </div>
 
           <div className="bg-[#7084D8]/85 rounded-xl p-5 text-white shadow-xs mt-3.5 space-y-2 text-xs sm:text-sm font-normal">
-            <p className="flex items-start gap-2">
-              <span className="text-white text-base leading-none">•</span>
-              <span>
-                Request volume is expected to peak <strong className="font-bold text-white">this week</strong> with approximately <strong className="font-bold text-white">{Math.max(25, Math.round(metrics.total * 1.5))} requests</strong>
-              </span>
-            </p>
-            <p className="flex items-start gap-2">
-              <span className="text-white text-base leading-none">•</span>
-              <span>
-                {targetedSection.topDocName} requests show <strong className="font-bold text-white">+8% growth trend</strong>
-              </span>
-            </p>
-            <p className="flex items-start gap-2">
-              <span className="text-white text-base leading-none">•</span>
-              <span>
-                Model accuracy based on last 4 weeks: <strong className="font-bold text-white">87% confidence</strong>
-              </span>
-            </p>
+            {metrics.total > 0 ? (
+              <>
+                <p className="flex items-start gap-2">
+                  <span className="text-white text-base leading-none">•</span>
+                  <span>
+                    Current registrar workload: <strong className="font-bold text-white">{metrics.total} total {metrics.total === 1 ? 'request' : 'requests'}</strong> ({metrics.pending} pending review, {metrics.processing} in progress).
+                  </span>
+                </p>
+                {targetedSection.cards.length > 0 && (
+                  <p className="flex items-start gap-2">
+                    <span className="text-white text-base leading-none">•</span>
+                    <span>
+                      Primary requested document: <strong className="font-bold text-white">{targetedSection.topDocName}</strong> ({targetedSection.cards[0].count} {targetedSection.cards[0].count === 1 ? 'copy' : 'copies'} requested).
+                    </span>
+                  </p>
+                )}
+                <p className="flex items-start gap-2">
+                  <span className="text-white text-base leading-none">•</span>
+                  <span>
+                    Ready for collection: <strong className="font-bold text-white">{metrics.forRelease} {metrics.forRelease === 1 ? 'document' : 'documents'}</strong> ready for release.
+                  </span>
+                </p>
+              </>
+            ) : (
+              <p className="flex items-start gap-2">
+                <span className="text-white text-base leading-none">•</span>
+                <span>
+                  No document requests currently in the pipeline. New student submissions will appear here automatically.
+                </span>
+              </p>
+            )}
           </div>
         </div>
 
         {/* Section 4: Calendar (Weekly Schedule) */}
         <div id="calendar" className="bg-[#EAF0FE] rounded-2xl p-6 border border-[#D5E0FA] shadow-xs">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-500/20 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <rect x="3" y="4" width="18" height="18" rx="2" strokeLinecap="round" strokeLinejoin="round" />
-                <line x1="16" y1="2" x2="16" y2="6" strokeLinecap="round" />
-                <line x1="8" y1="2" x2="8" y2="6" strokeLinecap="round" />
-                <line x1="3" y1="10" x2="21" y2="10" strokeLinecap="round" />
-              </svg>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-blue-500/20 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <rect x="3" y="4" width="18" height="18" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <line x1="16" y1="2" x2="16" y2="6" strokeLinecap="round" />
+                  <line x1="8" y1="2" x2="8" y2="6" strokeLinecap="round" />
+                  <line x1="3" y1="10" x2="21" y2="10" strokeLinecap="round" />
+                </svg>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-blue-700 bg-blue-100/80 px-2.5 py-0.5 rounded-full">
+                    {calendarHeaderLabel.range}
+                  </span>
+                  {selectedCalendarDate && (
+                    <span className="text-xs font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span>Selected: {selectedCalendarDate}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedCalendarDate(null);
+                        }}
+                        className="hover:text-red-700 font-black cursor-pointer ml-1"
+                        title="Clear filter"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mt-1">Calendar & Schedule</h3>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">{todayFormatted}</p>
-              <h3 className="text-xl font-bold text-slate-900">Calendar</h3>
+
+            {/* Navigation buttons: Previous week, Today, Next week */}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setCurrentWeekOffset((prev) => prev - 1)}
+                className="p-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer active:scale-95"
+                title="Previous Week"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentWeekOffset(0);
+                  setSelectedCalendarDate(null);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs active:scale-95 ${
+                  currentWeekOffset === 0
+                    ? 'bg-[#000080] text-white'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentWeekOffset((prev) => prev + 1)}
+                className="p-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer active:scale-95"
+                title="Next Week"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
             </div>
           </div>
 
@@ -640,69 +885,167 @@ export default function StaffDashboard() {
 
             {/* Days Grid */}
             <div className="grid grid-cols-7 divide-x divide-slate-200 min-h-[175px]">
-              {currentWeekDays.map((d) => (
-                <div
-                  key={d.dayName}
-                  className={`p-2 sm:p-2.5 flex flex-col justify-between ${
-                    d.isToday ? 'bg-blue-50/40 ring-1 ring-inset ring-blue-400/40' : ''
-                  }`}
-                >
-                  {d.hasActiveWork ? (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className={`text-lg ${d.isToday ? 'font-black text-blue-800' : 'font-bold text-slate-800'}`}>
-                          {d.dayNumber}
-                        </span>
-                        <span
-                          className={`text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                            d.comp >= 100 ? 'bg-[#00D02A]' : 'bg-[#F59E0B]'
-                          }`}
-                        >
-                          {d.comp}%
-                        </span>
+              {currentWeekDays.map((d) => {
+                const isSelected = selectedCalendarDate === d.dateStr;
+                return (
+                  <div
+                    key={d.dateStr}
+                    onClick={() => setSelectedCalendarDate((prev) => (prev === d.dateStr ? null : d.dateStr))}
+                    className={`p-2 sm:p-2.5 flex flex-col justify-between cursor-pointer transition-all hover:bg-blue-50/50 select-none ${
+                      isSelected
+                        ? 'bg-blue-100/60 ring-2 ring-inset ring-[#000080]'
+                        : d.isToday
+                        ? 'bg-blue-50/40 ring-1 ring-inset ring-blue-400/50'
+                        : ''
+                    }`}
+                  >
+                    {d.hasActiveWork ? (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span
+                            className={`text-lg ${
+                              isSelected
+                                ? 'font-black text-[#000080]'
+                                : d.isToday
+                                ? 'font-black text-blue-800'
+                                : 'font-bold text-slate-800'
+                            }`}
+                          >
+                            {d.dayNumber}
+                          </span>
+                          {/* Completion percentage is only displayed on the expected release date of the batch */}
+                          {d.isReleaseDate && d.comp !== null && (
+                            <span
+                              className={`text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                                d.comp >= 100 ? 'bg-[#00D02A]' : 'bg-[#F59E0B]'
+                              }`}
+                            >
+                              {d.comp}%
+                            </span>
+                          )}
+                        </div>
+                        <div className="space-y-1 text-[9px] sm:text-[10px]">
+                          {/* Expected release date is reserved for releasing documents only */}
+                          {d.isReleaseDate && (
+                            <div
+                              className="bg-[#DCFCE7] text-[#15803D] p-1 rounded font-medium truncate"
+                              title={`Release document from: ${d.relTargetStr}`}
+                            >
+                              Release document from: {d.relTargetStr}
+                            </div>
+                          )}
+                          {/* Scheduled processing requests divided across processing days */}
+                          {d.proc > 0 && (
+                            <div className="bg-[#E0F2FE] text-[#0369A1] p-1 rounded font-medium flex justify-between">
+                              <span>Process document:</span>
+                              <strong className="font-bold">{d.proc}</strong>
+                            </div>
+                          )}
+                          {/* New requests received today */}
+                          {d.newReqs > 0 && (
+                            <div className="bg-[#FEF9C3] text-[#854D0E] p-1 rounded font-medium flex justify-between">
+                              <span>New requests:</span>
+                              <strong className="font-bold">{d.newReqs}</strong>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="space-y-1 text-[9px] sm:text-[10px]">
-                        <div
-                          className="bg-[#DCFCE7] text-[#15803D] p-1 rounded font-medium truncate"
-                          title={`Release document from: ${d.relTargetStr}`}
-                        >
-                          Release document from: {d.relTargetStr}
-                        </div>
-                        <div className="bg-[#E0F2FE] text-[#0369A1] p-1 rounded font-medium flex justify-between">
-                          <span>Process document:</span>
-                          <strong className="font-bold">{d.proc}</strong>
-                        </div>
-                        <div className="bg-[#FEF9C3] text-[#854D0E] p-1 rounded font-medium flex justify-between">
-                          <span>New requests:</span>
-                          <strong className="font-bold">{d.newReqs}</strong>
-                        </div>
+                    ) : (
+                      <div className="p-1 font-bold text-slate-800 text-lg flex items-center justify-between">
+                        <span className={d.isToday ? 'text-blue-800 font-black' : ''}>{d.dayNumber}</span>
+                        {d.isToday && (
+                          <span className="text-[10px] font-semibold text-blue-600 bg-blue-100 px-1 rounded">
+                            Today
+                          </span>
+                        )}
                       </div>
-                    </div>
-                  ) : (
-                    <div className="p-1 font-bold text-slate-800 text-lg">
-                      <span className={d.isToday ? 'text-blue-800 font-black' : ''}>{d.dayNumber}</span>
-                    </div>
-                  )}
+                    )}
 
-                  {d.hasActiveWork && (
-                    <div
-                      className={`w-full h-1 rounded-full mt-2 ${
-                        d.comp >= 100 ? 'bg-[#00D02A]' : 'bg-[#F59E0B]'
-                      }`}
-                    />
-                  )}
-                </div>
-              ))}
+                    {/* Completion bar is only visible on the batch's expected release date */}
+                    {d.isReleaseDate && d.comp !== null && (
+                      <div
+                        className={`w-full h-1 rounded-full mt-2 ${
+                          d.comp >= 100 ? 'bg-[#00D02A]' : 'bg-[#F59E0B]'
+                        }`}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
-            {/* Optional Collapsible Second Week when expanded */}
+            {/* Dynamic Full Month Grid when expanded */}
             {isCalendarExpanded && (
-              <div className="border-t border-slate-200 grid grid-cols-7 divide-x divide-slate-200 min-h-[120px] bg-slate-50/50 animate-fadeIn">
-                {currentWeekDays.map((d) => (
-                  <div key={`next-${d.dayName}`} className="p-3 font-bold text-slate-800 text-base">
-                    {d.dayNumber + 7 > 31 ? (d.dayNumber + 7) - 31 : d.dayNumber + 7}
-                  </div>
-                ))}
+              <div className="border-t border-slate-200 bg-slate-50/70 p-3 sm:p-4 space-y-3 animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-[#0A0A7C] uppercase tracking-wider">
+                    Full Month Schedule ({calendarHeaderLabel.monthYear})
+                  </h4>
+                  <span className="text-[11px] text-slate-500">
+                    Click any date to inspect requests
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                  {fullMonthWeeks.map((week, wIdx) =>
+                    week.map((day) => {
+                      const isSel = selectedCalendarDate === day.dateStr;
+                      return (
+                        <div
+                          key={`month-day-${day.dateStr}`}
+                          onClick={() => setSelectedCalendarDate((prev) => (prev === day.dateStr ? null : day.dateStr))}
+                          className={`p-2 rounded-lg border text-left cursor-pointer transition-all ${
+                            isSel
+                              ? 'bg-blue-100 border-[#000080] ring-1 ring-[#000080]'
+                              : day.isToday
+                              ? 'bg-blue-50 border-blue-300 font-bold'
+                              : day.isCurrentMonth
+                              ? 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-2xs'
+                              : 'bg-slate-100/60 border-slate-200/50 text-slate-400'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span
+                              className={`text-xs ${
+                                day.isCurrentMonth
+                                  ? day.isToday
+                                    ? 'font-black text-blue-800'
+                                    : 'font-bold text-slate-800'
+                                  : 'text-slate-400'
+                              }`}
+                            >
+                              {day.dayNumber}
+                            </span>
+                            {day.hasWork && (
+                              <span className="w-2 h-2 rounded-full bg-emerald-500" title="Has document activity" />
+                            )}
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-1 text-[9px]">
+                            {day.newReqs > 0 && (
+                              <span className="bg-amber-100 text-amber-800 px-1 rounded font-semibold">
+                                +{day.newReqs} new
+                              </span>
+                            )}
+                            {day.proc > 0 && (
+                              <span className="bg-blue-100 text-blue-800 px-1 rounded font-semibold">
+                                {day.proc} proc
+                              </span>
+                            )}
+                            {day.isReleaseDate && day.comp !== null && (
+                              <span
+                                className={`px-1 rounded font-semibold text-white ${
+                                  day.comp >= 100 ? 'bg-[#00D02A]' : 'bg-[#F59E0B]'
+                                }`}
+                              >
+                                {day.comp}% rel
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -714,7 +1057,7 @@ export default function StaffDashboard() {
               onClick={() => setIsCalendarExpanded(!isCalendarExpanded)}
               className="text-[#0A0A7C] font-bold text-sm flex items-center gap-1 hover:underline cursor-pointer transition-all"
             >
-              <span>{isCalendarExpanded ? 'Show Less' : 'View All'}</span>
+              <span>{isCalendarExpanded ? 'Show Current Week' : 'View Full Month'}</span>
               <svg
                 className={`w-4 h-4 transition-transform duration-200 ${isCalendarExpanded ? 'rotate-180' : ''}`}
                 fill="none"
@@ -730,18 +1073,40 @@ export default function StaffDashboard() {
 
         {/* Section 5: Requests Table */}
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 sm:p-8">
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
             <div>
-              <h3 className="text-xl font-bold text-slate-900">Requests</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Latest document requests from students</p>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xl font-bold text-slate-900">Requests</h3>
+                {selectedCalendarDate && (
+                  <span className="text-xs bg-blue-100 text-[#000080] px-2.5 py-0.5 rounded-full font-bold">
+                    Filtered: {selectedCalendarDate}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {selectedCalendarDate
+                  ? `Showing requests matching ${selectedCalendarDate} (${displayedRequests.length} found)`
+                  : 'Latest document requests from students'}
+              </p>
             </div>
-            <button
-              type="button"
-              onClick={() => navigate(ROUTES.STAFF.REQUESTS)}
-              className="px-5 py-2 rounded-lg bg-[#000080] hover:bg-[#000066] text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs active:scale-95"
-            >
-              View All
-            </button>
+            <div className="flex items-center gap-2">
+              {selectedCalendarDate && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedCalendarDate(null)}
+                  className="px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Clear Filter
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.STAFF.REQUESTS)}
+                className="px-5 py-2 rounded-lg bg-[#000080] hover:bg-[#000066] text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs active:scale-95"
+              >
+                View All
+              </button>
+            </div>
           </div>
 
           {/* Table Container */}
@@ -759,58 +1124,66 @@ export default function StaffDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {requestsList.slice(0, 5).map((req) => (
-                  <tr key={req.id || req.tracking_number} className="hover:bg-slate-50/70 transition-colors">
-                    {/* Request ID */}
-                    <td className="py-4 px-4 font-bold text-slate-900 whitespace-nowrap">
-                      {req.tracking_number}
-                    </td>
-
-                    {/* Student */}
-                    <td className="py-4 px-4">
-                      <p className="font-bold text-slate-900 leading-tight">{req.student_name}</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">{req.student_id}</p>
-                    </td>
-
-                    {/* Document Type */}
-                    <td className="py-4 px-4">
-                      <p className="text-slate-800 font-medium">{req.document_type}</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        {req.copies} {req.copies > 1 ? 'copies' : 'copy'}
-                      </p>
-                    </td>
-
-                    {/* Status */}
-                    <td className="py-4 px-4 whitespace-nowrap">
-                      {getStatusBadge(req.status)}
-                    </td>
-
-                    {/* Request Date */}
-                    <td className="py-4 px-4 font-semibold text-slate-700 whitespace-nowrap">
-                      {req.request_date}
-                    </td>
-
-                    {/* Release Date */}
-                    <td className="py-4 px-4 font-semibold text-slate-700 whitespace-nowrap">
-                      {req.release_date}
-                    </td>
-
-                    {/* Actions */}
-                    <td className="py-4 px-4 text-center whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenRequestModal(req)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 hover:border-slate-400 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-all cursor-pointer shadow-2xs active:scale-95"
-                      >
-                        <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                        <span>View</span>
-                      </button>
+                {displayedRequests.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="py-12 text-center text-slate-400 text-xs font-medium">
+                      No document requests found.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  displayedRequests.slice(0, 5).map((req) => (
+                    <tr key={req.id || req.tracking_number} className="hover:bg-slate-50/70 transition-colors">
+                      {/* Request ID */}
+                      <td className="py-4 px-4 font-bold text-slate-900 whitespace-nowrap">
+                        {req.tracking_number}
+                      </td>
+
+                      {/* Student */}
+                      <td className="py-4 px-4">
+                        <p className="font-bold text-slate-900 leading-tight">{req.student_name}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">{req.student_id}</p>
+                      </td>
+
+                      {/* Document Type */}
+                      <td className="py-4 px-4">
+                        <p className="text-slate-800 font-medium">{req.document_type}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {req.copies} {req.copies > 1 ? 'copies' : 'copy'}
+                        </p>
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-4 px-4 whitespace-nowrap">
+                        {getStatusBadge(req.status)}
+                      </td>
+
+                      {/* Request Date */}
+                      <td className="py-4 px-4 font-semibold text-slate-700 whitespace-nowrap">
+                        {req.request_date}
+                      </td>
+
+                      {/* Release Date */}
+                      <td className="py-4 px-4 font-semibold text-slate-700 whitespace-nowrap">
+                        {req.release_date}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-4 px-4 text-center whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenRequestModal(req)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 hover:border-slate-400 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-all cursor-pointer shadow-2xs active:scale-95"
+                        >
+                          <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          <span>View</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -828,7 +1201,7 @@ export default function StaffDashboard() {
           updating={modalUpdating}
           onUpdateStatus={handleSaveStatus}
           onBackToList={handleCloseRequestModal}
-          requestStatuses={['Pending', 'Processing', 'For release', 'Claimed', 'On Hold']}
+          requestStatuses={['Pending', 'Processing', 'For Release', 'Claimed', 'On Hold']}
           getStatusBadge={getStatusBadge}
         />
       )}
