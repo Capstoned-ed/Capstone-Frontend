@@ -37,6 +37,7 @@ import UserManagementPage from './pages/admin/UserManagementPage';
 import CredentialsPage from './pages/admin/CredentialsPage';
 import AdminRequestsPage from './pages/admin/AdminRequestsPage';
 import AdminProcessingCalendarPage from './pages/admin/ProcessingCalendarPage';
+import AnalyticsGraphsPage from './pages/admin/AnalyticsGraphsPage';
 
 // Shared Pages
 import NotificationsPage from './pages/notifications/NotificationsPage';
@@ -113,11 +114,13 @@ export default function App() {
                 <Route path={ROUTES.STAFF.RELEASE} element={<ReleasePage />} />
                 <Route path={ROUTES.REGISTRAR.CREDENTIALS} element={<CredentialsPage />} />
                 <Route path={ROUTES.REGISTRAR.PROCESSING} element={<AdminRequestsPage />} />
+                <Route path={ROUTES.REGISTRAR.ANALYTICS} element={<AnalyticsGraphsPage />} />
               </Route>
 
               {/* Admin Role Routes */}
               <Route element={<RoleRoute allowedRoles={[ROLES.ADMIN]} />}>
                 <Route path={ROUTES.ADMIN.DASHBOARD} element={<AdminDashboard />} />
+                <Route path={ROUTES.ADMIN.ANALYTICS} element={<AnalyticsGraphsPage />} />
                 <Route path={ROUTES.ADMIN.CALENDAR} element={<AdminProcessingCalendarPage />} />
                 <Route path={ROUTES.ADMIN.USERS} element={<UserManagementPage />} />
                 <Route path={ROUTES.ADMIN.CREDENTIALS} element={<CredentialsPage />} />
