@@ -6,6 +6,7 @@ export const ROUTES = {
     REQUESTS: '/student/requests',
     NEW_REQUEST: '/student/requests/new',
     CREDENTIALS: '/student/credentials',
+    PROFILE: '/student/profile',
   },
   STAFF: {
     DASHBOARD: '/staff/dashboard',
