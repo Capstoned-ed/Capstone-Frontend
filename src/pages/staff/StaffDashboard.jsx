@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
 import ustpBuilding from '../../assets/USTP.png';
-import requestsApi, { getStoredRequests, updateStoredRequest, isDummyStudentRequest } from '../../api/requests';
+import requestsApi, { getStoredRequests, updateStoredRequest, isValidRequest } from '../../api/requests';
 import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
 import { StaffProcessModal } from '../../components/staff';
@@ -119,7 +119,7 @@ export default function StaffDashboard() {
 
       if (combinedRaw.length > 0) {
         const enriched = combinedRaw
-          .filter((r) => !isDummyStudentRequest(r))
+          .filter(isValidRequest)
           .map((r, idx) => {
           const userObj = userMap.get(r.user) || userMap.get(r.student_id);
           const cred = credMap.get(r.credential_type) || credMap.get(r.credential);

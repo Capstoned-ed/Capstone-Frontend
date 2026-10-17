@@ -41,6 +41,25 @@ import AnalyticsGraphsPage from './pages/admin/AnalyticsGraphsPage';
 
 // Shared Pages
 import NotificationsPage from './pages/notifications/NotificationsPage';
+import { isValidRequest } from './api/requests';
+
+// Self-healing purge of corrupt/blank/dummy requests from localStorage
+if (typeof window !== 'undefined') {
+  try {
+    ['regquest_submitted_requests', 'student_my_requests', 'regquest_stored_requests'].forEach((key) => {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter(isValidRequest);
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem(key, JSON.stringify(cleaned));
+          }
+        }
+      }
+    });
+  } catch {}
+}
 
 function RootRedirect() {
   const { user, isAuthenticated, loading } = useAuth();
