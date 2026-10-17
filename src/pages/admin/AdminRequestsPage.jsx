@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import requestsApi from '../../api/requests';
+import requestsApi, { isDummyStudentRequest } from '../../api/requests';
 import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
@@ -208,7 +208,9 @@ export default function AdminRequestsPage() {
 
   // Transform raw backend requests into display-ready items
   const requests = useMemo(() => {
-    return rawRequests.map((r, idx) => {
+    return rawRequests
+      .filter((r) => !isDummyStudentRequest(r))
+      .map((r, idx) => {
       const user = userMap.get(r.user);
       const cred = credTypeMap.get(r.credential_type);
 
@@ -280,7 +282,7 @@ export default function AdminRequestsPage() {
 
       const studentName = !isStudentNameId
         ? r.student_name
-        : (userFullName || profileName || fallbackKnownName || r.student_name || `Student #${r.user || idx + 1}`);
+        : (userFullName || profileName || fallbackKnownName || r.student_name || user?.username || 'Student');
 
       const studentId =
         (r.student_id && /^\d+$/.test(r.student_id))
