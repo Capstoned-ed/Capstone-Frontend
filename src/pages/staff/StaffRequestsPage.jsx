@@ -20,6 +20,7 @@ const BACKEND_STATUS_MAP = {
   'Pendong': 'PENDING',
   'Processing': 'PROCESSING',
   'For release': 'READY_FOR_RELEASE',
+  'For Release': 'READY_FOR_RELEASE',
   'Claimed': 'RELEASED',
   'On Hold': 'REQUIREMENTS_VERIFICATION',
 };
@@ -335,6 +336,7 @@ export default function StaffRequestsPage() {
       case 'Processing':
         return <span className="status-pill processing">Processing</span>;
       case 'For release':
+      case 'For Release':
         return <span className="status-pill for-release">For release</span>;
       case 'Claimed':
         return <span className="status-pill claimed">Claimed</span>;
