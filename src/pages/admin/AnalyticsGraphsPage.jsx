@@ -55,7 +55,6 @@ const DOC_ROWS = [
 export default function AnalyticsGraphsPage() {
   // Always starts on Daily View when first opened
   const [viewMode, setViewMode] = useState('daily');
-  const [showAllDetails, setShowAllDetails] = useState(false);
   const [hoveredItem, setHoveredItem] = useState(null);
   const [lineHoveredItem, setLineHoveredItem] = useState(null);
 
@@ -245,25 +244,6 @@ export default function AnalyticsGraphsPage() {
   // Table Totals
   const grandTotal = currentData.reduce((sum, d) => sum + d.totalLine, 0);
 
-  const topCredentialName = useMemo(() => {
-    if (grandTotal === 0) return 'None yet';
-    const totals = {
-      'Transcript of Record': currentData.reduce((sum, d) => sum + (d.transcript || 0), 0),
-      'Honorable Dismissal': currentData.reduce((sum, d) => sum + (d.dismissal || 0), 0),
-      'Evaluation': currentData.reduce((sum, d) => sum + (d.evaluation || 0), 0),
-      'CAR': currentData.reduce((sum, d) => sum + (d.car || 0), 0),
-      'Officially Enrolled': currentData.reduce((sum, d) => sum + (d.enrolled || 0), 0),
-    };
-    const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
-    return sorted[0][1] > 0 ? sorted[0][0] : 'None yet';
-  }, [currentData, grandTotal]);
-
-  const peakVolumeLabel = useMemo(() => {
-    if (grandTotal === 0) return 'No requests yet';
-    const peak = currentData.reduce((max, c) => (c.totalLine > max.totalLine ? c : max), currentData[0]);
-    return peak && peak.totalLine > 0 ? `${peak.label} (${peak.totalLine} requests)` : 'No requests yet';
-  }, [currentData, grandTotal]);
-
   const colors = {
     transcript: '#001FD1',
     dismissal: '#EAB308',
@@ -344,10 +324,6 @@ export default function AnalyticsGraphsPage() {
           <div className="analytics-legend-item">
             <span className="analytics-legend-box" style={{ backgroundColor: colors.enrolled }} />
             <span>Officially enrolled</span>
-          </div>
-          <div className="analytics-legend-item">
-            <div className="analytics-legend-line" />
-            <span>Total (line)</span>
           </div>
         </div>
 
@@ -445,24 +421,6 @@ export default function AnalyticsGraphsPage() {
                 </g>
               );
             })}
-
-            {/* Total Line overlay */}
-            {linePoints && (
-              <polyline fill="none" stroke="#000000" strokeWidth="2.5" points={linePoints} />
-            )}
-
-            {/* Data points on black line */}
-            {currentData.map((d, i) => (
-              <circle
-                key={`line-point-${d.label}`}
-                cx={getXCoord(i)}
-                cy={getYCoord(d.totalLine)}
-                r="4.5"
-                fill="#000000"
-                stroke="#FFFFFF"
-                strokeWidth="1.5"
-              />
-            ))}
           </svg>
         </div>
 
@@ -478,51 +436,6 @@ export default function AnalyticsGraphsPage() {
             <span className="text-[#0B0B36] font-extrabold">Total: {hoveredItem.totalLine}</span>
           </div>
         )}
-
-        {/* View All accordion toggle */}
-        <div className="analytics-view-all-wrap">
-          <button
-            type="button"
-            onClick={() => setShowAllDetails(!showAllDetails)}
-            className="analytics-view-all-btn"
-          >
-            <span>{showAllDetails ? 'Hide Details' : 'View All'}</span>
-            <svg
-              className={`w-4 h-4 transition-transform duration-200 ${showAllDetails ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {showAllDetails && (
-            <div className="analytics-details-panel">
-              <div className="analytics-stats-grid">
-                <div>
-                  <p className="stat-metric-label">{isMonthly ? 'Annual Total Requests' : 'Weekly Total Requests'}</p>
-                  <p className="stat-metric-value">{grandTotal.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="stat-metric-label">Peak Volume</p>
-                  <p className="stat-metric-value text-indigo-700">{peakVolumeLabel}</p>
-                </div>
-                <div>
-                  <p className="stat-metric-label">Top Credential</p>
-                  <p className="stat-metric-value">{topCredentialName}</p>
-                </div>
-                <div>
-                  <p className="stat-metric-label">Avg. Processing Time</p>
-                  <p className="stat-metric-value text-emerald-600">
-                    {grandTotal > 0 ? '2.25 Days' : '—'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* ------------------------------------------------------------------
