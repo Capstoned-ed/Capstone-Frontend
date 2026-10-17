@@ -50,7 +50,7 @@ export default function StudentProfilePage() {
   return (
     <div className="min-h-screen bg-[#F4F5F8] p-4 md:p-8 flex items-center justify-center">
       <div
-        className="bg-[#F8F9FA] border border-slate-200/90 rounded-2xl w-full max-w-4xl shadow-xl flex flex-col md:flex-row overflow-hidden text-slate-800"
+        className="bg-[#F8F9FA] border border-slate-200/90 rounded-2xl w-full max-w-5xl shadow-xl flex flex-col md:flex-row overflow-hidden text-slate-800"
         style={{ minHeight: '520px' }}
       >
         {/* Left Navigation Panel */}
