@@ -6,12 +6,14 @@ import { ROUTES } from '../../constants/routes';
 import logoExpanded from '../../assets/RegQuest-Logo-2-cropped.png';
 import logoShrunk from '../../assets/RegQuest-Logo-3-cropped.png';
 import { useNotifications } from '../../context/NotificationContext';
+import StudentProfileModal from '../student/StudentProfileModal';
 
 export default function Sidebar({ isCollapsed, onToggle }) {
   const { user, logout } = useAuth();
   const { unreadCount } = useNotifications();
   const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   const userRole = user?.role;
 
@@ -24,7 +26,8 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           to: ROUTES.STUDENT.DASHBOARD,
           icon: (
             <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 9.5L12 3l9 6.5V20a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9.5z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 22V12h6v10" />
             </svg>
           ),
         },
@@ -42,12 +45,18 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           to: ROUTES.STUDENT.REQUESTS,
           icon: (
             <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 4h5.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V17a2 2 0 01-2 2h-4" />
-              <circle cx="8" cy="16" r="3" strokeWidth={2} />
-              <line x1="8" y1="11" x2="8" y2="13" strokeLinecap="round" strokeWidth={2} />
-              <line x1="8" y1="19" x2="8" y2="21" strokeLinecap="round" strokeWidth={2} />
-              <line x1="3" y1="16" x2="5" y2="16" strokeLinecap="round" strokeWidth={2} />
-              <line x1="11" y1="16" x2="13" y2="16" strokeLinecap="round" strokeWidth={2} />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M14 2H6a2 2 0 00-2 2v7m16 0v9a2 2 0 01-2 2h-7"
+              />
+              <polyline strokeLinecap="round" strokeLinejoin="round" points="14 2 14 8 20 8" />
+              <circle cx="7" cy="17" r="3" strokeWidth={2} />
+              <line x1="7" y1="12" x2="7" y2="13.5" strokeLinecap="round" strokeWidth={2} />
+              <line x1="7" y1="20.5" x2="7" y2="22" strokeLinecap="round" strokeWidth={2} />
+              <line x1="2" y1="17" x2="3.5" y2="17" strokeLinecap="round" strokeWidth={2} />
+              <line x1="10.5" y1="17" x2="12" y2="17" strokeLinecap="round" strokeWidth={2} />
+              <circle cx="7" cy="17" r="0.75" fill="currentColor" />
             </svg>
           ),
         },
@@ -199,24 +208,16 @@ export default function Sidebar({ isCollapsed, onToggle }) {
     : 'Student';
 
   return (
-    <aside
-      className={`relative z-30 min-h-screen bg-[#0B0B36] text-white flex flex-col justify-between transition-all duration-300 ease-in-out select-none shadow-xl ${
-        isCollapsed ? 'w-[80px]' : 'w-[270px]'
-      }`}
-    >
-      {/* Top Header Section */}
-      <div>
-        <div className={`pt-8 pb-6 flex items-center ${isCollapsed ? 'flex-col px-2 gap-4' : 'justify-between px-6'}`}>
+    <>
+      <aside
+        className={`relative z-30 min-h-screen bg-[#0B0B36] text-white flex flex-col justify-between transition-all duration-300 ease-in-out select-none shadow-xl ${
+          isCollapsed ? 'w-[80px]' : 'w-[270px]'
+        }`}
+      >
+        {/* Top Header Section */}
+        <div>
           {isCollapsed ? (
-            <>
-              {/* Shrunk Sidebar Logo (RegQuest-Logo-3) */}
-              <div className="flex items-center justify-center">
-                <img
-                  src={logoShrunk}
-                  alt="RegQuest Logo"
-                  className="h-10 w-10 object-contain drop-shadow"
-                />
-              </div>
+            <div className="pt-8 pb-6 flex items-center justify-center">
               {/* Toggle Button */}
               <button
                 type="button"
@@ -229,9 +230,9 @@ export default function Sidebar({ isCollapsed, onToggle }) {
                   <line x1="9" y1="4" x2="9" y2="20" />
                 </svg>
               </button>
-            </>
+            </div>
           ) : (
-            <>
+            <div className="pt-8 pb-6 flex items-center justify-between px-6">
               {/* Expanded Sidebar Logo (RegQuest-Logo-2) */}
               <div className="flex items-center">
                 <img
@@ -252,105 +253,103 @@ export default function Sidebar({ isCollapsed, onToggle }) {
                   <line x1="9" y1="4" x2="9" y2="20" />
                 </svg>
               </button>
-            </>
+            </div>
           )}
-        </div>
 
-        {/* Navigation Items (Middle Section) */}
-        <nav className={`mt-4 space-y-4 ${isCollapsed ? 'px-2' : 'px-4'}`}>
-          {navLinks.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end
-              title={isCollapsed ? (item.badge > 0 ? `${item.label} (${item.badge} unread)` : item.label) : undefined}
-              className={({ isActive }) =>
-                `group flex items-center rounded-xl transition-all font-medium ${
-                  isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-4 text-[15px]'
-                } ${
-                  isActive
-                    ? 'bg-white/15 text-white shadow-sm font-semibold'
-                    : 'text-white/80 hover:text-white hover:bg-white/10'
-                }`
-              }
-            >
-              <div className="relative flex items-center justify-center shrink-0">
-                {item.icon}
-                {isCollapsed && item.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950 ring-2 ring-[#0B0B36]">
-                    {item.badge > 99 ? '99+' : item.badge}
-                  </span>
-                )}
-              </div>
-              {!isCollapsed && (
-                <div className="flex-1 flex items-center justify-between min-w-0">
-                  <span className="truncate">{item.label}</span>
-                  {item.badge > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950">
+          {/* Navigation Items (Middle Section) */}
+          <nav className={`mt-4 space-y-4 ${isCollapsed ? 'px-2' : 'px-4'}`}>
+            {navLinks.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end
+                title={isCollapsed ? (item.badge > 0 ? `${item.label} (${item.badge} unread)` : item.label) : undefined}
+                className={({ isActive }) =>
+                  `group flex items-center rounded-xl transition-all font-medium ${
+                    isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-4 text-[15px]'
+                  } ${
+                    isActive
+                      ? 'bg-white/15 text-white shadow-sm font-semibold'
+                      : 'text-white/80 hover:text-white hover:bg-white/10'
+                  }`
+                }
+              >
+                <div className="relative flex items-center justify-center shrink-0">
+                  {item.icon}
+                  {isCollapsed && item.badge > 0 && (
+                    <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950 ring-2 ring-[#0B0B36]">
                       {item.badge > 99 ? '99+' : item.badge}
                     </span>
                   )}
                 </div>
-              )}
-            </NavLink>
-          ))}
-        </nav>
-      </div>
+                {!isCollapsed && (
+                  <div className="flex-1 flex items-center justify-between min-w-0">
+                    <span className="truncate">{item.label}</span>
+                    {item.badge > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950">
+                        {item.badge > 99 ? '99+' : item.badge}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </NavLink>
+            ))}
+          </nav>
+        </div>
 
-      {/* Bottom Section: Notifications & User Profile */}
-      <div className={`pb-6 space-y-2 ${isCollapsed ? 'px-2' : 'px-4'}`}>
-        {/* Notifications Item (positioned at the top of profile icon) */}
-        <NavLink
-          to={ROUTES.NOTIFICATIONS}
-          end
-          title={isCollapsed ? (unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications') : undefined}
-          className={({ isActive }) =>
-            `group flex items-center rounded-xl transition-all font-medium ${
-              isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-4 text-[15px]'
-            } ${
-              isActive
-                ? 'bg-white/15 text-white shadow-sm font-semibold'
-                : 'text-white/80 hover:text-white hover:bg-white/10'
-            }`
-          }
-        >
-          <div className="relative flex items-center justify-center shrink-0">
-            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-            {isCollapsed && unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950 ring-2 ring-[#0B0B36]">
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </span>
-            )}
-          </div>
-          {!isCollapsed && (
-            <div className="flex-1 flex items-center justify-between min-w-0">
-              <span className="truncate">Notifications</span>
+        {/* Bottom Section: Notifications & User Profile */}
+        <div className={`pb-8 space-y-2 ${isCollapsed ? 'px-2' : 'px-4'}`}>
+          {/* Notifications Item (positioned directly above the profile icon) */}
+          <NavLink
+            to={ROUTES.NOTIFICATIONS}
+            end
+            title={isCollapsed ? (unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications') : undefined}
+            className={({ isActive }) =>
+              `group flex items-center rounded-xl transition-all font-medium ${
+                isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-4 text-[15px]'
+              } ${
+                isActive
+                  ? 'bg-white/15 text-white shadow-sm font-semibold'
+                  : 'text-white/80 hover:text-white hover:bg-white/10'
+              }`
+            }
+          >
+            <div className="relative flex items-center justify-center shrink-0">
+              <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
               {unreadCount > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950">
+                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950 ring-2 ring-[#0B0B36]">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
             </div>
-          )}
-        </NavLink>
+            {!isCollapsed && (
+              <div className="flex-1 flex items-center justify-between min-w-0">
+                <span className="truncate">Notifications</span>
+                {unreadCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </div>
+            )}
+          </NavLink>
 
-        {/* User Profile Card */}
-        <div className="relative">
+          {/* User Profile Card / Toggle Button */}
           <button
             type="button"
-            onClick={() => setShowUserMenu(!showUserMenu)}
-            title={isCollapsed ? `${displayName} (${roleDisplay})` : 'Account Options'}
-            className={`w-full flex items-center rounded-2xl transition-all text-left ${
+            onClick={() => setShowUserMenu((prev) => !prev)}
+            title={isCollapsed ? `${displayName} (${roleDisplay})` : 'Profile Options'}
+            className={`w-full flex items-center rounded-xl transition-all text-left ${
               isCollapsed
                 ? 'justify-center p-2 hover:bg-white/10'
-                : 'px-3 py-2.5 gap-3.5 hover:bg-white/10'
+                : 'px-4 py-2.5 gap-4 hover:bg-white/10'
             }`}
           >
             {/* Avatar */}
-            <div className="w-11 h-11 rounded-full bg-[#6B7280] flex items-center justify-center overflow-hidden flex-shrink-0 text-white shadow-inner">
-              <svg className="w-8 h-8 text-slate-200 mt-1" fill="currentColor" viewBox="0 0 24 24">
+            <div className="w-10 h-10 rounded-full bg-[#64748B] flex items-center justify-center overflow-hidden flex-shrink-0 text-white shadow-inner">
+              <svg className="w-7 h-7 text-white mt-1" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
               </svg>
             </div>
@@ -368,34 +367,52 @@ export default function Sidebar({ isCollapsed, onToggle }) {
             )}
           </button>
 
-          {/* User Options Popover Menu */}
+          {/* Inline Profile Sub-menu (Rendered directly beneath profile when showUserMenu is true) */}
           {showUserMenu && (
-            <div
-              className={`absolute bottom-full mb-2 bg-[#14144d] border border-white/15 rounded-xl shadow-2xl p-2 z-50 animate-fadeIn ${
-                isCollapsed ? 'left-14 w-48' : 'left-2 right-2'
-              }`}
-            >
-              <div className="px-3 py-2 border-b border-white/10 mb-1">
-                <p className="text-xs text-slate-400 font-medium">Signed in as</p>
-                <p className="text-sm font-semibold text-white truncate">{displayName}</p>
-                <span className="inline-block px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded bg-amber-400/20 text-amber-300 mt-1">
-                  {roleDisplay}
-                </span>
-              </div>
+            <div className={`space-y-1 pt-1 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
+              {/* My Profile */}
+              <button
+                type="button"
+                onClick={() => setShowProfileModal(true)}
+                title={isCollapsed ? 'My Profile' : undefined}
+                className={`w-full flex items-center rounded-xl transition-all font-medium text-white/90 hover:text-white hover:bg-white/10 ${
+                  isCollapsed ? 'justify-center p-3' : 'px-4 py-2.5 gap-4 text-[15px]'
+                }`}
+              >
+                <div className="w-6 h-6 flex items-center justify-center shrink-0">
+                  <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                  </svg>
+                </div>
+                {!isCollapsed && <span className="truncate">My Profile</span>}
+              </button>
+
+              {/* Logout */}
               <button
                 type="button"
                 onClick={handleLogout}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-red-300 hover:text-red-200 hover:bg-red-500/15 rounded-lg transition-colors text-left"
+                title={isCollapsed ? 'Logout' : undefined}
+                className={`w-full flex items-center rounded-xl transition-all font-medium text-white/90 hover:text-white hover:bg-white/10 ${
+                  isCollapsed ? 'justify-center p-3' : 'px-4 py-2.5 gap-4 text-[15px]'
+                }`}
               >
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-                Sign Out
+                <div className="w-6 h-6 flex items-center justify-center shrink-0">
+                  <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+                  </svg>
+                </div>
+                {!isCollapsed && <span className="truncate">Logout</span>}
               </button>
             </div>
           )}
         </div>
-      </div>
-    </aside>
+      </aside>
+
+      {/* Student Profile Modal matching design */}
+      <StudentProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+      />
+    </>
   );
 }
