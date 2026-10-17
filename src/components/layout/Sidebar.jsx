@@ -84,8 +84,8 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           ),
         },
         {
-          label: 'Calendar & Deadlines',
-          to: `${ROUTES.STAFF.DASHBOARD}#calendar`,
+          label: 'Processing Calendar',
+          to: ROUTES.STAFF.CALENDAR,
           icon: (
             <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <rect x="3" y="4" width="18" height="18" rx="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -145,8 +145,8 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           ),
         },
         {
-          label: 'Schedule & Calendar',
-          to: `${ROUTES.ADMIN.DASHBOARD}#volume`,
+          label: 'Processing Calendar',
+          to: ROUTES.ADMIN.CALENDAR,
           icon: (
             <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <rect x="3" y="4" width="18" height="18" rx="2" strokeLinecap="round" strokeLinejoin="round" />

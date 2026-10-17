@@ -10,6 +10,7 @@ export const ROUTES = {
   },
   STAFF: {
     DASHBOARD: '/staff/dashboard',
+    CALENDAR: '/staff/calendar',
     REQUESTS: '/staff/requests',
     VERIFICATION: '/staff/verification',
     CLEARANCES: '/staff/clearances',
@@ -18,12 +19,14 @@ export const ROUTES = {
   },
   REGISTRAR: {
     DASHBOARD: '/registrar/dashboard',
+    CALENDAR: '/registrar/calendar',
     PROCESSING: '/registrar/processing',
     CREDENTIALS: '/registrar/credentials',
     REQUESTS: '/admin/requests',
   },
   ADMIN: {
     DASHBOARD: '/admin/dashboard',
+    CALENDAR: '/admin/calendar',
     USERS: '/admin/users',
     CREDENTIALS: '/admin/credentials',
     REQUESTS: '/admin/requests',
