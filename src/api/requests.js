@@ -21,6 +21,49 @@ export function isDummyStudentRequest(item) {
 }
 
 /**
+ * Validate that an item is a genuine, complete request.
+ * Excludes corrupt, blank, or placeholder requests (like those with missing tracking numbers,
+ * missing dates, or placeholder student names).
+ */
+export function isValidRequest(item) {
+  if (!item || typeof item !== 'object') return false;
+
+  const id = item.tracking_number || item.trackingId || item.id || item.rawId;
+  const idStr = String(id || '').trim();
+
+  // Rejects empty, undefined, or generic null IDs
+  if (!idStr || idStr === 'undefined' || idStr === 'null' || idStr === 'N/A') {
+    return false;
+  }
+
+  // Filter dummy student #1 to #4 records
+  if (isDummyStudentRequest(item)) {
+    return false;
+  }
+
+  // Must have a real tracking number or id (at least 3 characters)
+  if (idStr.length < 3) {
+    return false;
+  }
+
+  // Must have at least a date or a valid student identifier/name
+  const hasDate = Boolean(item.created_at || item.request_date || item.date);
+  const studentName = String(item.student_name || item.student || '').trim();
+  const studentId = String(item.student_id || item.studentId || item.user || '').trim();
+  const hasStudent = Boolean(
+    (studentName && studentName !== 'Student' && studentName !== 'N/A') ||
+    (studentId && studentId !== 'N/A')
+  );
+
+  // If a request has neither a valid date nor genuine student info, it's corrupt placeholder data
+  if (!hasDate && !hasStudent) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Retrieve stored/submitted requests across student, staff, and admin.
  */
 export function getStoredRequests() {
@@ -31,23 +74,23 @@ export function getStoredRequests() {
 
     const map = new Map();
     [...primary, ...student, ...legacy].forEach((item) => {
-      if (!item || isDummyStudentRequest(item)) return;
+      if (!isValidRequest(item)) return;
       const key = item.tracking_number || item.trackingId || item.id;
       if (key && !map.has(key)) {
         map.set(key, item);
       }
     });
 
-    // Clean up any dummy student #1 to #4 items from localStorage
-    const cleanPrimary = primary.filter((item) => !isDummyStudentRequest(item));
+    // Clean up any corrupt, dummy, or invalid items from localStorage permanently
+    const cleanPrimary = primary.filter(isValidRequest);
     if (cleanPrimary.length !== primary.length) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanPrimary));
     }
-    const cleanStudent = student.filter((item) => !isDummyStudentRequest(item));
+    const cleanStudent = student.filter(isValidRequest);
     if (cleanStudent.length !== student.length) {
       localStorage.setItem(STUDENT_REQUESTS_KEY, JSON.stringify(cleanStudent));
     }
-    const cleanLegacy = legacy.filter((item) => !isDummyStudentRequest(item));
+    const cleanLegacy = legacy.filter(isValidRequest);
     if (cleanLegacy.length !== legacy.length) {
       localStorage.setItem('regquest_stored_requests', JSON.stringify(cleanLegacy));
     }
@@ -253,7 +296,7 @@ export const requestsApi = {
       }
     });
 
-    return combined.filter((r) => !isDummyStudentRequest(r));
+    return combined.filter(isValidRequest);
   },
 
   /**

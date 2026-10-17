@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import requestsApi, { isDummyStudentRequest } from '../../api/requests';
+import requestsApi, { isValidRequest } from '../../api/requests';
 import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
@@ -209,7 +209,7 @@ export default function AdminRequestsPage() {
   // Transform raw backend requests into display-ready items
   const requests = useMemo(() => {
     return rawRequests
-      .filter((r) => !isDummyStudentRequest(r))
+      .filter(isValidRequest)
       .map((r, idx) => {
       const user = userMap.get(r.user);
       const cred = credTypeMap.get(r.credential_type);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import requestsApi, { getStoredRequests, isDummyStudentRequest } from '../../api/requests';
+import requestsApi, { getStoredRequests, isValidRequest } from '../../api/requests';
 import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
 import ProcessCalendarCard from '../../components/calendar/ProcessCalendarCard';
@@ -117,7 +117,7 @@ export default function ProcessingCalendarPage() {
 
       if (combinedRaw.length > 0) {
         const enriched = combinedRaw
-          .filter((r) => !isDummyStudentRequest(r))
+          .filter(isValidRequest)
           .map((r, idx) => {
           const userObj = userMap.get(r.user) || userMap.get(r.student_id);
           const cred = credMap.get(r.credential_type) || credMap.get(r.credential);
