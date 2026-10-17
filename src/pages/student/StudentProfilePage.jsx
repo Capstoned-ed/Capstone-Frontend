@@ -3,14 +3,66 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
 import requestsApi from '../../api/requests';
+import useToast from '../../hooks/useToast';
 
 export default function StudentProfilePage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
+
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'information'
   const [requestsList, setRequestsList] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
 
+  // Editable fields state (Email, Mobile Number, Year Level)
+  const [editableEmail, setEditableEmail] = useState('');
+  const [editableMobile, setEditableMobile] = useState('');
+  const [editableYearLevel, setEditableYearLevel] = useState('1st year');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Student Identity data matching screenshot with fallbacks to authenticated user
+  const displayName =
+    user?.full_name ||
+    (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : null) ||
+    (user?.username && !/^\d{6,}$/.test(user.username) ? user.username : null) ||
+    'Juan De Letchi';
+
+  const studentId = user?.student_id || user?.username || '2026202666';
+  const academicProgram = user?.program || 'B.S. in Information Technology';
+
+  // Initialize editable fields on open / user change
+  useEffect(() => {
+    try {
+      const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+      const userKey = user?.id || user?.username || user?.student_id;
+      const p = profiles[userKey] || profiles[user?.username] || {};
+
+      setEditableEmail(
+        p.email ||
+        user?.email ||
+        (user?.username === '2023301564' ? 'daisy.traya@ustp.edu.ph' : 'juan@email.com')
+      );
+      setEditableMobile(
+        p.mobile_number ||
+        p.phone ||
+        user?.phone ||
+        user?.mobile_number ||
+        '09561236549'
+      );
+      setEditableYearLevel(
+        p.year_level ||
+        user?.year_level ||
+        '1st year'
+      );
+    } catch {
+      setEditableEmail(user?.email || 'juan@email.com');
+      setEditableMobile('09561236549');
+      setEditableYearLevel(user?.year_level || '1st year');
+    }
+  }, [user]);
+
+  // Load requests
   useEffect(() => {
     setLoadingRequests(true);
     requestsApi
@@ -35,17 +87,52 @@ export default function StudentProfilePage() {
     navigate(ROUTES.LOGIN);
   };
 
-  const displayName =
-    user?.full_name ||
-    (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : null) ||
-    (user?.username && !/^\d{6,}$/.test(user.username) ? user.username : null) ||
-    'Juan De Letchi';
+  // Save changes handler for editable fields (Email, Mobile Number, Year Level)
+  const handleSaveInformation = (e) => {
+    e?.preventDefault();
 
-  const studentId = user?.student_id || user?.username || '2026202666';
-  const email = user?.email || (user?.username === '2023301564' ? 'daisy.traya@ustp.edu.ph' : 'juan@email.com');
-  const mobileNumber = user?.phone || user?.mobile_number || '09561236549';
-  const academicProgram = user?.program || 'B.S. in Information Technology';
-  const yearLevel = user?.year_level || '1st year';
+    if (!editableEmail || !editableEmail.includes('@')) {
+      toast.error('Please enter a valid email address.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+      const userKey = user?.id || user?.username || studentId;
+      const existing = profiles[userKey] || profiles[user?.username] || {};
+
+      const updated = {
+        ...existing,
+        full_name: displayName,
+        student_id: studentId,
+        program: academicProgram,
+        email: editableEmail.trim(),
+        mobile_number: editableMobile.trim(),
+        phone: editableMobile.trim(),
+        year_level: editableYearLevel,
+      };
+
+      profiles[userKey] = updated;
+      if (user?.username) profiles[user?.username] = updated;
+      if (user?.student_id) profiles[user?.student_id] = updated;
+      if (user?.id) profiles[user?.id] = updated;
+
+      localStorage.setItem('regquest_student_profiles', JSON.stringify(profiles));
+
+      // Notify other components
+      window.dispatchEvent(new CustomEvent('regquest_profile_updated', { detail: updated }));
+
+      setSaveSuccess(true);
+      toast.success('Information updated successfully!');
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.warn('Could not save profile:', err);
+      toast.error('Failed to save profile changes.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F4F5F8] p-4 md:p-8 flex items-center justify-center">
@@ -54,7 +141,7 @@ export default function StudentProfilePage() {
         style={{ minHeight: '520px' }}
       >
         {/* Left Navigation Panel */}
-        <div className="w-full md:w-52 bg-white border-b md:border-b-0 md:border-r border-slate-200/80 p-6 flex flex-col justify-between shrink-0">
+        <div className="w-full md:w-56 bg-white border-b md:border-b-0 md:border-r border-slate-200/80 p-6 flex flex-col justify-between shrink-0">
           <div className="space-y-4">
             {/* Overview Tab Button */}
             <button
@@ -136,10 +223,10 @@ export default function StudentProfilePage() {
                   <table className="w-full text-left">
                     <thead>
                       <tr className="text-slate-800 font-semibold text-[15px]">
-                        <th className="pb-4 font-semibold pr-4">Request #</th>
-                        <th className="pb-4 font-semibold pr-4">Document Type</th>
-                        <th className="pb-4 font-semibold pr-4">Date</th>
-                        <th className="pb-4 font-semibold">Time</th>
+                        <th className="pb-4 font-semibold pr-6 whitespace-nowrap">Request #</th>
+                        <th className="pb-4 font-semibold pr-6 whitespace-nowrap">Document Type</th>
+                        <th className="pb-4 font-semibold pr-6 whitespace-nowrap">Date</th>
+                        <th className="pb-4 font-semibold whitespace-nowrap">Time</th>
                       </tr>
                     </thead>
                     <tbody className="text-sm text-slate-600 divide-y divide-slate-100">
@@ -171,19 +258,19 @@ export default function StudentProfilePage() {
 
                           return (
                             <tr key={req.id || idx} className="hover:bg-slate-50/60 transition-colors">
-                              <td className="py-3.5 pr-4 text-slate-700 font-medium">{reqNum}</td>
-                              <td className="py-3.5 pr-4 text-slate-600">{docType}</td>
-                              <td className="py-3.5 pr-4 text-slate-600">{dateStr}</td>
-                              <td className="py-3.5 text-slate-600">{timeStr}</td>
+                              <td className="py-3.5 pr-6 text-slate-700 font-medium whitespace-nowrap">{reqNum}</td>
+                              <td className="py-3.5 pr-6 text-slate-600">{docType}</td>
+                              <td className="py-3.5 pr-6 text-slate-600 whitespace-nowrap">{dateStr}</td>
+                              <td className="py-3.5 text-slate-600 whitespace-nowrap">{timeStr}</td>
                             </tr>
                           );
                         })
                       ) : (
                         <tr className="hover:bg-slate-50/60 transition-colors">
-                          <td className="py-3.5 pr-4 text-slate-700 font-medium">RQ-097323</td>
-                          <td className="py-3.5 pr-4 text-slate-600">Transcript of Records</td>
-                          <td className="py-3.5 pr-4 text-slate-600">May 9, 2026</td>
-                          <td className="py-3.5 text-slate-600">10:26:13 am</td>
+                          <td className="py-3.5 pr-6 text-slate-700 font-medium whitespace-nowrap">RQ-097323</td>
+                          <td className="py-3.5 pr-6 text-slate-600">Transcript of Records</td>
+                          <td className="py-3.5 pr-6 text-slate-600 whitespace-nowrap">May 9, 2026</td>
+                          <td className="py-3.5 text-slate-600 whitespace-nowrap">10:26:13 am</td>
                         </tr>
                       )}
                     </tbody>
@@ -193,91 +280,163 @@ export default function StudentProfilePage() {
             </div>
           )}
 
-          {/* Tab 2: My Information */}
+          {/* Tab 2: My Information (Email, Mobile Number, Year Level Editable) */}
           {activeTab === 'information' && (
             <div className="mt-7">
-              <h3 className="text-xl font-bold text-[#000080] mb-4">My Information</h3>
-              <div className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_4px_16px_rgba(0,0,0,0.05)] p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-[#000080]">My Information</h3>
+                <span className="text-xs text-slate-500 font-medium">
+                  Editable: Email, Mobile Number, Year Level
+                </span>
+              </div>
+
+              <form
+                onSubmit={handleSaveInformation}
+                className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_4px_16px_rgba(0,0,0,0.05)] p-6 md:p-8"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
                   {/* Left Column */}
                   <div className="space-y-4">
+                    {/* Full Name (Read-only) */}
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        Full Name
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-sm font-semibold text-slate-800">
+                          Full Name
+                        </label>
+                        <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                          Read-only
+                        </span>
+                      </div>
                       <input
                         type="text"
                         readOnly
                         value={displayName}
-                        className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2 text-sm text-slate-700 outline-none select-text cursor-default"
+                        className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2.5 text-sm text-slate-500 outline-none select-text cursor-not-allowed font-medium"
                       />
                     </div>
 
+                    {/* Email (Editable) */}
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        Email
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-sm font-semibold text-slate-800">
+                          Email
+                        </label>
+                        <span className="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                          Editable
+                        </span>
+                      </div>
                       <input
-                        type="text"
-                        readOnly
-                        value={email}
-                        className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2 text-sm text-slate-700 outline-none select-text cursor-default truncate"
+                        type="email"
+                        value={editableEmail}
+                        onChange={(e) => setEditableEmail(e.target.value)}
+                        required
+                        placeholder="Enter email address"
+                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm"
                       />
                     </div>
 
+                    {/* Academic Program (Read-only) */}
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        Academic Program
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-sm font-semibold text-slate-800">
+                          Academic Program
+                        </label>
+                        <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                          Read-only
+                        </span>
+                      </div>
                       <input
                         type="text"
                         readOnly
                         value={academicProgram}
-                        className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2 text-sm text-slate-700 outline-none select-text cursor-default truncate"
+                        className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2.5 text-sm text-slate-500 outline-none select-text cursor-not-allowed truncate font-medium"
                       />
                     </div>
                   </div>
 
                   {/* Right Column */}
                   <div className="space-y-4">
+                    {/* Student ID (Read-only) */}
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        Student ID
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-sm font-semibold text-slate-800">
+                          Student ID
+                        </label>
+                        <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                          Read-only
+                        </span>
+                      </div>
                       <input
                         type="text"
                         readOnly
                         value={studentId}
-                        className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2 text-sm text-slate-700 outline-none select-text cursor-default"
+                        className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2.5 text-sm text-slate-500 outline-none select-text cursor-not-allowed font-medium"
                       />
                     </div>
 
+                    {/* Mobile Number (Editable) */}
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        Mobile Number
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-sm font-semibold text-slate-800">
+                          Mobile Number
+                        </label>
+                        <span className="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                          Editable
+                        </span>
+                      </div>
                       <input
-                        type="text"
-                        readOnly
-                        value={mobileNumber}
-                        className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2 text-sm text-slate-700 outline-none select-text cursor-default"
+                        type="tel"
+                        value={editableMobile}
+                        onChange={(e) => setEditableMobile(e.target.value)}
+                        placeholder="09xxxxxxxxx"
+                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm"
                       />
                     </div>
 
+                    {/* Year Level (Editable) */}
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        Year Level
-                      </label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={yearLevel}
-                        className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2 text-sm text-slate-700 outline-none select-text cursor-default"
-                      />
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-sm font-semibold text-slate-800">
+                          Year Level
+                        </label>
+                        <span className="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                          Editable
+                        </span>
+                      </div>
+                      <select
+                        value={editableYearLevel}
+                        onChange={(e) => setEditableYearLevel(e.target.value)}
+                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm cursor-pointer"
+                      >
+                        <option value="1st year">1st year</option>
+                        <option value="2nd year">2nd year</option>
+                        <option value="3rd year">3rd year</option>
+                        <option value="4th year">4th year</option>
+                        <option value="5th year">5th year</option>
+                      </select>
                     </div>
                   </div>
                 </div>
-              </div>
+
+                {/* Save Button Row */}
+                <div className="mt-8 pt-5 border-t border-slate-100 flex items-center justify-end gap-3">
+                  {saveSuccess && (
+                    <span className="text-sm font-semibold text-emerald-600 flex items-center gap-1.5 animate-fadeIn">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      Changes saved!
+                    </span>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-6 py-2.5 rounded-xl text-sm font-semibold bg-[#000080] hover:bg-[#000066] text-white transition-all shadow-md hover:shadow-lg disabled:opacity-50 flex items-center gap-2 cursor-pointer active:scale-95"
+                  >
+                    {isSaving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
             </div>
           )}
         </div>
