@@ -44,19 +44,39 @@ export default function useDashboardData() {
         // -------------------------------------------------------------
         // 2. Compute Dynamic Status Distribution
         // -------------------------------------------------------------
-        const totalRequests = requests.length;
+        const validRequests = requests.filter((r) => Boolean(String(r.tracking_number || '').trim()));
+        const totalRequests = validRequests.length;
         const statusCounts = {
           'Pending': 0,
+          'For Payment': 0,
+          'For Processing': 0,
           'Processing': 0,
           'For release': 0,
           'Claimed': 0,
           'On Hold': 0,
         };
 
-        requests.forEach((req) => {
-          const s = (req.status || '').toUpperCase();
+        validRequests.forEach((req) => {
+          const s = (req.status || '').toUpperCase().trim();
           if (s === 'PENDING' || s === 'PENDONG' || s === 'RECEIVED' || s === 'REQUEST SUBMITTED') {
             statusCounts['Pending']++;
+          } else if (
+            s === 'FOR PAYMENT' ||
+            s === 'FOR_PAYMENT' ||
+            s === 'PAYMENT_PENDING' ||
+            s === 'PAYMENT PENDING' ||
+            s === 'PENDING PAYMENT' ||
+            s === 'PENDING_PAYMENT' ||
+            s === 'CLEARED FOR PAYMENT'
+          ) {
+            statusCounts['For Payment']++;
+          } else if (
+            s === 'FOR PROCESSING' ||
+            s === 'FOR_PROCESSING' ||
+            s === 'PAYMENT_VERIFIED' ||
+            s === 'PAYMENT VERIFIED'
+          ) {
+            statusCounts['For Processing']++;
           } else if (s === 'PROCESSING' || s === 'DOCUMENT_PREPARATION' || s === 'DOCUMENT PREPARATION') {
             statusCounts['Processing']++;
           } else if (
@@ -65,7 +85,8 @@ export default function useDashboardData() {
             s === 'READY_FOR_PICKUP' ||
             s === 'READY FOR PICKUP' ||
             s === 'FOR_RELEASE' ||
-            s === 'FOR RELEASE'
+            s === 'FOR RELEASE' ||
+            s === 'RELEASING'
           ) {
             statusCounts['For release']++;
           } else if (s === 'RELEASED' || s === 'CLAIMED' || s === 'CLAIMED / RELEASED') {
@@ -73,8 +94,6 @@ export default function useDashboardData() {
           } else if (
             s === 'REQUIREMENTS_VERIFICATION' ||
             s === 'CLEARANCE_VERIFIED' ||
-            s === 'PAYMENT_PENDING' ||
-            s === 'PAYMENT_VERIFIED' ||
             s === 'ON HOLD' ||
             s === 'ON_HOLD' ||
             s === 'HOLD' ||
@@ -101,10 +120,14 @@ export default function useDashboardData() {
         const staffUsers = users.filter((u) => u.role === ROLES.STAFF || u.role === ROLES.REGISTRAR);
         const activeStaff = staffUsers.length > 0 ? staffUsers : users.filter((u) => u.role === ROLES.ADMIN);
 
-        const pendingCount = requests.filter((r) =>
-          ['PENDING', 'REQUIREMENTS_VERIFICATION', 'PAYMENT_PENDING', 'PROCESSING'].includes(r.status)
-        ).length;
-        const completedCount = requests.filter((r) => r.status === 'RELEASED').length;
+        const pendingCount = validRequests.filter((r) => {
+          const s = (r.status || '').toUpperCase().trim();
+          return s !== 'RELEASED' && s !== 'CLAIMED' && s !== 'CLAIMED / RELEASED';
+        }).length;
+        const completedCount = validRequests.filter((r) => {
+          const s = (r.status || '').toUpperCase().trim();
+          return s === 'RELEASED' || s === 'CLAIMED' || s === 'CLAIMED / RELEASED';
+        }).length;
 
         const computedStaffMetrics = activeStaff.map((staff) => {
           const displayName = staff.first_name && staff.last_name
@@ -213,8 +236,14 @@ export default function useDashboardData() {
 
     loadDashboardData();
 
+    const handleSync = () => {
+      loadDashboardData();
+    };
+    window.addEventListener('regquest_requests_updated', handleSync);
+
     return () => {
       ignore = true;
+      window.removeEventListener('regquest_requests_updated', handleSync);
     };
   }, [reloadTrigger]);
 

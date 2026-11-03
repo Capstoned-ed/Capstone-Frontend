@@ -16,21 +16,50 @@ export default function LoginForm({ onSuccess }) {
     setErrorMessage('');
 
     if (!username.trim() || !password) {
-      setErrorMessage('Please enter both your Student ID / Email and password.');
+      setErrorMessage('Please enter both your ID Number / Email and password.');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const result = await login(username.trim(), password);
+      let loginIdentifier = username.trim();
+      // If the user entered an email address, try resolving to their ID number / username
+      if (loginIdentifier.includes('@')) {
+        try {
+          const cachedUsers = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
+          const matched = cachedUsers.find(
+            (u) => u.email && u.email.toLowerCase() === loginIdentifier.toLowerCase()
+          );
+          if (matched?.username) {
+            loginIdentifier = matched.username;
+          }
+        } catch {}
+      }
+
+      // If the user set an optional custom password and entered it, map to the backend provisioned password
+      let backendPassword = password;
+      try {
+        const customPasswords = JSON.parse(localStorage.getItem('regquest_custom_passwords') || '{}');
+        const userCustom =
+          customPasswords[loginIdentifier] ||
+          customPasswords[username.trim().toLowerCase()] ||
+          customPasswords[username.trim()];
+        if (userCustom && userCustom.newPassword && password === userCustom.newPassword) {
+          backendPassword = userCustom.originalPassword || loginIdentifier;
+        }
+      } catch (err) {
+        console.warn('Error reading custom password:', err);
+      }
+
+      const result = await login(loginIdentifier, backendPassword);
       if (onSuccess) {
         onSuccess(result.user);
       }
     } catch (err) {
       if (err.response?.status === 401) {
         setErrorMessage(
-          err.response?.data?.detail || 'Invalid credentials. Please check your Student ID / Email and password.'
+          err.response?.data?.detail || 'Invalid credentials. Please check your ID Number / Email and password.'
         );
       } else if (err.response?.data) {
         const errorData = err.response.data;
@@ -73,16 +102,16 @@ export default function LoginForm({ onSuccess }) {
 
       {/* Form Fields */}
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
-        {/* Username / Student ID / Email Field */}
+        {/* Username / ID Number / Email Field */}
         <div>
           <label
             htmlFor="username"
             className="block text-xs font-semibold text-slate-700 mb-1.5"
           >
-            Student ID / Email Address
+            ID Number / Email Address
           </label>
           <div className="relative flex items-center">
-            {/* Mail Icon */}
+            {/* User Icon */}
             <div className="absolute left-3.5 text-slate-400 pointer-events-none flex items-center justify-center">
               <svg
                 className="w-4 h-4"
@@ -94,7 +123,7 @@ export default function LoginForm({ onSuccess }) {
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                 />
               </svg>
             </div>
@@ -105,7 +134,7 @@ export default function LoginForm({ onSuccess }) {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={isLoading}
-              placeholder="Enter your Student ID / Email"
+              placeholder="Enter your ID Number or Email"
               className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg py-2.5 sm:py-3 pl-10 pr-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#fbb643] focus:border-transparent transition-all"
             />
           </div>

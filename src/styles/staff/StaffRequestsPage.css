@@ -1,5 +1,3 @@
-/* StaffRequestsPage.css - Styling for Staff Process Request page matching user photos */
-
 .staff-req-container {
   display: flex;
   flex-direction: column;
@@ -8,9 +6,6 @@
   padding-bottom: 3rem;
 }
 
-/* --------------------------------------------------------------------------
-   1. Search & Filter Bar (Top Card in Photo 1)
-   -------------------------------------------------------------------------- */
 .staff-search-card {
   background-color: #ffffff;
   border-radius: 1rem;
@@ -94,9 +89,6 @@
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
-/* --------------------------------------------------------------------------
-   2. Requests Table Card (Photo 1)
-   -------------------------------------------------------------------------- */
 .staff-list-card {
   background-color: #ffffff;
   border-radius: 1rem;
@@ -210,9 +202,6 @@
   color: #0f172a;
 }
 
-/* --------------------------------------------------------------------------
-   3. Process Request View (Photo 2)
-   -------------------------------------------------------------------------- */
 .staff-process-backdrop {
   position: fixed;
   inset: 0;
@@ -313,7 +302,6 @@
   margin-bottom: 0;
 }
 
-/* Gray Container from Photo 2 */
 .staff-process-box {
   background-color: #f8fafc;
   border-radius: 1rem;
@@ -370,7 +358,6 @@
   white-space: pre-wrap;
 }
 
-/* Form Controls in Photo 2 */
 .staff-form-group {
   display: flex;
   flex-direction: column;
@@ -427,7 +414,6 @@
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
-/* Bottom Action Buttons in Photo 2 */
 .staff-process-footer {
   padding: 1rem 1.5rem;
   border-top: 1px solid #e2e8f0;
@@ -482,54 +468,59 @@
   cursor: not-allowed;
 }
 
-/* --------------------------------------------------------------------------
-   4. Status Pill Badges
-   -------------------------------------------------------------------------- */
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  white-space: nowrap;
+.status-pill,
+.status-badge {
+  @apply inline-flex items-center justify-center px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap;
 }
 
 .status-pill.pending,
 .status-pill.request-submitted,
-.status-pill.received {
-  background-color: #fef9c3;
-  color: #854d0e;
+.status-pill.received,
+.status-badge.pending {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.status-pill.payment-pending,
+.status-pill.for-payment,
+.status-pill.cleared-for-payment,
+.status-badge.payment-pending,
+.status-badge.for-payment {
+  @apply bg-yellow-200 text-yellow-800 border border-yellow-400;
+}
+
+.status-pill.for-processing,
+.status-badge.for-processing {
+  @apply bg-blue-100 text-blue-800 border border-blue-200;
 }
 
 .status-pill.processing,
-.status-pill.document-preparation {
-  background-color: #e0f2fe;
-  color: #0369a1;
+.status-pill.document-preparation,
+.status-badge.processing {
+  @apply bg-sky-100 text-sky-700;
 }
 
 .status-pill.for-release,
 .status-pill.ready-for-pickup,
-.status-pill.ready {
-  background-color: #f3e8ff;
-  color: #6b21a8;
+.status-pill.ready,
+.status-badge.releasing,
+.status-badge.for-release {
+  @apply bg-purple-100 text-purple-800;
 }
 
 .status-pill.claimed,
 .status-pill.claimed-released,
-.status-pill.released {
-  background-color: #bbf7d0;
-  color: #166534;
+.status-pill.released,
+.status-badge.claimed {
+  @apply bg-green-200 text-green-800;
 }
 
 .status-pill.on-hold,
 .status-pill.hold,
 .status-pill.clearance-verified,
 .status-pill.cancelled,
-.status-pill.rejected {
-  background-color: #ffedd5;
-  color: #c2410c;
-  border: 1px solid #fed7aa;
+.status-pill.rejected,
+.status-badge.on-hold {
+  @apply bg-orange-100 text-orange-700 border border-orange-200;
 }
+
 

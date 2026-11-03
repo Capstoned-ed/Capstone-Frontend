@@ -7,6 +7,7 @@ import logoExpanded from '../../assets/RegQuest-Logo-2-cropped.png';
 import logoShrunk from '../../assets/RegQuest-Logo-3-cropped.png';
 import { useNotifications } from '../../context/NotificationContext';
 import StudentProfileModal from '../student/StudentProfileModal';
+import StaffProfileModal from '../staff/StaffProfileModal';
 
 export default function Sidebar({ isCollapsed, onToggle }) {
   const { user, logout } = useAuth();
@@ -57,6 +58,17 @@ export default function Sidebar({ isCollapsed, onToggle }) {
               <line x1="2" y1="17" x2="3.5" y2="17" strokeLinecap="round" strokeWidth={2} />
               <line x1="10.5" y1="17" x2="12" y2="17" strokeLinecap="round" strokeWidth={2} />
               <circle cx="7" cy="17" r="0.75" fill="currentColor" />
+            </svg>
+          ),
+        },
+        {
+          label: 'Payments',
+          to: ROUTES.STUDENT.PAYMENTS,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <rect x="2" y="5" width="20" height="14" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+              <line x1="2" y1="10" x2="22" y2="10" strokeLinecap="round" strokeLinejoin="round" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 15h2m4 0h6" />
             </svg>
           ),
         },
@@ -136,8 +148,8 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           ),
         },
         {
-          label: 'Analytics & Trends',
-          to: `${ROUTES.ADMIN.DASHBOARD}#reports`,
+          label: 'Analytics & Graphs',
+          to: ROUTES.ADMIN.ANALYTICS,
           icon: (
             <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -408,11 +420,18 @@ export default function Sidebar({ isCollapsed, onToggle }) {
         </div>
       </aside>
 
-      {/* Student Profile Modal matching design */}
-      <StudentProfileModal
-        isOpen={showProfileModal}
-        onClose={() => setShowProfileModal(false)}
-      />
+      {/* Role-specific Profile Modal (Student vs Admin/Staff) */}
+      {userRole === ROLES.STUDENT ? (
+        <StudentProfileModal
+          isOpen={showProfileModal}
+          onClose={() => setShowProfileModal(false)}
+        />
+      ) : (
+        <StaffProfileModal
+          isOpen={showProfileModal}
+          onClose={() => setShowProfileModal(false)}
+        />
+      )}
     </>
   );
 }
