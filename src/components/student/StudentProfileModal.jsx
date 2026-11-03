@@ -11,7 +11,7 @@ export default function StudentProfileModal({ isOpen, onClose }) {
   const navigate = useNavigate();
   const toast = useToast();
 
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'information'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'information' | 'password'
   const [requestsList, setRequestsList] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
 
@@ -21,6 +21,17 @@ export default function StudentProfileModal({ isOpen, onClose }) {
   const [editableYearLevel, setEditableYearLevel] = useState('1st year');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Password fields state (Optional)
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Student Identity data matching screenshot with fallbacks to authenticated user
   const displayName =
@@ -209,6 +220,22 @@ export default function StudentProfileModal({ isOpen, onClose }) {
               </svg>
               <span className="text-[15px]">My Information</span>
             </button>
+
+            {/* Change Password Tab Button (Optional) */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('password')}
+              className={`w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl transition-colors text-left ${
+                activeTab === 'password'
+                  ? 'text-[#0B0B7A] font-bold'
+                  : 'text-slate-600 hover:text-slate-900 font-medium hover:bg-slate-50'
+              }`}
+            >
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+              </svg>
+              <span className="text-[15px]">Change Password</span>
+            </button>
           </div>
 
           {/* Bottom Log out Button */}
@@ -325,14 +352,11 @@ export default function StudentProfileModal({ isOpen, onClose }) {
             </div>
           )}
 
-          {/* Tab 2: My Information (Email, Mobile Number, Year Level Editable) */}
+          {/* Tab 2: My Information */}
           {activeTab === 'information' && (
             <div className="mt-7">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-bold text-[#000080]">My Information</h3>
-                <span className="text-xs text-slate-500 font-medium">
-                  Editable: Email, Mobile Number, Year Level
-                </span>
               </div>
 
               <form
@@ -342,16 +366,11 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
                   {/* Left Column */}
                   <div className="space-y-4">
-                    {/* Full Name (Read-only) */}
+                    {/* Full Name */}
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-sm font-semibold text-slate-800">
-                          Full Name
-                        </label>
-                        <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                          Read-only
-                        </span>
-                      </div>
+                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                        Full Name
+                      </label>
                       <input
                         type="text"
                         readOnly
@@ -360,16 +379,11 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                       />
                     </div>
 
-                    {/* Email (Editable) */}
+                    {/* Email */}
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-sm font-semibold text-slate-800">
-                          Email
-                        </label>
-                        <span className="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                          Editable
-                        </span>
-                      </div>
+                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                        Email
+                      </label>
                       <input
                         type="email"
                         value={editableEmail}
@@ -380,16 +394,11 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                       />
                     </div>
 
-                    {/* Academic Program (Read-only) */}
+                    {/* Academic Program */}
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-sm font-semibold text-slate-800">
-                          Academic Program
-                        </label>
-                        <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                          Read-only
-                        </span>
-                      </div>
+                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                        Academic Program
+                      </label>
                       <input
                         type="text"
                         readOnly
@@ -401,16 +410,11 @@ export default function StudentProfileModal({ isOpen, onClose }) {
 
                   {/* Right Column */}
                   <div className="space-y-4">
-                    {/* Student ID (Read-only) */}
+                    {/* Student ID */}
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-sm font-semibold text-slate-800">
-                          Student ID
-                        </label>
-                        <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                          Read-only
-                        </span>
-                      </div>
+                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                        Student ID
+                      </label>
                       <input
                         type="text"
                         readOnly
@@ -419,16 +423,11 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                       />
                     </div>
 
-                    {/* Mobile Number (Editable) */}
+                    {/* Mobile Number */}
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-sm font-semibold text-slate-800">
-                          Mobile Number
-                        </label>
-                        <span className="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                          Editable
-                        </span>
-                      </div>
+                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                        Mobile Number
+                      </label>
                       <input
                         type="tel"
                         value={editableMobile}
@@ -438,16 +437,11 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                       />
                     </div>
 
-                    {/* Year Level (Editable) */}
+                    {/* Year Level */}
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-sm font-semibold text-slate-800">
-                          Year Level
-                        </label>
-                        <span className="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                          Editable
-                        </span>
-                      </div>
+                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                        Year Level
+                      </label>
                       <select
                         value={editableYearLevel}
                         onChange={(e) => setEditableYearLevel(e.target.value)}
@@ -482,6 +476,205 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {/* Tab 3: Change Password (Optional) */}
+          {activeTab === 'password' && (
+            <div className="mt-7">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-[#000080]">Change Password</h3>
+                <span className="text-xs text-slate-500 font-medium">
+                  Optional Security Setting
+                </span>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_4px_16px_rgba(0,0,0,0.05)] p-6 md:p-8">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs text-slate-600 mb-6 leading-relaxed">
+                  <span className="font-semibold text-slate-800 block mb-0.5">Account Notice:</span>
+                  Your default institutional password is your <strong>Student ID</strong> (<code>{studentId}</code>). Changing your password is fully optional. If you keep your default password, you can always log in with your Student ID.
+                </div>
+
+                {passwordError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl p-3 mb-5 animate-fadeIn">
+                    {passwordError}
+                  </div>
+                )}
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setPasswordError('');
+
+                    if (!currentPassword.trim()) {
+                      setPasswordError('Please enter your current password (default is your Student ID).');
+                      return;
+                    }
+                    if (newPassword.length < 6) {
+                      setPasswordError('New password must be at least 6 characters long.');
+                      return;
+                    }
+                    if (newPassword !== confirmPassword) {
+                      setPasswordError('New password and confirmation do not match.');
+                      return;
+                    }
+                    if (newPassword === currentPassword) {
+                      setPasswordError('New password must be different from your current password.');
+                      return;
+                    }
+
+                    setIsChangingPassword(true);
+                    try {
+                      const customPasswords = JSON.parse(localStorage.getItem('regquest_custom_passwords') || '{}');
+                      const userKey = user?.username || studentId || user?.id || '';
+                      const record = {
+                        originalPassword: currentPassword.trim(),
+                        newPassword: newPassword.trim(),
+                        updatedAt: new Date().toISOString(),
+                      };
+
+                      if (userKey) customPasswords[userKey] = record;
+                      if (user?.email) customPasswords[user.email.toLowerCase()] = record;
+                      if (studentId) customPasswords[studentId] = record;
+
+                      localStorage.setItem('regquest_custom_passwords', JSON.stringify(customPasswords));
+
+                      setPasswordSuccess(true);
+                      toast.success('Password updated successfully!');
+                      setCurrentPassword('');
+                      setNewPassword('');
+                      setConfirmPassword('');
+                      setTimeout(() => setPasswordSuccess(false), 3000);
+                    } catch (err) {
+                      console.warn('Password change failed:', err);
+                      setPasswordError('Failed to save password change.');
+                    } finally {
+                      setIsChangingPassword(false);
+                    }
+                  }}
+                  className="space-y-4 max-w-lg"
+                >
+                  {/* Current Password */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                      Current Password (or Student ID)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showCurrentPass ? 'text' : 'password'}
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        placeholder="Enter current password"
+                        required
+                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentPass(!showCurrentPass)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                      >
+                        {showCurrentPass ? (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* New Password */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showNewPass ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="At least 6 characters"
+                        required
+                        minLength={6}
+                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPass(!showNewPass)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                      >
+                        {showNewPass ? (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Confirm New Password */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                      Confirm New Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPass ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Re-enter new password"
+                        required
+                        minLength={6}
+                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPass(!showConfirmPass)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                      >
+                        {showConfirmPass ? (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="pt-4 flex items-center gap-3">
+                    {passwordSuccess && (
+                      <span className="text-sm font-semibold text-emerald-600 flex items-center gap-1.5 animate-fadeIn">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Password updated!
+                      </span>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={isChangingPassword}
+                      className="px-6 py-2.5 rounded-xl text-sm font-semibold bg-[#000080] hover:bg-[#000066] text-white transition-all shadow-md hover:shadow-lg disabled:opacity-50 flex items-center gap-2 cursor-pointer active:scale-95"
+                    >
+                      {isChangingPassword ? 'Updating...' : 'Update Password'}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
         </div>

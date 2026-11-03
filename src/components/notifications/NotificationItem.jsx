@@ -20,12 +20,16 @@ function formatEventTitle(eventType) {
       return 'Clearance Approved';
     case 'CLEARANCE_REJECTED':
       return 'Clearance Notice';
+    case 'PAYMENT_PENDING':
+      return 'Your Request Is Ready for Payment';
     case 'PAYMENT_SUBMITTED':
       return 'Payment Submitted';
     case 'PAYMENT_VERIFIED':
       return 'Payment Verified';
     case 'PAYMENT_REJECTED':
       return 'Payment Action Needed';
+    case 'READY_FOR_RELEASE':
+      return 'Credential Ready for Release';
     default:
       return 'System Notification';
   }
@@ -35,13 +39,25 @@ function getEventBadge(eventType) {
   switch (eventType) {
     case 'CLEARANCE_APPROVED':
     case 'PAYMENT_VERIFIED':
+    case 'READY_FOR_RELEASE':
       return {
         bg: 'bg-emerald-50 text-emerald-600 border-emerald-200',
         pill: 'bg-emerald-100 text-emerald-800',
-        label: 'Approved',
+        label: eventType === 'READY_FOR_RELEASE' ? 'Ready to Claim' : 'Approved',
         icon: (
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+          </svg>
+        ),
+      };
+    case 'PAYMENT_PENDING':
+      return {
+        bg: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+        pill: 'bg-indigo-100 text-indigo-800',
+        label: 'Ready for Payment',
+        icon: (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
         ),
       };
@@ -137,7 +153,7 @@ export default function NotificationItem({
   const navigate = useNavigate();
   const { id, event_type, message, is_read, created_at, related_object_type, related_object_id } = notification;
   const badge = getEventBadge(event_type);
-  const title = formatEventTitle(event_type);
+  const title = notification.title || formatEventTitle(event_type);
   const timeText = formatRelativeTime(created_at);
   const fullTimeText = formatFullDateTime(created_at);
 
@@ -150,6 +166,12 @@ export default function NotificationItem({
         return { label: 'Admin Requests →', path: ROUTES.ADMIN.REQUESTS };
       }
       const trackParam = related_object_id ? `?trackId=${related_object_id}` : '';
+      if (event_type === 'PAYMENT_PENDING') {
+        return {
+          label: 'Download Form & Pay →',
+          path: related_object_id ? `/student/form/${related_object_id}` : `${ROUTES.STUDENT.REQUESTS}${trackParam}`,
+        };
+      }
       return { label: 'Track Request →', path: `${ROUTES.STUDENT.REQUESTS}${trackParam}` };
     }
     if (related_object_type === 'StudentClearance') {

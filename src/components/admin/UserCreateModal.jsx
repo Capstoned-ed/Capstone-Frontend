@@ -33,9 +33,10 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
 
     // Client-side quick checks
     const newErrors = {};
-    if (!formData.username.trim()) newErrors.username = 'Username is required.';
+    if (!formData.username.trim()) newErrors.username = 'ID Number / Username is required.';
     if (!formData.email.trim()) newErrors.email = 'Email address is required.';
-    if (!formData.password) newErrors.password = 'Temporary password is required.';
+    const finalPassword = (formData.password || formData.username).trim();
+    if (!finalPassword) newErrors.password = 'Password is required.';
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -47,7 +48,7 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
       const payload = {
         username: formData.username.trim(),
         email: formData.email.trim(),
-        password: formData.password,
+        password: finalPassword,
         role: formData.role,
       };
 
@@ -55,7 +56,7 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
       if (formData.last_name.trim()) payload.last_name = formData.last_name.trim();
 
       const createdUser = await usersApi.create(payload);
-      toast.success(`User "${createdUser.username}" successfully provisioned.`);
+      toast.success(`User "${createdUser.username}" successfully provisioned with password: ${finalPassword}`);
       onUserCreated(createdUser);
       onClose();
     } catch (err) {
@@ -144,17 +145,17 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
             </div>
           </div>
 
-          {/* Username */}
+          {/* ID Number / Username */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Username <span className="text-rose-500">*</span>
+              ID Number / Username <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
               name="username"
               value={formData.username}
               onChange={handleChange}
-              placeholder="e.g. maria_santos"
+              placeholder="e.g. 2024-001 or EMP-1029"
               className={`w-full px-3 py-2 border rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 ${
                 errors.username
                   ? 'border-rose-400 focus:ring-rose-200'
@@ -191,14 +192,14 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
           {/* Temporary Password */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Temporary Password <span className="text-rose-500">*</span>
+              Temporary Password <span className="text-slate-400 font-normal">(Defaults to ID Number)</span>
             </label>
             <input
               type="password"
               name="password"
               value={formData.password}
               onChange={handleChange}
-              placeholder="••••••••"
+              placeholder="Leave blank to use ID Number"
               className={`w-full px-3 py-2 border rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 ${
                 errors.password
                   ? 'border-rose-400 focus:ring-rose-200'
@@ -209,7 +210,7 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
               <p className="text-xs text-rose-500 mt-1 font-medium">{errors.password}</p>
             )}
             <p className="text-[11px] text-slate-500 mt-1">
-              User will be flagged to change this password on their next login.
+              If left blank, the ID number will be used as their login password (same as student accounts).
             </p>
           </div>
 

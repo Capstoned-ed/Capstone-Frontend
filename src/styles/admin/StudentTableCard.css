@@ -7,7 +7,6 @@
   transition: all 0.2s ease-in-out;
 }
 
-/* Card Header Bar (Mint Green matching the photo) */
 .student-table-header-bar {
   background-color: #e6f8ee;
   padding: 1.125rem 1.5rem;
@@ -50,7 +49,6 @@
   font-weight: 500;
 }
 
-/* Table Presentation */
 .student-table-scroll {
   overflow-x: auto;
   width: 100%;
@@ -113,7 +111,6 @@
   white-space: nowrap;
 }
 
-/* View / Update Action Button (Solid Dark Blue matching the photo) */
 .btn-view-update {
   display: inline-flex;
   align-items: center;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import usersApi from '../../api/users';
 import useToast from '../../hooks/useToast';
+import { useAuth } from '../../hooks/useAuth';
 import { ROLES } from '../../constants/roles';
 import UserTable from '../../components/admin/UserTable';
 import StudentTableCard from '../../components/admin/StudentTableCard';
@@ -8,6 +9,7 @@ import '../../styles/admin/UserManagementPage.css';
 
 export default function UserManagementPage() {
   const toast = useToast();
+  const { user: currentAdmin } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -16,6 +18,7 @@ export default function UserManagementPage() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [addUserLoading, setAddUserLoading] = useState(false);
   const [addUserName, setAddUserName] = useState('');
+  const [addUserIdInput, setAddUserIdInput] = useState('');
   const [addUserEmail, setAddUserEmail] = useState('');
   const [addUserRole, setAddUserRole] = useState(ROLES.STAFF);
 
@@ -72,6 +75,14 @@ export default function UserManagementPage() {
 
         try {
           localStorage.setItem('regquest_users_cache', JSON.stringify(enriched));
+          const creationDates = JSON.parse(localStorage.getItem('regquest_account_creation_dates') || '{}');
+          enriched.forEach((u) => {
+            if (u.username && u.date_joined) {
+              creationDates[u.username.toLowerCase()] = u.date_joined;
+              creationDates[String(u.id)] = u.date_joined;
+            }
+          });
+          localStorage.setItem('regquest_account_creation_dates', JSON.stringify(creationDates));
         } catch {}
 
         if (!ignore) {
@@ -100,17 +111,51 @@ export default function UserManagementPage() {
     setUsers((prev) =>
       prev.map((u) => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u))
     );
+    try {
+      const activity = JSON.parse(localStorage.getItem('regquest_account_activity') || '[]');
+      const targetName = updatedUser.full_name || updatedUser.username || `User #${updatedUser.id}`;
+      activity.unshift({
+        id: `act-${Date.now()}`,
+        actor: (currentAdmin?.username || 'admin').toLowerCase(),
+        actorName: currentAdmin?.full_name || currentAdmin?.username || 'Administrator',
+        targetName,
+        targetId: updatedUser.username || String(updatedUser.id),
+        role: updatedUser.role || 'user',
+        action: 'Account Details & Role Permissions Updated',
+        timestamp: new Date().toISOString(),
+        status: updatedUser.is_active !== false ? 'Active' : 'Inactive',
+        type: 'account',
+      });
+      localStorage.setItem('regquest_account_activity', JSON.stringify(activity.slice(0, 50)));
+    } catch {}
   };
 
   const handleUserDeactivated = (userId) => {
     setUsers((prev) =>
       prev.map((u) => (u.id === userId ? { ...u, is_active: false } : u))
     );
+    try {
+      const activity = JSON.parse(localStorage.getItem('regquest_account_activity') || '[]');
+      activity.unshift({
+        id: `act-${Date.now()}`,
+        actor: (currentAdmin?.username || 'admin').toLowerCase(),
+        actorName: currentAdmin?.full_name || currentAdmin?.username || 'Administrator',
+        targetName: `Account ID #${userId}`,
+        targetId: String(userId),
+        role: 'user',
+        action: 'Account Deactivated (Status: Inactive)',
+        timestamp: new Date().toISOString(),
+        status: 'Inactive',
+        type: 'account',
+      });
+      localStorage.setItem('regquest_account_activity', JSON.stringify(activity.slice(0, 50)));
+    } catch {}
   };
 
   // Add User Handlers
   const handleAddUserReset = () => {
     setAddUserName('');
+    setAddUserIdInput('');
     setAddUserEmail('');
     setAddUserRole(ROLES.STAFF);
     setIsAddUserOpen(false);
@@ -121,6 +166,10 @@ export default function UserManagementPage() {
 
     if (!addUserName.trim()) {
       toast.error('Please enter a full name.');
+      return;
+    }
+    if (!addUserIdInput.trim()) {
+      toast.error('Please enter an ID number.');
       return;
     }
     if (!addUserEmail.trim()) {
@@ -135,16 +184,12 @@ export default function UserManagementPage() {
       const firstName = nameParts[0] || '';
       const lastName = nameParts.slice(1).join(' ') || '';
 
-      const usernameBase = addUserEmail.includes('@')
-        ? addUserEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9._-]/g, '')
-        : addUserName.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9._-]/g, '');
-
-      const username = usernameBase || `user_${Date.now()}`;
+      const finalIdNumber = addUserIdInput.trim();
 
       const payload = {
-        username,
+        username: finalIdNumber,
         email: addUserEmail.trim().toLowerCase(),
-        password: 'Password123!',
+        password: finalIdNumber,
         role: addUserRole,
         first_name: firstName,
         last_name: lastName,
@@ -155,23 +200,70 @@ export default function UserManagementPage() {
         ...res,
         first_name: firstName,
         last_name: lastName,
+        full_name: addUserName.trim(),
+        username: finalIdNumber,
+        employee_id: finalIdNumber,
+        id_number: finalIdNumber,
       };
 
       // Patch first_name and last_name via usersApi.update because UserCreateSerializer
-      // in Django drops first_name and last_name on create
+      // in Django backend only validates ['username', 'email', 'password', 'role'],
+      // whereas UserUpdateSerializer accepts ['first_name', 'last_name', 'email', 'role', 'is_active']
       if (res?.id && (firstName || lastName)) {
         try {
           const patched = await usersApi.update(res.id, {
             first_name: firstName,
             last_name: lastName,
           });
-          newUser = { ...newUser, ...patched, first_name: firstName, last_name: lastName };
+          newUser = {
+            ...newUser,
+            ...patched,
+            first_name: firstName,
+            last_name: lastName,
+            full_name: addUserName.trim(),
+          };
         } catch (patchErr) {
           console.warn('Could not patch user name:', patchErr);
         }
       }
 
-      toast.success(`User "${addUserName}" (${addUserRole}) provisioned successfully.`);
+      // Persist user in cache for instant display and login lookup
+      try {
+        const usersCache = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
+        const filtered = usersCache.filter((u) => u.id !== newUser.id && u.username !== finalIdNumber);
+        localStorage.setItem('regquest_users_cache', JSON.stringify([newUser, ...filtered]));
+      } catch (e) {
+        console.warn('Could not cache user profile:', e);
+      }
+
+      // Record creation date so new account never receives historical notifications
+      try {
+        const creationDates = JSON.parse(localStorage.getItem('regquest_account_creation_dates') || '{}');
+        const isoNow = res?.date_joined || new Date().toISOString();
+        creationDates[finalIdNumber.toLowerCase()] = isoNow;
+        if (res?.id) creationDates[String(res.id)] = isoNow;
+        localStorage.setItem('regquest_account_creation_dates', JSON.stringify(creationDates));
+      } catch {}
+
+      // Record account provisioning in activity log for Profile Overview
+      try {
+        const activity = JSON.parse(localStorage.getItem('regquest_account_activity') || '[]');
+        activity.unshift({
+          id: `act-${Date.now()}`,
+          actor: (currentAdmin?.username || 'admin').toLowerCase(),
+          actorName: currentAdmin?.full_name || currentAdmin?.username || 'Administrator',
+          targetName: addUserName.trim(),
+          targetId: finalIdNumber,
+          role: addUserRole,
+          action: `Account Provisioned (${addUserRole.toUpperCase()}) - Default Password: ID`,
+          timestamp: res?.date_joined || new Date().toISOString(),
+          status: 'Active',
+          type: 'account',
+        });
+        localStorage.setItem('regquest_account_activity', JSON.stringify(activity.slice(0, 50)));
+      } catch {}
+
+      toast.success(`User "${addUserName}" (${addUserRole}) provisioned with password: ${finalIdNumber}`);
       handleUserCreated(newUser);
       handleAddUserReset();
     } catch (err) {
@@ -285,6 +377,33 @@ export default function UserManagementPage() {
         console.warn('Could not cache student profile:', e);
       }
 
+      // Record creation date so new account never receives historical notifications
+      try {
+        const creationDates = JSON.parse(localStorage.getItem('regquest_account_creation_dates') || '{}');
+        const isoNow = res?.date_joined || new Date().toISOString();
+        creationDates[finalStudentId.toLowerCase()] = isoNow;
+        if (res?.id) creationDates[String(res.id)] = isoNow;
+        localStorage.setItem('regquest_account_creation_dates', JSON.stringify(creationDates));
+      } catch {}
+
+      // Record student provisioning in activity log for Profile Overview
+      try {
+        const activity = JSON.parse(localStorage.getItem('regquest_account_activity') || '[]');
+        activity.unshift({
+          id: `act-${Date.now()}`,
+          actor: (currentAdmin?.username || 'admin').toLowerCase(),
+          actorName: currentAdmin?.full_name || currentAdmin?.username || 'Administrator',
+          targetName: studentFullName.trim(),
+          targetId: finalStudentId,
+          role: 'student',
+          action: 'Student Account Provisioned - Default Password: ID',
+          timestamp: res?.date_joined || new Date().toISOString(),
+          status: 'Active',
+          type: 'account',
+        });
+        localStorage.setItem('regquest_account_activity', JSON.stringify(activity.slice(0, 50)));
+      } catch {}
+
       toast.success(`Student "${studentFullName}" provisioned with password: ${finalStudentId}`);
       handleUserCreated(newStudent);
       handleAddStudentReset();
@@ -394,13 +513,24 @@ export default function UserManagementPage() {
               Add New User
             </h3>
 
-            <div className="add-user-grid-3">
+            <div className="add-user-grid-4">
               <div>
                 <input
                   type="text"
                   placeholder="Full Name"
                   value={addUserName}
                   onChange={(e) => setAddUserName(e.target.value)}
+                  required
+                  className="add-user-input"
+                />
+              </div>
+
+              <div>
+                <input
+                  type="text"
+                  placeholder="ID Number"
+                  value={addUserIdInput}
+                  onChange={(e) => setAddUserIdInput(e.target.value)}
                   required
                   className="add-user-input"
                 />
@@ -429,6 +559,10 @@ export default function UserManagementPage() {
                 </select>
               </div>
             </div>
+
+            <p className="add-user-hint">
+              * The user's ID number will be used as their username and default login password.
+            </p>
 
             <div className="add-user-actions">
               <button

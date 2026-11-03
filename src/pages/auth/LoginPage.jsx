@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LoginForm from '../../components/auth/LoginForm';
 import { useAuth } from '../../hooks/useAuth';
@@ -8,17 +8,27 @@ import '../../styles/auth/LoginPage.css';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { isAuthenticated, force_password_change, logout } = useAuth();
-  const [showForcePasswordModal, setShowForcePasswordModal] = useState(false);
+  const { user, isAuthenticated } = useAuth();
+
+  // If already authenticated, redirect directly to role dashboard
+  useEffect(() => {
+    if (isAuthenticated && user?.role) {
+      const userRole = user.role;
+      if (userRole === ROLES.STUDENT) {
+        navigate(ROUTES.STUDENT.DASHBOARD, { replace: true });
+      } else if (userRole === ROLES.ADMIN) {
+        navigate(ROUTES.ADMIN.DASHBOARD, { replace: true });
+      } else if (userRole === ROLES.STAFF || userRole === ROLES.REGISTRAR) {
+        navigate(ROUTES.STAFF.DASHBOARD, { replace: true });
+      } else {
+        navigate('/', { replace: true });
+      }
+    }
+  }, [isAuthenticated, user, navigate]);
 
   const handleLoginSuccess = (loggedInUser) => {
-    if (loggedInUser.force_password_change) {
-      setShowForcePasswordModal(true);
-      return;
-    }
-
-    // Role-based redirection
-    const userRole = loggedInUser.role;
+    // Role-based redirection directly without blocking
+    const userRole = loggedInUser?.role;
     if (userRole === ROLES.STUDENT) {
       navigate(ROUTES.STUDENT.DASHBOARD);
     } else if (userRole === ROLES.ADMIN) {
@@ -30,9 +40,6 @@ export default function LoginPage() {
       navigate('/');
     }
   };
-
-  // If already authenticated and force_password_change is active
-  const isBlockedByPasswordChange = isAuthenticated && (force_password_change || showForcePasswordModal);
 
   return (
     <div className="login-viewport">
@@ -58,41 +65,6 @@ export default function LoginPage() {
           <LoginForm onSuccess={handleLoginSuccess} />
         </div>
       </div>
-
-      {/* Force Password Change Non-Dismissible Intercept Modal (Per Sprint 3 / Sec 5.2) */}
-      {isBlockedByPasswordChange && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl border border-amber-200 text-center">
-            <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-600 mx-auto flex items-center justify-center text-2xl font-bold mb-4 shadow-inner">
-              🔑
-            </div>
-            <h3 className="text-xl font-bold text-slate-900 mb-2">
-              Password Change Required
-            </h3>
-            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed mb-4">
-              Your institutional account has been flagged for a mandatory password update. Before you can access role-specific workflows, you must change your temporary password.
-            </p>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 text-left mb-6">
-              <span className="font-semibold block mb-1">Notice:</span>
-              The self-service password change API endpoint is scheduled in <strong>Chunk 12.1</strong>. Please contact your System Administrator to perform a password update, or log out to switch accounts.
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                type="button"
-                onClick={async () => {
-                  setShowForcePasswordModal(false);
-                  await logout();
-                  navigate(ROUTES.LOGIN);
-                }}
-                className="w-full py-2.5 px-4 rounded-lg bg-slate-800 text-white text-xs sm:text-sm font-semibold hover:bg-slate-900 transition-colors"
-              >
-                Log Out
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

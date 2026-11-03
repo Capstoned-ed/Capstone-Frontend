@@ -1,4 +1,3 @@
-/* Main Dashboard Page Container */
 .admin-dashboard-wrapper {
   width: 100%;
   min-height: 100vh;
@@ -134,7 +133,6 @@
   }
 }
 
-/* Dashboard Section Headers */
 .admin-section {
   display: flex;
   flex-direction: column;
@@ -161,7 +159,6 @@
   font-weight: 400;
 }
 
-/* 2-Column Grid for Reports */
 .admin-reports-grid {
   display: grid;
   grid-template-columns: 1fr;

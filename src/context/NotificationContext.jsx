@@ -3,6 +3,9 @@ import notificationsApi, {
   getStoredNotifications,
   markStoredNotificationRead,
   markAllStoredNotificationsRead,
+  notifyRealtimeUpdate,
+  purgeHallucinatedNotifications,
+  isNotificationForUser,
 } from '../api/notifications';
 import { useAuth } from '../hooks/useAuth';
 
@@ -16,7 +19,7 @@ export function NotificationProvider({ children }) {
 
   const fetchNotifications = useCallback(
     async (quiet = false) => {
-      if (!isAuthenticated) {
+      if (!isAuthenticated || !user) {
         setNotifications([]);
         return;
       }
@@ -24,45 +27,54 @@ export function NotificationProvider({ children }) {
       if (!quiet) setLoading(true);
       setError(null);
       try {
+        // Clean up any stale hallucinated mock notifications
+        purgeHallucinatedNotifications();
+
+        // 1. Fetch genuine database notifications from Django Backend
         const backendData = await notificationsApi.list();
+        // 2. Fetch any real locally-saved actions strictly targeted to this user
         const localData = getStoredNotifications(user);
 
-        // Merge and deduplicate
-        const seenKeys = new Set();
+        const seenIds = new Set();
         const combined = [];
 
-        // 1. Add Backend notifications
+        // 1. Backend notifications are primary source of truth (strictly verified for user role)
         if (Array.isArray(backendData)) {
           backendData.forEach((item) => {
-            if (item && item.id) {
-              const key = `backend_${item.id}`;
-              seenKeys.add(key);
-              combined.push(item);
+            if (item && item.id && isNotificationForUser(item, user)) {
+              const idStr = String(item.id);
+              seenIds.add(idStr);
+              combined.push({
+                ...item,
+                id: item.id,
+                is_read: Boolean(item.is_read),
+              });
             }
           });
         }
 
-        // 2. Add Stored/Local notifications
+        // 2. Add legitimate local notifications (strictly verified for user role)
         localData.forEach((item) => {
-          if (!item) return;
-          const key = `local_${item.id}`;
-          if (!seenKeys.has(key)) {
-            // Check if identical message already exists from backend
-            const isDuplicate = combined.some(
-              (c) =>
-                c.event_type === item.event_type &&
-                String(c.related_object_id) === String(item.related_object_id) &&
-                c.message === item.message
-            );
-            if (!isDuplicate) {
-              seenKeys.add(key);
-              combined.push(item);
-            }
+          if (!item || !item.id || !isNotificationForUser(item, user)) return;
+          const idStr = String(item.id);
+          if (seenIds.has(idStr)) return;
+
+          // Check if identical event/message exists from backend
+          const isDuplicate = combined.some(
+            (c) =>
+              c.event_type === item.event_type &&
+              String(c.related_object_id || '') === String(item.related_object_id || '') &&
+              c.message === item.message
+          );
+
+          if (!isDuplicate) {
+            seenIds.add(idStr);
+            combined.push(item);
           }
         });
 
-        // 3. Sort chronologically (most recent first)
-        combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        // 3. Sort chronologically (newest first)
+        combined.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
         setNotifications(combined);
       } catch (err) {
@@ -75,38 +87,77 @@ export function NotificationProvider({ children }) {
     [isAuthenticated, user]
   );
 
-  // Initial load and auth change
+  // Initial load and on user authentication change
   useEffect(() => {
     if (isAuthenticated) {
       fetchNotifications();
     } else {
       setNotifications([]);
     }
-  }, [isAuthenticated, user?.id, user?.username, fetchNotifications]);
+  }, [isAuthenticated, user?.id, user?.username, user?.role, fetchNotifications]);
 
-  // Periodic polling every 30s + sync on custom app events
+  // Real-time synchronization: fast polling (4s) + cross-tab BroadcastChannel + window events
   useEffect(() => {
     if (!isAuthenticated) return;
 
+    // Fast polling every 4 seconds when active tab is visible
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         fetchNotifications(true);
       }
-    }, 30000);
+    }, 4000);
 
     const handleSync = () => {
       fetchNotifications(true);
     };
 
+    // Cross-tab broadcast listener for sub-second sync across multiple windows/tabs
+    let channel = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        channel = new BroadcastChannel('regquest_realtime_notifications');
+        channel.onmessage = () => {
+          fetchNotifications(true);
+        };
+      }
+    } catch (e) {
+      console.warn('BroadcastChannel error:', e);
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchNotifications(true);
+      }
+    };
+
+    const handleStorageChange = (e) => {
+      if (
+        e.key === 'regquest_stored_notifications' ||
+        e.key === 'regquest_submitted_requests' ||
+        e.key?.startsWith('regquest_read_notifs_')
+      ) {
+        fetchNotifications(true);
+      }
+    };
+
     window.addEventListener('regquest_requests_updated', handleSync);
     window.addEventListener('regquest_notification_created', handleSync);
+    window.addEventListener('regquest_status_updated', handleSync);
     window.addEventListener('focus', handleSync);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('storage', handleStorageChange);
 
     return () => {
       clearInterval(interval);
+      if (channel) {
+        channel.close();
+      }
       window.removeEventListener('regquest_requests_updated', handleSync);
       window.removeEventListener('regquest_notification_created', handleSync);
+      window.removeEventListener('regquest_status_updated', handleSync);
       window.removeEventListener('focus', handleSync);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, [isAuthenticated, fetchNotifications]);
 
@@ -122,14 +173,17 @@ export function NotificationProvider({ children }) {
     // Mark in local store
     markStoredNotificationRead(id, user);
 
-    // If backend ID, sync with backend
+    // Sync with backend (supports both UUIDs and numeric IDs)
     try {
-      if (typeof id === 'number' || (!isNaN(id) && !String(id).startsWith('notif_'))) {
+      const idStr = String(id);
+      if (!idStr.startsWith('notif_') && !idStr.startsWith('local_')) {
         await notificationsApi.markRead(id);
       }
     } catch (err) {
       console.warn(`Failed to mark notification #${id} as read on server:`, err);
     }
+
+    notifyRealtimeUpdate({ reason: 'marked_read', id });
   };
 
   // Mark all notifications as read
@@ -146,6 +200,8 @@ export function NotificationProvider({ children }) {
     } catch (err) {
       console.warn('Failed to mark all notifications as read on server:', err);
     }
+
+    notifyRealtimeUpdate({ reason: 'marked_all_read' });
   };
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
