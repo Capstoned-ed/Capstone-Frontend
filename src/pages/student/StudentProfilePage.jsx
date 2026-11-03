@@ -280,14 +280,11 @@ export default function StudentProfilePage() {
             </div>
           )}
 
-          {/* Tab 2: My Information (Email, Mobile Number, Year Level Editable) */}
+          {/* Tab 2: My Information */}
           {activeTab === 'information' && (
             <div className="mt-7">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-bold text-[#000080]">My Information</h3>
-                <span className="text-xs text-slate-500 font-medium">
-                  Editable: Email, Mobile Number, Year Level
-                </span>
               </div>
 
               <form
@@ -297,16 +294,11 @@ export default function StudentProfilePage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
                   {/* Left Column */}
                   <div className="space-y-4">
-                    {/* Full Name (Read-only) */}
+                    {/* Full Name */}
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-sm font-semibold text-slate-800">
-                          Full Name
-                        </label>
-                        <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                          Read-only
-                        </span>
-                      </div>
+                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                        Full Name
+                      </label>
                       <input
                         type="text"
                         readOnly
@@ -315,16 +307,11 @@ export default function StudentProfilePage() {
                       />
                     </div>
 
-                    {/* Email (Editable) */}
+                    {/* Email */}
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-sm font-semibold text-slate-800">
-                          Email
-                        </label>
-                        <span className="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                          Editable
-                        </span>
-                      </div>
+                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                        Email
+                      </label>
                       <input
                         type="email"
                         value={editableEmail}
@@ -335,16 +322,11 @@ export default function StudentProfilePage() {
                       />
                     </div>
 
-                    {/* Academic Program (Read-only) */}
+                    {/* Academic Program */}
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-sm font-semibold text-slate-800">
-                          Academic Program
-                        </label>
-                        <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                          Read-only
-                        </span>
-                      </div>
+                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                        Academic Program
+                      </label>
                       <input
                         type="text"
                         readOnly
@@ -356,16 +338,11 @@ export default function StudentProfilePage() {
 
                   {/* Right Column */}
                   <div className="space-y-4">
-                    {/* Student ID (Read-only) */}
+                    {/* Student ID */}
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-sm font-semibold text-slate-800">
-                          Student ID
-                        </label>
-                        <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                          Read-only
-                        </span>
-                      </div>
+                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                        Student ID
+                      </label>
                       <input
                         type="text"
                         readOnly
@@ -374,16 +351,11 @@ export default function StudentProfilePage() {
                       />
                     </div>
 
-                    {/* Mobile Number (Editable) */}
+                    {/* Mobile Number */}
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-sm font-semibold text-slate-800">
-                          Mobile Number
-                        </label>
-                        <span className="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                          Editable
-                        </span>
-                      </div>
+                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                        Mobile Number
+                      </label>
                       <input
                         type="tel"
                         value={editableMobile}
@@ -393,16 +365,11 @@ export default function StudentProfilePage() {
                       />
                     </div>
 
-                    {/* Year Level (Editable) */}
+                    {/* Year Level */}
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-sm font-semibold text-slate-800">
-                          Year Level
-                        </label>
-                        <span className="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                          Editable
-                        </span>
-                      </div>
+                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                        Year Level
+                      </label>
                       <select
                         value={editableYearLevel}
                         onChange={(e) => setEditableYearLevel(e.target.value)}

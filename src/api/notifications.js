@@ -2,10 +2,329 @@ import apiClient from './client';
 
 export const NOTIFICATIONS_STORAGE_KEY = 'regquest_stored_notifications';
 
+// Cross-tab broadcast channel for instant real-time notification sync
+let broadcastChannel = null;
+if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+  try {
+    broadcastChannel = new BroadcastChannel('regquest_realtime_notifications');
+  } catch (err) {
+    console.warn('BroadcastChannel error:', err);
+  }
+}
+
+export function notifyRealtimeUpdate(payload = {}) {
+  try {
+    if (broadcastChannel) {
+      broadcastChannel.postMessage({ type: 'REFRESH_NOTIFICATIONS', timestamp: Date.now(), ...payload });
+    }
+  } catch {
+    // Ignore broadcast errors
+  }
+}
+
 function getUserNamespace(user) {
   if (!user) return 'guest';
   return (user.username || user.role || String(user.id || 'anon')).toLowerCase();
 }
+
+/**
+ * Check if a notification is a legacy hardcoded seed or hallucinated synthetic item.
+ */
+export function isHallucinatedNotification(item) {
+  if (!item) return true;
+  const id = String(item.id || '');
+  if (
+    id.startsWith('staff_act_') ||
+    id.startsWith('admin_act_') ||
+    id.startsWith('student_act_') ||
+    id.startsWith('dyn_student_') ||
+    id.startsWith('dyn_staff_') ||
+    id.startsWith('dyn_admin_')
+  ) {
+    return true;
+  }
+  const msg = String(item.message || '');
+  if (
+    msg.includes('Love (2023-1029)') ||
+    msg.includes('RQ-829104') ||
+    msg.includes('CLR-2026-002') ||
+    msg.includes('RQ-092144') ||
+    msg.includes('Institutional Volume: 3 new') ||
+    msg.includes('Student profile synchronization completed') ||
+    msg.includes('Security Audit: Registrar staff delegation') ||
+    msg.includes('CLR-2026-001') ||
+    /Student\s*#?\s*[1-4]\b/i.test(msg)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function getUserAccountCreationTime(user) {
+  if (!user) return null;
+  const username = String(user.username || user.student_id || user.id || '').toLowerCase();
+  if (!username) return null;
+
+  // 1. Direct property on user object
+  if (user.date_joined) return new Date(user.date_joined).getTime();
+  if (user.created_at) return new Date(user.created_at).getTime();
+
+  // 2. Check dedicated creation dates map
+  try {
+    const creationDates = JSON.parse(localStorage.getItem('regquest_account_creation_dates') || '{}');
+    if (creationDates[username]) {
+      return new Date(creationDates[username]).getTime();
+    }
+    if (user.id && creationDates[String(user.id)]) {
+      return new Date(creationDates[String(user.id)]).getTime();
+    }
+  } catch {}
+
+  // 3. Check cached users from database
+  try {
+    const cachedUsers = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
+    const match = cachedUsers.find(
+      (u) =>
+        (u.username && u.username.toLowerCase() === username) ||
+        (u.id && String(u.id) === String(user.id)) ||
+        (u.id_number && u.id_number.toLowerCase() === username)
+    );
+    if (match?.date_joined) {
+      const time = new Date(match.date_joined).getTime();
+      try {
+        const creationDates = JSON.parse(localStorage.getItem('regquest_account_creation_dates') || '{}');
+        creationDates[username] = match.date_joined;
+        localStorage.setItem('regquest_account_creation_dates', JSON.stringify(creationDates));
+      } catch {}
+      return time;
+    }
+    if (match?.created_at) return new Date(match.created_at).getTime();
+  } catch {}
+
+  // 4. Check student profiles
+  try {
+    const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+    const p = profiles[username] || (user.id && profiles[user.id]);
+    if (p?.created_at) return new Date(p.created_at).getTime();
+  } catch {}
+
+  // 5. Default/First Session Fallback:
+  // If an account has no recorded creation time, register its appearance as NOW so that
+  // any previous notifications created before this account was born are strictly excluded.
+  try {
+    const nowIso = new Date().toISOString();
+    const creationDates = JSON.parse(localStorage.getItem('regquest_account_creation_dates') || '{}');
+    creationDates[username] = nowIso;
+    if (user.id) creationDates[String(user.id)] = nowIso;
+    localStorage.setItem('regquest_account_creation_dates', JSON.stringify(creationDates));
+    return new Date(nowIso).getTime();
+  } catch {}
+
+  return null;
+}
+
+/**
+ * Determines whether a notification is strictly meant for the currently logged-in user.
+ * Enforces strict role isolation and timeline bounds:
+ * - A user can NEVER see notifications from before their account was created.
+ * - Student personal notifications (e.g. "Your request...", "Your credential request...")
+ *   can NEVER be seen by Admin or Staff.
+ * - Admin/Staff operational alerts (e.g. "Incoming Request:", "New credential request submitted by...",
+ *   "System Audit:", "Processing Queue:") can NEVER be seen by Students.
+ * - Notifications with a specific student identity can only be seen by that specific student.
+ */
+export function isNotificationForUser(notification, user) {
+  if (!notification || !user) return false;
+
+  // RULE 0: A user cannot see notifications created BEFORE their account was created!
+  const accountCreatedTime = getUserAccountCreationTime(user);
+  if (accountCreatedTime && notification.created_at) {
+    const notifTime = new Date(notification.created_at).getTime();
+    // Allow a 1-minute buffer for clock tolerance when account provisioning and initial alert are dispatched
+    if (notifTime < accountCreatedTime - 60000) {
+      return false;
+    }
+  }
+
+  const role = (user.role || '').toLowerCase();
+  const currentUsername = (user.username || '').toLowerCase();
+  const currentStudentId = (user.student_id || user.studentId || '').toLowerCase();
+  const currentUserId = user.id ? String(user.id) : user.userId ? String(user.userId) : null;
+
+  const targetRole = (notification.target_role || '').toLowerCase();
+  const targetRoles = Array.isArray(notification.target_roles)
+    ? notification.target_roles.map((r) => String(r).toLowerCase())
+    : [];
+
+  const msg = String(notification.message || '').trim();
+
+  // Personal student request / clearance / payment status feedback
+  const isPersonalRequestMsg =
+    msg.startsWith('Your credential request') ||
+    msg.startsWith('Your request') ||
+    msg.startsWith('Your student clearance') ||
+    msg.startsWith('Your academic clearance') ||
+    msg.startsWith('Your OTC payment') ||
+    msg.startsWith('Your payment') ||
+    msg.startsWith('Status update: Your request');
+
+  // Operational / audit notifications for admin & staff
+  const isOperationalMsg =
+    msg.startsWith('Incoming Request:') ||
+    msg.startsWith('New credential request') ||
+    msg.startsWith('Clearance Submitted:') ||
+    msg.startsWith('Clearance Verification:') ||
+    msg.startsWith('Payment Submitted:') ||
+    msg.startsWith('Processing Queue:') ||
+    msg.startsWith('Production Queue:') ||
+    msg.startsWith('Release Queue:') ||
+    msg.startsWith('Document Release:') ||
+    msg.startsWith('System Audit:') ||
+    msg.startsWith('Workflow Audit:') ||
+    msg.startsWith('Institutional Volume:') ||
+    msg.startsWith('Security Audit:') ||
+    msg.startsWith('Request ');
+
+  // -------------------------------------------------------------
+  // RULE 1: CURRENT USER IS STUDENT
+  // -------------------------------------------------------------
+  if (role === 'student') {
+    // Under no circumstances can a student see staff or admin operational logs
+    if (isOperationalMsg) return false;
+    if (targetRole === 'staff' || targetRole === 'admin' || targetRole === 'registrar') return false;
+    if (targetRoles.length > 0 && !targetRoles.includes('student')) return false;
+
+    // Check if notification is targeted to a specific student
+    const hasTargetSpecifier = Boolean(
+      notification.target_user_id ||
+      notification.target_student_id ||
+      notification.target_username ||
+      notification.related_object_id
+    );
+
+    if (hasTargetSpecifier) {
+      const matchUserId = Boolean(
+        notification.target_user_id && currentUserId && String(notification.target_user_id) === currentUserId
+      );
+
+      const matchStudentId = Boolean(
+        notification.target_student_id && (
+          (currentStudentId && String(notification.target_student_id).toLowerCase() === currentStudentId) ||
+          (currentUsername && String(notification.target_student_id).toLowerCase() === currentUsername)
+        )
+      );
+
+      const userFullName = (user.full_name || user.fullName || `${user.first_name || ''} ${user.last_name || ''}`).trim().toLowerCase();
+      const matchUsername = Boolean(
+        notification.target_username && (
+          (currentUsername && String(notification.target_username).toLowerCase() === currentUsername) ||
+          (currentStudentId && String(notification.target_username).toLowerCase() === currentStudentId) ||
+          (userFullName && String(notification.target_username).toLowerCase() === userFullName) ||
+          (user.first_name && String(notification.target_username).toLowerCase().includes(String(user.first_name).toLowerCase()))
+        )
+      );
+
+      // Check if related request belongs to this student
+      let matchRequestOwnership = false;
+      if (notification.related_object_id) {
+        try {
+          const reqs = JSON.parse(localStorage.getItem('regquest_submitted_requests') || '[]');
+          const req = reqs.find((r) =>
+            String(r.tracking_number) === String(notification.related_object_id) ||
+            String(r.id) === String(notification.related_object_id) ||
+            String(r.trackingId) === String(notification.related_object_id)
+          );
+          if (req) {
+            matchRequestOwnership = Boolean(
+              (currentUserId && String(req.user) === currentUserId) ||
+              (currentStudentId && String(req.student_id).toLowerCase() === currentStudentId) ||
+              (currentUsername && (String(req.student_id).toLowerCase() === currentUsername || String(req.student_name).toLowerCase() === currentUsername)) ||
+              (userFullName && String(req.student_name).toLowerCase() === userFullName)
+            );
+          }
+        } catch {}
+      }
+
+      // If any of the identity / ownership attributes match, allow this notification!
+      if (matchUserId || matchStudentId || matchUsername || matchRequestOwnership) {
+        return true;
+      }
+
+      // If target fields were explicitly provided but NONE matched this student, reject
+      if (notification.target_user_id || notification.target_student_id || notification.target_username) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  // -------------------------------------------------------------
+  // RULE 2: CURRENT USER IS STAFF OR REGISTRAR
+  // -------------------------------------------------------------
+  if (role === 'staff' || role === 'registrar') {
+    // Staff/Registrar should never see personal student request messages
+    if (isPersonalRequestMsg) return false;
+    if (targetRole === 'student') return false;
+    if (targetRoles.length > 0 && !targetRoles.some((r) => r === 'staff' || r === 'registrar')) return false;
+
+    // Direct targeting check if notification was explicitly addressed to a particular staff/user
+    if (notification.target_username && currentUsername && notification.target_username.toLowerCase() !== currentUsername) {
+      return false;
+    }
+    if (notification.target_user_id && currentUserId && String(notification.target_user_id) !== currentUserId) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // -------------------------------------------------------------
+  // RULE 3: CURRENT USER IS ADMIN
+  // -------------------------------------------------------------
+  if (role === 'admin') {
+    // Admin should never see personal student request messages
+    if (isPersonalRequestMsg) return false;
+    if (targetRole === 'student') return false;
+    if (targetRoles.length > 0 && !targetRoles.includes('admin')) return false;
+
+    // Direct targeting check if notification was explicitly addressed to a specific admin
+    if (notification.target_username && currentUsername && notification.target_username.toLowerCase() !== currentUsername) {
+      return false;
+    }
+    if (notification.target_user_id && currentUserId && String(notification.target_user_id) !== currentUserId) {
+      return false;
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Permanently purge any legacy seed or hallucinated dummy notifications from localStorage.
+ */
+export function purgeHallucinatedNotifications() {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter((item) => !isHallucinatedNotification(item));
+        if (cleaned.length !== parsed.length) {
+          localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(cleaned));
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to purge hallucinated notifications:', e);
+  }
+}
+
+// Run purge on module load
+purgeHallucinatedNotifications();
 
 /**
  * Retrieve the set of notification IDs that the user has marked as read locally.
@@ -49,269 +368,25 @@ export function markAllNotificationIdsAsRead(ids = [], user = null) {
 }
 
 /**
- * Initial curated activity notifications tailored specifically by role
- */
-const SEED_NOTIFICATIONS_BY_ROLE = {
-  staff: [
-    {
-      id: 'staff_act_1',
-      event_type: 'REQUEST_CREATED',
-      message: 'Incoming Request: Love (2023-1029) submitted a request for Transcript of Records (RQ-829104).',
-      related_object_type: 'CredentialRequest',
-      related_object_id: 'RQ-829104',
-      created_at: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
-      target_role: 'staff',
-    },
-    {
-      id: 'staff_act_2',
-      event_type: 'CLEARANCE_SUBMITTED',
-      message: 'Clearance Verification: Student 2023301564 uploaded academic clearance for evaluation.',
-      related_object_type: 'StudentClearance',
-      related_object_id: 'CLR-2026-002',
-      created_at: new Date(Date.now() - 95 * 60 * 1000).toISOString(),
-      target_role: 'staff',
-    },
-    {
-      id: 'staff_act_3',
-      event_type: 'REQUEST_STATUS_CHANGED',
-      message: 'Release Queue: Document for Request RQ-092144 is verified and ready for student window release.',
-      related_object_type: 'CredentialRequest',
-      related_object_id: 'RQ-092144',
-      created_at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
-      target_role: 'staff',
-    },
-  ],
-  admin: [
-    {
-      id: 'admin_act_1',
-      event_type: 'REQUEST_CREATED',
-      message: 'Institutional Volume: 3 new credential requests logged across engineering and computing programs.',
-      related_object_type: 'CredentialRequest',
-      related_object_id: '',
-      created_at: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-      target_role: 'admin',
-    },
-    {
-      id: 'admin_act_2',
-      event_type: 'REQUEST_STATUS_CHANGED',
-      message: 'Workflow Audit: Request RQ-829104 was received and placed in the Registrar processing queue.',
-      related_object_type: 'CredentialRequest',
-      related_object_id: 'RQ-829104',
-      created_at: new Date(Date.now() - 70 * 60 * 1000).toISOString(),
-      target_role: 'admin',
-    },
-    {
-      id: 'admin_act_3',
-      event_type: 'ACCOUNT_CREATED',
-      message: 'User Management: Student profile synchronization completed for academic term 2025-2026.',
-      related_object_type: 'User',
-      related_object_id: '',
-      created_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
-      target_role: 'admin',
-    },
-    {
-      id: 'admin_act_4',
-      event_type: 'PASSWORD_RESET',
-      message: 'Security Audit: Registrar staff delegation and authorization policies verified.',
-      related_object_type: 'System',
-      related_object_id: '',
-      created_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-      target_role: 'admin',
-    },
-  ],
-  student: [
-    {
-      id: 'student_act_1',
-      event_type: 'REQUEST_CREATED',
-      message: 'Your credential request (RQ-829104) for Transcript of Records has been successfully submitted.',
-      related_object_type: 'CredentialRequest',
-      related_object_id: 'RQ-829104',
-      created_at: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
-      target_role: 'student',
-    },
-    {
-      id: 'student_act_2',
-      event_type: 'CLEARANCE_APPROVED',
-      message: 'Your academic clearance for the semester has been reviewed and approved by the Registrar.',
-      related_object_type: 'StudentClearance',
-      related_object_id: 'CLR-2026-001',
-      created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      target_role: 'student',
-    },
-  ],
-};
-
-/**
- * Retrieve notifications stored locally and dynamically derived from submitted requests,
- * strictly differentiated based on the user's role and specific system activities.
+ * Retrieve genuinely saved local notifications strictly matching the authenticated user.
+ * Strictly enforces isNotificationForUser so student items never leak to staff/admin,
+ * and staff/admin items never leak to students.
  */
 export function getStoredNotifications(user = null) {
   try {
-    const role = (user?.role || '').toLowerCase();
-    const currentUsername = (user?.username || '').toLowerCase();
-    const currentStudentId = (user?.student_id || user?.studentId || '').toLowerCase();
-    const currentUserId = user?.id || user?.userId || null;
+    purgeHallucinatedNotifications();
 
-    // Load any explicitly saved notifications
+    if (!user) return [];
+
     const rawSaved = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
     const savedNotifications = rawSaved ? JSON.parse(rawSaved) : [];
 
-    // Combine with role-specific seed activity
-    const roleSeed = SEED_NOTIFICATIONS_BY_ROLE[role] || (role === 'registrar' ? SEED_NOTIFICATIONS_BY_ROLE.staff : []);
-    const all = [...savedNotifications, ...roleSeed];
-
-    // Dynamically derive activity notifications from existing submitted requests
-    try {
-      const storedReqsRaw = localStorage.getItem('regquest_submitted_requests');
-      const studentReqsRaw = localStorage.getItem('student_my_requests');
-      const combinedReqs = [
-        ...(storedReqsRaw ? JSON.parse(storedReqsRaw) : []),
-        ...(studentReqsRaw ? JSON.parse(studentReqsRaw) : []),
-      ];
-
-      const seenTracking = new Set();
-
-      combinedReqs.forEach((req) => {
-        if (!req) return;
-        const tracking = req.tracking_number || req.trackingId || req.id;
-        if (!tracking || seenTracking.has(tracking)) return;
-        seenTracking.add(tracking);
-
-        const docTitle = req.document_type || req.credential_type_details?.name || 'Document';
-        const studentName = req.student_name || 'Student';
-        const studentNum = req.student_id || '';
-        const status = req.status || 'Pending';
-        const createdAt = req.created_at || new Date().toISOString();
-
-        // 1. STUDENT VIEW: Only their own requests & personal status updates
-        if (role === 'student') {
-          const reqStudentName = (req.student_name || '').toLowerCase();
-          const reqStudentId = (req.student_id || '').toLowerCase();
-          const matchesStudent =
-            !currentUsername ||
-            reqStudentName.includes(currentUsername) ||
-            currentUsername.includes(reqStudentName) ||
-            (currentStudentId && reqStudentId === currentStudentId) ||
-            (currentUserId && req.user && String(req.user) === String(currentUserId));
-
-          if (matchesStudent) {
-            all.push({
-              id: `dyn_student_created_${tracking}`,
-              event_type: 'REQUEST_CREATED',
-              message: `Your credential request (${tracking}) for ${docTitle} has been submitted. Status: ${status}.`,
-              related_object_type: 'CredentialRequest',
-              related_object_id: tracking,
-              created_at: createdAt,
-              target_role: 'student',
-            });
-
-            if (status.toLowerCase() !== 'pending') {
-              all.push({
-                id: `dyn_student_status_${tracking}_${status}`,
-                event_type: 'REQUEST_STATUS_CHANGED',
-                message: `Status update: Your request (${tracking}) has moved to ${status}.`,
-                related_object_type: 'CredentialRequest',
-                related_object_id: tracking,
-                created_at: req.updated_at || createdAt,
-                target_role: 'student',
-              });
-            }
-          }
-        }
-
-        // 2. STAFF VIEW: Operational processing queue, clearances, releases
-        else if (role === 'staff' || role === 'registrar') {
-          all.push({
-            id: `dyn_staff_incoming_${tracking}`,
-            event_type: 'REQUEST_CREATED',
-            message: `Incoming Request: ${studentName} (${studentNum || 'Student'}) requested ${docTitle} (${tracking}).`,
-            related_object_type: 'CredentialRequest',
-            related_object_id: tracking,
-            created_at: createdAt,
-            target_role: 'staff',
-          });
-
-          if (status.toLowerCase() === 'processing') {
-            all.push({
-              id: `dyn_staff_processing_${tracking}`,
-              event_type: 'REQUEST_STATUS_CHANGED',
-              message: `Production Queue: Request ${tracking} for ${studentName} is in active processing.`,
-              related_object_type: 'CredentialRequest',
-              related_object_id: tracking,
-              created_at: req.updated_at || createdAt,
-              target_role: 'staff',
-            });
-          } else if (status.toLowerCase().includes('release')) {
-            all.push({
-              id: `dyn_staff_release_${tracking}`,
-              event_type: 'REQUEST_STATUS_CHANGED',
-              message: `Document Release: ${docTitle} for ${studentName} (${tracking}) is ready for claim window release.`,
-              related_object_type: 'CredentialRequest',
-              related_object_id: tracking,
-              created_at: req.updated_at || createdAt,
-              target_role: 'staff',
-            });
-          }
-        }
-
-        // 3. ADMIN VIEW: Institutional volume, workflow audits, system management
-        else if (role === 'admin') {
-          all.push({
-            id: `dyn_admin_audit_${tracking}`,
-            event_type: 'REQUEST_CREATED',
-            message: `System Audit: New document request (${tracking}) logged for ${studentName} (${docTitle}).`,
-            related_object_type: 'CredentialRequest',
-            related_object_id: tracking,
-            created_at: createdAt,
-            target_role: 'admin',
-          });
-
-          if (status.toLowerCase() !== 'pending') {
-            all.push({
-              id: `dyn_admin_transition_${tracking}_${status}`,
-              event_type: 'REQUEST_STATUS_CHANGED',
-              message: `Workflow Audit: Request ${tracking} (${studentName}) transitioned to ${status}.`,
-              related_object_type: 'CredentialRequest',
-              related_object_id: tracking,
-              created_at: req.updated_at || createdAt,
-              target_role: 'admin',
-            });
-          }
-        }
-      });
-    } catch (e) {
-      console.warn('Dynamic activity notifications sync warning:', e);
-    }
-
-    // Role-specific filtering of stored notifications
     const readIds = getReadNotificationIds(user);
 
-    const filtered = all.filter((n) => {
-      if (!n) return false;
-
-      // Student: Only student-targeted items
-      if (role === 'student') {
-        if (n.target_role === 'staff' || n.target_role === 'admin') return false;
-        if (n.target_roles && !n.target_roles.includes('student')) return false;
-        if (n.target_username && currentUsername && n.target_username.toLowerCase() !== currentUsername) return false;
-        return true;
-      }
-
-      // Staff / Registrar: Only staff-targeted items
-      if (role === 'staff' || role === 'registrar') {
-        if (n.target_role === 'student' || n.target_role === 'admin') return false;
-        if (n.target_roles && !n.target_roles.some((r) => r === 'staff' || r === 'registrar')) return false;
-        return true;
-      }
-
-      // Admin: Only admin-targeted items
-      if (role === 'admin') {
-        if (n.target_role === 'student' || n.target_role === 'staff') return false;
-        if (n.target_roles && !n.target_roles.includes('admin')) return false;
-        return true;
-      }
-
-      return true;
+    // Strictly filter notifications relevant to this specific user
+    const filtered = savedNotifications.filter((n) => {
+      if (!n || isHallucinatedNotification(n)) return false;
+      return isNotificationForUser(n, user);
     });
 
     // Deduplicate by unique notification ID
@@ -333,15 +408,50 @@ export function getStoredNotifications(user = null) {
 }
 
 /**
- * Save a new notification into local storage and notify active listeners.
+ * Save a genuine real-time notification into local storage and notify active listeners.
+ * Explicitly infers and sets target_role and target_roles to prevent cross-role leaks.
  */
 export function saveStoredNotification(notification) {
+  if (!notification || !notification.message) return null;
+  if (isHallucinatedNotification(notification)) return null;
+
   try {
     const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
     const existing = raw ? JSON.parse(raw) : [];
+
+    const msg = String(notification.message || '').trim();
+    const isPersonal =
+      msg.startsWith('Your credential request') ||
+      msg.startsWith('Your request') ||
+      msg.startsWith('Your student clearance') ||
+      msg.startsWith('Your academic clearance') ||
+      msg.startsWith('Your OTC payment') ||
+      msg.startsWith('Your payment') ||
+      msg.startsWith('Status update: Your request');
+
+    const inferredTargetRole = notification.target_role || (isPersonal ? 'student' : 'staff');
+    const inferredTargetRoles =
+      notification.target_roles ||
+      (isPersonal ? ['student'] : ['admin', 'staff', 'registrar']);
+
+    // Deduplicate: prevent saving identical event + related object + message within recent timeframe
+    const now = Date.now();
+    const isDuplicate = existing.some((item) => {
+      const sameType = item.event_type === notification.event_type;
+      const sameObj = String(item.related_object_id || '') === String(notification.related_object_id || '');
+      const sameMsg = item.message === notification.message;
+      const timeDiff = Math.abs(now - new Date(item.created_at || 0).getTime());
+      return sameType && sameObj && sameMsg && timeDiff < 10000;
+    });
+
+    if (isDuplicate) {
+      return null;
+    }
+
     const item = {
       id: notification.id || `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       event_type: notification.event_type || 'REQUEST_STATUS_CHANGED',
+      title: notification.title || null,
       message: notification.message,
       related_object_type: notification.related_object_type || 'CredentialRequest',
       related_object_id: notification.related_object_id || '',
@@ -350,8 +460,8 @@ export function saveStoredNotification(notification) {
       target_user_id: notification.target_user_id || null,
       target_username: notification.target_username || null,
       target_student_id: notification.target_student_id || null,
-      target_roles: notification.target_roles || null,
-      target_role: notification.target_role || null,
+      target_role: inferredTargetRole,
+      target_roles: inferredTargetRoles,
     };
 
     const updated = [item, ...existing];
@@ -360,6 +470,7 @@ export function saveStoredNotification(notification) {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('regquest_notification_created', { detail: item }));
       window.dispatchEvent(new CustomEvent('regquest_requests_updated', { detail: item }));
+      notifyRealtimeUpdate({ reason: 'notification_created', item });
     }
     return item;
   } catch (err) {
@@ -378,6 +489,7 @@ export function markStoredNotificationRead(id, user = null) {
     const existing = raw ? JSON.parse(raw) : [];
     const updated = existing.map((n) => (String(n.id) === String(id) ? { ...n, is_read: true } : n));
     localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
+    notifyRealtimeUpdate({ reason: 'marked_read', id });
   } catch (err) {
     console.warn('Failed to mark stored notification as read:', err);
   }
@@ -401,6 +513,7 @@ export function markAllStoredNotificationsRead(user = null, currentNotifications
       return n;
     });
     localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
+    notifyRealtimeUpdate({ reason: 'marked_all_read' });
   } catch (err) {
     console.warn('Failed to mark all stored notifications as read:', err);
   }
@@ -412,8 +525,12 @@ export const notificationsApi = {
    */
   list: async (params = {}) => {
     try {
-      const response = await apiClient.get('/api/notifications/', { params });
-      return Array.isArray(response.data) ? response.data : (response.data?.results || []);
+      const response = await apiClient.get('/api/notifications/', {
+        params: { page_size: 100, ...params },
+      });
+      return Array.isArray(response.data)
+        ? response.data
+        : response.data?.results || [];
     } catch (err) {
       console.warn('notificationsApi.list backend returned error:', err);
       return [];
@@ -426,6 +543,7 @@ export const notificationsApi = {
   markRead: async (id) => {
     try {
       const response = await apiClient.patch(`/api/notifications/${id}/read/`);
+      notifyRealtimeUpdate({ reason: 'backend_marked_read', id });
       return response.data;
     } catch (err) {
       console.warn(`notificationsApi.markRead error for #${id}:`, err);
@@ -439,10 +557,17 @@ export const notificationsApi = {
   markAllRead: async () => {
     try {
       const response = await apiClient.post('/api/notifications/mark_all_read/');
+      notifyRealtimeUpdate({ reason: 'backend_marked_all_read' });
       return response.data;
     } catch {
-      const response = await apiClient.post('/api/notifications/mark-all-read/');
-      return response.data;
+      try {
+        const response = await apiClient.post('/api/notifications/mark-all-read/');
+        notifyRealtimeUpdate({ reason: 'backend_marked_all_read' });
+        return response.data;
+      } catch (err) {
+        console.warn('notificationsApi.markAllRead error:', err);
+        return { status: 'success' };
+      }
     }
   },
 };

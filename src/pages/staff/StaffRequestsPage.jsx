@@ -1,26 +1,30 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import requestsApi, { updateStoredRequest } from '../../api/requests';
-import { saveStoredNotification } from '../../api/notifications';
+import requestsApi, { updateStoredRequest, isValidRequest, logProcessedAction, sortRequestsNewestFirst, resolveRequestDocType } from '../../api/requests';
+import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
-import clearancesApi from '../../api/clearances';
+import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
 import useToast from '../../hooks/useToast';
 import { StaffProcessModal, StaffRequestsTable, StaffSearchFilter } from '../../components/staff';
 import '../../styles/staff/StaffRequestsPage.css';
 
 const REQUEST_STATUSES = [
   'Pending',
+  'For Payment',
+  'For Processing',
   'Processing',
-  'For release',
+  'Releasing',
   'Claimed',
-  'On Hold',
 ];
 
 const BACKEND_STATUS_MAP = {
   'Pending': 'PENDING',
-  'Pendong': 'PENDING',
+  'For Payment': 'PAYMENT_PENDING',
+  'Pending Payment': 'PAYMENT_PENDING',
+  'Payment Pending': 'PAYMENT_PENDING',
+  'For Processing': 'PAYMENT_VERIFIED',
   'Processing': 'PROCESSING',
+  'Releasing': 'READY_FOR_RELEASE',
   'For release': 'READY_FOR_RELEASE',
-  'For Release': 'READY_FOR_RELEASE',
   'Claimed': 'RELEASED',
   'On Hold': 'REQUIREMENTS_VERIFICATION',
 };
@@ -45,12 +49,22 @@ function formatStatusDisplay(rawStatus) {
     case 'RECEIVED':
     case 'REQUEST SUBMITTED':
       return 'Pending';
+    case 'FOR_PAYMENT':
+    case 'FOR PAYMENT':
+    case 'PAYMENT_PENDING':
+    case 'PAYMENT PENDING':
+    case 'PENDING_PAYMENT':
+    case 'PENDING PAYMENT':
+    case 'CLEARED FOR PAYMENT':
+      return 'For Payment';
+    case 'PAYMENT_VERIFIED':
+    case 'PAYMENT VERIFIED':
+    case 'FOR_PROCESSING':
+    case 'FOR PROCESSING':
+      return 'For Processing';
     case 'PROCESSING':
     case 'DOCUMENT_PREPARATION':
     case 'DOCUMENT PREPARATION':
-    case 'RELEASE_SCHEDULE_CONFIRMED':
-    case 'SCHEDULE_CONFIRMED':
-    case 'RELEASE SCHEDULE CONFIRMED':
       return 'Processing';
     case 'READY_FOR_RELEASE':
     case 'READY FOR RELEASE':
@@ -58,7 +72,8 @@ function formatStatusDisplay(rawStatus) {
     case 'READY FOR PICKUP':
     case 'FOR_RELEASE':
     case 'FOR RELEASE':
-      return 'For release';
+    case 'RELEASING':
+      return 'Releasing';
     case 'RELEASED':
     case 'CLAIMED':
     case 'CLAIMED / RELEASED':
@@ -69,8 +84,6 @@ function formatStatusDisplay(rawStatus) {
     case 'HOLD':
     case 'REQUIREMENTS_VERIFICATION':
     case 'CLEARANCE_VERIFIED':
-    case 'PAYMENT_PENDING':
-    case 'PAYMENT_VERIFIED':
     case 'CANCELLED':
     case 'REJECTED':
       return 'On Hold';
@@ -79,10 +92,43 @@ function formatStatusDisplay(rawStatus) {
   }
 }
 
+function getStatusBadge(status) {
+  const norm = String(status || '').trim();
+  switch (norm) {
+    case 'Pending':
+    case 'PENDING':
+      return <span className="status-badge pending">Pending</span>;
+    case 'For Payment':
+    case 'FOR PAYMENT':
+    case 'FOR_PAYMENT':
+    case 'Pending Payment':
+    case 'PAYMENT_PENDING':
+    case 'Payment Pending':
+      return <span className="status-badge payment-pending">For Payment</span>;
+    case 'For Processing':
+    case 'FOR_PROCESSING':
+    case 'PAYMENT_VERIFIED':
+      return <span className="status-badge for-processing">For Processing</span>;
+    case 'Processing':
+    case 'PROCESSING':
+      return <span className="status-badge processing">Processing</span>;
+    case 'Releasing':
+    case 'RELEASING':
+    case 'For release':
+    case 'READY_FOR_RELEASE':
+      return <span className="status-badge releasing">Releasing</span>;
+    case 'Claimed':
+    case 'RELEASED':
+      return <span className="status-badge claimed">Claimed</span>;
+    default:
+      return <span className="status-badge on-hold">{norm || 'On Hold'}</span>;
+  }
+}
+
 export default function StaffRequestsPage() {
   const toast = useToast();
+  const { user } = useAuth();
 
-  // Dynamic API State
   const [rawRequests, setRawRequests] = useState([]);
   const [users, setUsers] = useState([]);
   const [credentialTypes, setCredentialTypes] = useState([]);
@@ -91,12 +137,10 @@ export default function StaffRequestsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
   const [docTypeFilter, setDocTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
-  // Selected Request for Process View (Photo 2)
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [newStatus, setNewStatus] = useState('Pending');
   const [notes, setNotes] = useState('');
@@ -128,7 +172,6 @@ export default function StaffRequestsPage() {
             localStorage.setItem('regquest_users_cache', JSON.stringify(usersRes));
           }
         } catch {
-          // Staff role does not have admin permissions to /api/users/, use cached users
           try {
             usersRes = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
           } catch {
@@ -164,7 +207,6 @@ export default function StaffRequestsPage() {
     };
   }, []);
 
-  // Derived Lookup Maps
   const userMap = useMemo(() => {
     const map = new Map();
     users.forEach((u) => map.set(u.id, u));
@@ -177,38 +219,43 @@ export default function StaffRequestsPage() {
     return map;
   }, [credentialTypes]);
 
-  // Quick clearance lookup map
   const clearanceMap = useMemo(() => {
     const map = new Map();
     clearances.forEach((c) => {
       const uId = typeof c.user === 'object' ? c.user?.id : c.user;
-      if (uId) map.set(uId, c);
+      if (uId) {
+        map.set(uId, c);
+        map.set(String(uId), c);
+      }
       if (c.student_id) map.set(c.student_id, c);
       if (c.username) map.set(c.username, c);
       if (c.user_details?.username) map.set(c.user_details.username, c);
       if (c.user_details?.student_id) map.set(c.user_details.student_id, c);
+      if (c.id) map.set(c.id, c);
     });
     return map;
   }, [clearances]);
 
-  // Formatted requests
   const requests = useMemo(() => {
-    return rawRequests.map((r, idx) => {
+    return rawRequests
+      .filter(isValidRequest)
+      .filter((r) => Boolean(String(r.tracking_number || '').trim()))
+      .map((r, idx) => {
       const user = userMap.get(r.user);
       const cred = credTypeMap.get(r.credential_type);
 
-      // Check stored request cache for clearance preview
       let cachedClearancePreview = null;
       let cachedClearanceFileName = null;
       let cachedClearanceIsPdf = false;
+      let matchedStored = null;
       try {
         const storedList = JSON.parse(localStorage.getItem('regquest_stored_requests') || '[]');
-        const matchedStored = storedList.find(
+        matchedStored = storedList.find(
           (s) =>
-            s.id === r.id ||
-            s.id === r.tracking_number ||
-            s.tracking_number === r.tracking_number ||
-            s.rawId === r.id
+            String(s.id) === String(r.id) ||
+            String(s.id) === String(r.tracking_number) ||
+            String(s.tracking_number) === String(r.tracking_number) ||
+            String(s.rawId) === String(r.id)
         );
         if (matchedStored?.clearance_preview) {
           cachedClearancePreview = matchedStored.clearance_preview;
@@ -217,20 +264,44 @@ export default function StaffRequestsPage() {
         }
       } catch {}
 
+      const localClearance = getClearanceAttachment([
+        r.tracking_number,
+        r.id,
+        r.rawId,
+        r.student_id,
+        r.user,
+        String(r.user),
+      ]);
+
       const userClearance =
         clearanceMap.get(r.user) ||
+        clearanceMap.get(String(r.user)) ||
         clearanceMap.get(r.student_id) ||
         (user ? clearanceMap.get(user.id) : null) ||
+        (user ? clearanceMap.get(String(user.id)) : null) ||
         (user ? clearanceMap.get(user.student_id) : null) ||
         (user ? clearanceMap.get(user.username) : null);
 
       const effectiveClearancePreview =
         r.clearance_preview ||
+        localClearance?.dataUrl ||
         cachedClearancePreview ||
         userClearance?.file ||
         null;
 
-      // Check cached student profile
+      const effectiveClearanceIsPdf =
+        Boolean(r.clearance_is_pdf) ||
+        Boolean(localClearance?.meta?.isPdf) ||
+        Boolean(localClearance?.dataUrl?.startsWith('data:application/pdf')) ||
+        Boolean(cachedClearanceIsPdf) ||
+        Boolean(r.clearance_file_name?.toLowerCase().endsWith('.pdf'));
+
+      const effectiveClearanceFileName =
+        r.clearance_file_name ||
+        localClearance?.meta?.fileName ||
+        cachedClearanceFileName ||
+        (userClearance?.file ? 'Clearance Document' : null);
+
       let profileName = null;
       let profileStudentId = null;
       try {
@@ -251,60 +322,109 @@ export default function StaffRequestsPage() {
         : '';
 
       const fallbackKnownName =
-        (user?.username === '2023301564' || r.student_id === '2023301564' || r.student_name === '2023301564')
+        (user?.username === '2023301564' || r.student_id === '2023301564' || r.student_name === '2023301564' || r.user === 11 || String(r.user) === '11')
           ? 'Daisy Traya'
+          : (user?.username === 'Love' || r.student_name === 'Love' || r.user === 2 || String(r.user) === '2')
+          ? 'Love'
           : null;
 
-      // If r.student_name is valid and NOT an ID number or username, use it.
-      // Otherwise, prefer actual user first/last name, profileName, or fallbackKnownName.
       const isStudentNameId =
         !r.student_name ||
+        r.student_name === 'Student' ||
         /^\d{6,}$/.test(r.student_name) ||
         r.student_name === r.student_id ||
         (user && r.student_name === user.username);
 
       const studentName = !isStudentNameId
         ? r.student_name
-        : (userFullName || profileName || fallbackKnownName || r.student_name || `Student #${r.user || idx + 1}`);
+        : (userFullName || profileName || fallbackKnownName || (user?.username && !/^\d{6,}$/.test(user.username) ? user.username : null) || r.student_name || (r.student_id ? `Student (${r.student_id})` : 'Student'));
 
       const studentId =
         (r.student_id && /^\d+$/.test(r.student_id))
           ? r.student_id
-          : profileStudentId || user?.student_id || user?.username || r.student_id || 'N/A';
-      const documentType = r.document_type || cred?.name || r.credential_type_details?.name || 'Document Request';
+          : profileStudentId || user?.student_id || user?.username || (r.user === 11 || String(r.user) === '11' ? '2023301564' : null) || (r.user === 2 || String(r.user) === '2' ? '20231029' : null) || (r.user ? String(r.user) : 'N/A');
+
+      const documentType = resolveRequestDocType(r, cred);
+
       const amount =
+        matchedStored?.assessed_amount ||
+        matchedStored?.amount ||
+        r.assessed_amount ||
         r.amount ||
         (cred?.price ? `P${parseFloat(cred.price).toFixed(0)}` : 'P0');
 
       const requestDate = r.request_date || (r.created_at ? r.created_at.split('T')[0] : 'N/A');
-      const releaseDate = r.release_date || calculateReleaseDate(r.created_at, cred?.processing_days);
+      const releaseDate =
+        matchedStored?.date_of_release ||
+        matchedStored?.release_date ||
+        r.date_of_release ||
+        r.release_date ||
+        calculateReleaseDate(r.created_at, cred?.processing_days);
+
+      const effectiveRawStatus =
+        matchedStored?.status && String(matchedStored.status).toUpperCase() !== 'PENDING'
+          ? matchedStored.status
+          : r.status;
 
       return {
         rawId: r.rawId || r.id,
         id: r.tracking_number || r.id,
         tracking_number: r.tracking_number || r.id,
+        user: r.user,
         student_name: studentName,
         student_id: studentId,
         document_type: documentType,
         copies: r.copies || '1 copy',
-        status: formatStatusDisplay(r.status),
-        rawStatus: r.status,
+        status: formatStatusDisplay(effectiveRawStatus),
+        created_at: r.created_at,
         request_date: requestDate,
         release_date: releaseDate,
+        date_of_release: releaseDate,
         amount,
+        assessed_amount: matchedStored?.assessed_amount || r.assessed_amount || amount,
+        verified_by_name: matchedStored?.verified_by_name || r.verified_by_name || null,
         purpose: r.purpose || r.remarks || 'Official Academic Credential Request',
-        remarks: r.remarks || '',
+        remarks: matchedStored?.remarks || r.remarks || '',
         clearance_preview: effectiveClearancePreview,
         clearance_id: r.clearance_id || userClearance?.id || null,
-        clearance_status: userClearance?.status || (effectiveClearancePreview ? 'ATTACHED' : null),
-        clearance_file_name: r.clearance_file_name || cachedClearanceFileName || (userClearance?.file ? 'Clearance Document' : null),
-        clearance_is_pdf: r.clearance_is_pdf || cachedClearanceIsPdf || false,
+        clearance_status:
+          matchedStored?.clearance_status ||
+          r.clearance_status ||
+          (effectiveClearancePreview ? 'PENDING' : null),
+        clearance_file_name: effectiveClearanceFileName,
+        clearance_is_pdf: effectiveClearanceIsPdf,
         photo_preview: r.photo_preview || null,
+        payment_status: matchedStored?.payment_status || r.payment_status || null,
+        payment_proof: matchedStored?.payment_proof || r.payment_proof || null,
+        or_number: matchedStored?.or_number || r.or_number || '',
+        receipt_image: matchedStored?.receipt_image || r.receipt_image || null,
+        is_confirmed: Boolean(matchedStored?.is_confirmed || r.is_confirmed),
+        confirmed_for_payment: Boolean(matchedStored?.confirmed_for_payment || r.confirmed_for_payment),
       };
-    });
+    })
+    .filter((r) => {
+      const sName = String(r.student_name || '').toLowerCase();
+      const sId = String(r.student_id || '').toLowerCase();
+      if (/^student\s*#?\s*[1-4]$/i.test(sName) || /^student\s*#?\s*[1-4]$/i.test(sId)) {
+        return false;
+      }
+      if (r.id || r.tracking_number) {
+        return true;
+      }
+      if (
+        (r.student_name === 'Student' || r.student_name === 'N/A' || !r.student_name) &&
+        (r.student_id === 'N/A' || !r.student_id)
+      ) {
+        return false;
+      }
+      if (r.request_date === 'N/A' && r.release_date === 'N/A') {
+        return false;
+      }
+      return true;
+    })
+    .sort(sortRequestsNewestFirst);
   }, [rawRequests, userMap, credTypeMap, clearanceMap]);
 
-  // Filtered requests for table
   const filteredRequests = useMemo(() => {
     return requests.filter((r) => {
       const q = searchQuery.toLowerCase().trim();
@@ -325,52 +445,121 @@ export default function StaffRequestsPage() {
       }
 
       return true;
-    });
+    }).sort(sortRequestsNewestFirst);
   }, [requests, searchQuery, docTypeFilter, statusFilter]);
 
   const getStatusBadge = (status) => {
-    switch (status) {
+    const s = String(status || '').trim();
+    switch (s) {
       case 'Pending':
+      case 'PENDING':
       case 'Pendong':
         return <span className="status-pill pending">Pending</span>;
+      case 'For Payment':
+      case 'FOR PAYMENT':
+      case 'FOR_PAYMENT':
+      case 'Pending Payment':
+      case 'PAYMENT_PENDING':
+      case 'Payment Pending':
+        return <span className="status-pill for-payment">For Payment</span>;
+      case 'For Processing':
+      case 'FOR_PROCESSING':
+      case 'PAYMENT_VERIFIED':
+        return <span className="status-pill for-processing">For Processing</span>;
       case 'Processing':
+      case 'PROCESSING':
         return <span className="status-pill processing">Processing</span>;
       case 'For release':
       case 'For Release':
+      case 'Releasing':
+      case 'RELEASING':
+      case 'READY_FOR_RELEASE':
         return <span className="status-pill for-release">For release</span>;
       case 'Claimed':
+      case 'RELEASED':
         return <span className="status-pill claimed">Claimed</span>;
       case 'On Hold':
       case 'on Hold':
+      case 'ON_HOLD':
         return <span className="status-pill on-hold">On Hold</span>;
       default:
-        return <span className="status-pill pending">{status}</span>;
+        return <span className="status-pill pending">{s}</span>;
     }
   };
 
-  // Open Process View (Photo 2)
   const handleOpenProcess = (req) => {
     setSelectedRequest(req);
-    setNewStatus(req.status || 'Pending');
-    setNotes(''); // Empty at first open as requested
+    setNewStatus(formatStatusDisplay(req.status) || 'Pending');
+    setNotes('');
   };
 
-  // Back to Requests Table (Photo 1)
+  const handleRequestUpdated = (updatedReq) => {
+    setRawRequests((prev) =>
+      prev.map((r) =>
+        String(r.id) === String(updatedReq.rawId) ||
+        String(r.id) === String(updatedReq.id) ||
+        String(r.tracking_number) === String(updatedReq.id) ||
+        String(r.tracking_number) === String(updatedReq.tracking_number)
+          ? {
+              ...r,
+              status: updatedReq.status,
+              remarks: updatedReq.remarks ?? r.remarks,
+              payment_status: updatedReq.payment_status ?? r.payment_status,
+              or_number: updatedReq.or_number ?? r.or_number,
+              clearance_status: updatedReq.clearance_status ?? r.clearance_status,
+              is_confirmed: updatedReq.is_confirmed ?? r.is_confirmed,
+              confirmed_for_payment: updatedReq.confirmed_for_payment ?? r.confirmed_for_payment,
+              assessed_amount: updatedReq.assessed_amount ?? r.assessed_amount,
+              amount: updatedReq.amount ?? updatedReq.assessed_amount ?? r.amount,
+              release_date: updatedReq.release_date ?? updatedReq.date_of_release ?? r.release_date,
+              date_of_release: updatedReq.date_of_release ?? updatedReq.release_date ?? r.date_of_release,
+              verified_by_name: updatedReq.verified_by_name ?? r.verified_by_name,
+            }
+          : r
+      )
+    );
+  };
+
   const handleBackToList = () => {
+    if (selectedRequest) {
+      handleRequestUpdated(selectedRequest);
+    }
     setSelectedRequest(null);
   };
 
-  // Handle Status Update Submit
   const handleUpdateStatus = async (e) => {
-    e.preventDefault();
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
     if (!selectedRequest) return;
 
     setUpdating(true);
     const targetId = selectedRequest.rawId || selectedRequest.id;
+    const effectiveStatus =
+      selectedRequest.status &&
+      String(selectedRequest.status).toLowerCase() !== 'pending' &&
+      String(newStatus).toLowerCase() === 'pending'
+        ? selectedRequest.status
+        : newStatus;
+
+    const fullPatch = {
+      status: effectiveStatus,
+      remarks: notes || selectedRequest.remarks || '',
+      clearance_status: selectedRequest.clearance_status,
+      assessed_amount: selectedRequest.assessed_amount,
+      amount: selectedRequest.amount || selectedRequest.assessed_amount,
+      date_of_release: selectedRequest.date_of_release || selectedRequest.release_date,
+      release_date: selectedRequest.release_date || selectedRequest.date_of_release,
+      verified_by_name: selectedRequest.verified_by_name,
+      is_confirmed: selectedRequest.is_confirmed,
+      confirmed_for_payment: selectedRequest.confirmed_for_payment,
+      payment_status: selectedRequest.payment_status,
+      or_number: selectedRequest.or_number,
+    };
 
     try {
       if (selectedRequest.rawId && typeof selectedRequest.rawId === 'number') {
-        const backendStatus = BACKEND_STATUS_MAP[newStatus] || newStatus;
+        const backendStatus = BACKEND_STATUS_MAP[effectiveStatus] || effectiveStatus;
         try {
           await requestsApi.transition(selectedRequest.rawId, {
             status: backendStatus,
@@ -381,44 +570,35 @@ export default function StaffRequestsPage() {
         }
       }
 
-      // Update in stored requests
-      updateStoredRequest(selectedRequest.id || targetId, {
-        status: newStatus,
-        remarks: notes,
+      updateStoredRequest(selectedRequest.id || targetId, fullPatch, {
+        fallbackItem: selectedRequest,
       });
 
-      // Notify the student that their request status has been updated
-      saveStoredNotification({
-        event_type: 'REQUEST_STATUS_CHANGED',
-        message: `Your request (${selectedRequest.tracking_number || selectedRequest.id}) status changed to ${newStatus}.`,
-        related_object_type: 'CredentialRequest',
-        related_object_id: selectedRequest.tracking_number || selectedRequest.id,
-        target_user_id: selectedRequest.user || null,
-        target_username: selectedRequest.student_name || null,
-        target_student_id: selectedRequest.student_id || null,
+      logProcessedAction({
+        actor: user?.username,
+        actorName: user?.full_name || user?.username,
+        actorId: user?.id,
+        actorRole: user?.role || 'staff',
+        targetName: selectedRequest.student_name,
+        targetId: selectedRequest.student_id || selectedRequest.tracking_number,
+        trackingNumber: selectedRequest.tracking_number || selectedRequest.id,
+        documentType: selectedRequest.document_type,
+        action: `Status updated to ${effectiveStatus}`,
+        status: effectiveStatus,
       });
 
-      // Notify Admin and Staff that the request status was updated
-      saveStoredNotification({
-        event_type: 'REQUEST_STATUS_CHANGED',
-        message: `Request ${selectedRequest.tracking_number || selectedRequest.id} (${selectedRequest.student_name || 'Student'}) status was updated to ${newStatus}.`,
-        related_object_type: 'CredentialRequest',
-        related_object_id: selectedRequest.tracking_number || selectedRequest.id,
-        target_roles: ['admin', 'staff', 'registrar'],
-      });
+      toast.success(`Request ${selectedRequest.tracking_number || selectedRequest.id} updated to ${effectiveStatus}.`);
 
-      toast.success(`Request ${selectedRequest.tracking_number || selectedRequest.id} updated to ${newStatus}.`);
-
-      // Update state locally
       setRawRequests((prev) =>
         prev.map((r) =>
-          r.id === targetId || r.tracking_number === selectedRequest.id || r.id === selectedRequest.id
-            ? { ...r, status: newStatus, remarks: notes }
+          String(r.id) === String(targetId) ||
+          String(r.tracking_number) === String(selectedRequest.id) ||
+          String(r.id) === String(selectedRequest.id)
+            ? { ...r, ...fullPatch }
             : r
         )
       );
 
-      // Return to list view
       setSelectedRequest(null);
     } catch (err) {
       console.error('Failed to update status:', err);
@@ -430,7 +610,6 @@ export default function StaffRequestsPage() {
 
   return (
     <div className="staff-req-container">
-      {/* Search & Filter Toolbar */}
       <StaffSearchFilter
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
@@ -442,7 +621,6 @@ export default function StaffRequestsPage() {
         requestStatuses={REQUEST_STATUSES}
       />
 
-      {/* Requests Data Table */}
       <StaffRequestsTable
         loading={loading}
         error={error}
@@ -452,7 +630,6 @@ export default function StaffRequestsPage() {
         onOpenProcess={handleOpenProcess}
       />
 
-      {/* Process Request Modal Dialog */}
       {selectedRequest && (
         <StaffProcessModal
           selectedRequest={selectedRequest}
@@ -463,6 +640,7 @@ export default function StaffRequestsPage() {
           updating={updating}
           onUpdateStatus={handleUpdateStatus}
           onBackToList={handleBackToList}
+          onRequestUpdated={handleRequestUpdated}
           requestStatuses={REQUEST_STATUSES}
           getStatusBadge={getStatusBadge}
         />

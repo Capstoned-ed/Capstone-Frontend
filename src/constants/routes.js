@@ -5,8 +5,11 @@ export const ROUTES = {
     CLEARANCE: '/student/clearance',
     REQUESTS: '/student/requests',
     NEW_REQUEST: '/student/requests/new',
+    PAYMENTS: '/student/payments',
     CREDENTIALS: '/student/credentials',
     PROFILE: '/student/profile',
+    FORM: '/student/form/:trackingId',
+    REQUEST_FORM: '/request-form/:trackingId',
   },
   STAFF: {
     DASHBOARD: '/staff/dashboard',
@@ -19,6 +22,7 @@ export const ROUTES = {
   },
   REGISTRAR: {
     DASHBOARD: '/registrar/dashboard',
+    ANALYTICS: '/admin/analytics',
     CALENDAR: '/registrar/calendar',
     PROCESSING: '/registrar/processing',
     CREDENTIALS: '/registrar/credentials',
@@ -26,6 +30,7 @@ export const ROUTES = {
   },
   ADMIN: {
     DASHBOARD: '/admin/dashboard',
+    ANALYTICS: '/admin/analytics',
     CALENDAR: '/admin/calendar',
     USERS: '/admin/users',
     CREDENTIALS: '/admin/credentials',

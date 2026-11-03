@@ -92,6 +92,21 @@ export function AuthProvider({ children }) {
 
       // Check if access token is still valid (with 10-second buffer)
       if (decoded && decoded.exp * 1000 > Date.now() + 10000) {
+        try {
+          const uKey = (decoded.username || '').toLowerCase();
+          if (uKey) {
+            const creationDates = JSON.parse(localStorage.getItem('regquest_account_creation_dates') || '{}');
+            if (!creationDates[uKey]) {
+              const usersCache = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
+              const match = usersCache.find((x) => x.username && x.username.toLowerCase() === uKey);
+              const time = match?.date_joined || new Date().toISOString();
+              creationDates[uKey] = time;
+              if (decoded.userId) creationDates[String(decoded.userId)] = time;
+              localStorage.setItem('regquest_account_creation_dates', JSON.stringify(creationDates));
+            }
+          }
+        } catch {}
+
         setUser(decoded);
         setLoading(false);
       } else if (refreshToken) {
@@ -130,6 +145,23 @@ export function AuthProvider({ children }) {
     localStorage.setItem('refresh_token', refresh);
 
     const decoded = parseToken(access);
+
+    // Ensure account creation timestamp is established so this account never inherits past notifications
+    try {
+      const uKey = (decoded?.username || username || '').toLowerCase();
+      if (uKey) {
+        const creationDates = JSON.parse(localStorage.getItem('regquest_account_creation_dates') || '{}');
+        if (!creationDates[uKey]) {
+          const usersCache = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
+          const match = usersCache.find((x) => x.username && x.username.toLowerCase() === uKey);
+          const time = match?.date_joined || new Date().toISOString();
+          creationDates[uKey] = time;
+          if (decoded?.userId) creationDates[String(decoded.userId)] = time;
+          localStorage.setItem('regquest_account_creation_dates', JSON.stringify(creationDates));
+        }
+      }
+    } catch {}
+
     setUser(decoded);
     return { user: decoded, access, refresh };
   }, [parseToken]);

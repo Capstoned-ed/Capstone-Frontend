@@ -1,0 +1,412 @@
+/* ==========================================================================
+   StudentPaymentsPage.css
+   RegQuest Capstone Design System
+   ========================================================================== */
+
+.student-payments-container {
+  width: 100%;
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem 1rem;
+}
+
+@media (min-width: 640px) {
+  .student-payments-container {
+    padding: 2.5rem 1.5rem 5rem 1.5rem;
+  }
+}
+
+/* Page Header */
+.payments-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+@media (min-width: 640px) {
+  .payments-header {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+}
+
+.payments-title {
+  font-size: 1.875rem;
+  font-weight: 900;
+  color: #0b0b36;
+  letter-spacing: -0.025em;
+  margin-bottom: 0.375rem;
+}
+
+.payments-subtitle {
+  font-size: 0.875rem;
+  color: #64748b;
+  max-width: 36rem;
+  line-height: 1.5;
+}
+
+.payments-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.125rem;
+  background-color: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #334155;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease;
+  align-self: flex-start;
+}
+
+.payments-refresh-btn:hover {
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+  color: #0b0b36;
+}
+
+/* OTC 3-Step Guide Banner */
+.otc-guide-banner {
+  background: linear-gradient(135deg, #0b0b36 0%, #1e1e6b 100%);
+  border-radius: 1.25rem;
+  padding: 1.5rem;
+  color: #ffffff;
+  margin-bottom: 2rem;
+  box-shadow: 0 8px 20px -4px rgba(11, 11, 54, 0.25);
+}
+
+.otc-guide-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.otc-guide-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.75rem;
+  background-color: #fbbf24;
+  color: #0b0b36;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.125rem;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.otc-guide-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.otc-guide-sub {
+  font-size: 0.75rem;
+  color: #cbd5e1;
+}
+
+.otc-steps-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .otc-steps-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.otc-step-item {
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1rem;
+  padding: 1rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.otc-step-num {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 9999px;
+  background-color: #fbbf24;
+  color: #0b0b36;
+  font-size: 0.75rem;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.otc-step-heading {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 0.25rem;
+}
+
+.otc-step-text {
+  font-size: 0.6875rem;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+
+/* Filter Tabs */
+.payments-filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.payments-filter-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  border: 1.5px solid #e2e8f0;
+  background-color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.payments-filter-tab:hover {
+  border-color: #cbd5e1;
+  color: #0b0b36;
+  background-color: #f8fafc;
+}
+
+.payments-filter-tab.active {
+  background-color: #0b0b36;
+  border-color: #0b0b36;
+  color: #ffffff;
+  box-shadow: 0 4px 10px rgba(11, 11, 54, 0.15);
+}
+
+.payments-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  background-color: #f1f5f9;
+  color: #475569;
+}
+
+.payments-filter-tab.active .payments-tab-count {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+/* Payment Cards List */
+.payments-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.payment-card {
+  background-color: #ffffff;
+  border-radius: 1.25rem;
+  border: 1.5px solid #e2e8f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  padding: 1.5rem;
+  transition: all 0.2s ease;
+}
+
+.payment-card:hover {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+  border-color: #cbd5e1;
+}
+
+.payment-card.highlight {
+  border: 2px solid #6366f1;
+  background: linear-gradient(180deg, #fafaff 0%, #ffffff 100%);
+}
+
+.payment-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .payment-card-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.payment-card-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .payment-card-meta-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.payment-meta-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.payment-meta-lbl {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 0.25rem;
+}
+
+.payment-meta-val {
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+/* Proof banner attached */
+.payment-proof-banner {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 1rem;
+  padding: 0.875rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.payment-proof-preview {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 0.5rem;
+  object-fit: cover;
+  border: 1px solid #cbd5e1;
+  flex-shrink: 0;
+}
+
+/* Card Actions */
+.payment-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.payment-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.75rem;
+  background-color: #0b0b36;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(11, 11, 54, 0.2);
+  transition: all 0.15s ease;
+}
+
+.payment-btn-primary:hover {
+  background-color: #1e1e6b;
+  transform: translateY(-1px);
+}
+
+.payment-btn-emerald {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.75rem;
+  background-color: #059669;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(5, 150, 105, 0.2);
+  transition: all 0.15s ease;
+}
+
+.payment-btn-emerald:hover {
+  background-color: #047857;
+  transform: translateY(-1px);
+}
+
+.payment-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.125rem;
+  border-radius: 0.75rem;
+  background-color: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  color: #334155;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.payment-btn-outline:hover {
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+  color: #0b0b36;
+}
+
+/* Empty State Card */
+.payments-empty-card {
+  background-color: #ffffff;
+  border: 2px dashed #cbd5e1;
+  border-radius: 1.5rem;
+  padding: 3.5rem 1.5rem;
+  text-align: center;
+  margin: 1.5rem 0;
+}
+
+.payments-empty-icon {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 9999px;
+  background-color: #f1f5f9;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.25rem auto;
+}
+

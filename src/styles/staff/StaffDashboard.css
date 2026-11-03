@@ -1,0 +1,376 @@
+.staff-dash-page {
+  @apply bg-[#F4F5F8] min-h-screen;
+}
+
+.staff-dash-hero {
+  @apply relative bg-[#0B0B36] text-white overflow-hidden py-10 px-6 sm:px-10 lg:px-12 select-none;
+}
+
+.staff-dash-hero-bg {
+  @apply absolute right-0 top-0 bottom-0 w-2/5 sm:w-1/2 opacity-30 pointer-events-none overflow-hidden;
+}
+
+.staff-dash-hero-img {
+  @apply w-full h-full object-cover object-center;
+}
+
+.staff-dash-hero-grad-r {
+  @apply absolute inset-0 bg-gradient-to-r from-[#0B0B36] via-[#0B0B36]/80 to-transparent;
+}
+
+.staff-dash-hero-grad-t {
+  @apply absolute inset-0 bg-gradient-to-t from-[#0B0B36] via-transparent to-[#0B0B36]/60;
+}
+
+.staff-dash-hero-content {
+  @apply relative z-10 max-w-xl;
+}
+
+.staff-dash-hero-title {
+  @apply text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight;
+}
+
+.staff-dash-hero-subtitle {
+  @apply text-2xl sm:text-3xl font-extrabold text-[#F5B014] mt-1 tracking-tight;
+}
+
+.staff-dash-hero-desc {
+  @apply text-xs sm:text-sm text-slate-300 mt-2 font-normal leading-relaxed;
+}
+
+.staff-dash-main {
+  @apply p-6 sm:p-8 max-w-7xl mx-auto space-y-7;
+}
+
+.staff-dash-targeted-card {
+  @apply bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 sm:p-7;
+}
+
+.staff-dash-targeted-header {
+  @apply flex items-center gap-4;
+}
+
+.staff-dash-targeted-icon {
+  @apply w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-700 shrink-0;
+}
+
+.staff-dash-targeted-date {
+  @apply text-xs text-slate-400 font-medium;
+}
+
+.staff-dash-targeted-title {
+  @apply text-xl font-bold text-slate-900 leading-snug;
+}
+
+.staff-dash-targeted-sub {
+  @apply text-xs text-slate-400 font-normal;
+}
+
+.staff-dash-targeted-grid {
+  @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6;
+}
+
+.staff-dash-doc-card {
+  @apply bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow;
+}
+
+.staff-dash-doc-card-top {
+  @apply flex items-center justify-between;
+}
+
+.staff-dash-doc-name {
+  @apply text-xs font-medium text-slate-600 truncate;
+}
+
+.staff-dash-priority-badge {
+  @apply text-white text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0;
+}
+
+.staff-dash-priority-badge.high {
+  @apply bg-[#E60000];
+}
+
+.staff-dash-priority-badge.medium {
+  @apply bg-[#FF6B00];
+}
+
+.staff-dash-doc-count {
+  @apply text-3xl font-extrabold text-slate-900 mt-2;
+}
+
+.staff-dash-doc-unit {
+  @apply text-xs text-slate-400 font-normal;
+}
+
+.staff-dash-targeted-empty {
+  @apply mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200/60 text-slate-500 text-xs text-center font-medium;
+}
+
+.staff-dash-metrics-grid {
+  @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4;
+}
+
+.staff-dash-metric-card {
+  @apply bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-5 hover:shadow-md transition-shadow;
+}
+
+.staff-dash-metric-card.pending {
+  @apply border-l-4 border-l-orange-400;
+}
+
+.staff-dash-metric-card.processing {
+  @apply border-l-4 border-l-blue-500;
+}
+
+.staff-dash-metric-card.on-hold {
+  @apply border-l-4 border-l-rose-500;
+}
+
+.staff-dash-metric-card.for-release {
+  @apply border-l-4 border-l-emerald-500;
+}
+
+.staff-dash-metric-card.completed {
+  @apply border-l-4 border-l-teal-600;
+}
+
+.staff-dash-metric-top {
+  @apply flex items-center justify-between;
+}
+
+.staff-dash-metric-label {
+  @apply text-xs font-bold text-slate-800;
+}
+
+.staff-dash-metric-val {
+  @apply text-2xl font-black text-slate-900 mt-2;
+}
+
+.staff-dash-metric-sub {
+  @apply text-xs text-slate-400 mt-1;
+}
+
+.staff-dash-insight-card {
+  @apply bg-[#DDE3FF] rounded-2xl p-6 border border-[#C5D0FF] shadow-sm;
+}
+
+.staff-dash-insight-header {
+  @apply flex items-center gap-3;
+}
+
+.staff-dash-insight-icon {
+  @apply w-10 h-10 rounded-xl bg-[#BAC7FF] flex items-center justify-center text-[#2A3CB8] shrink-0 shadow-sm;
+}
+
+.staff-dash-insight-title {
+  @apply text-lg font-bold text-[#0A0A7C];
+}
+
+.staff-dash-insight-body {
+  @apply bg-[#7084D8]/85 rounded-xl p-5 text-white shadow-sm mt-3.5 space-y-2 text-xs sm:text-sm font-normal;
+}
+
+.staff-dash-insight-item {
+  @apply flex items-start gap-2;
+}
+
+.staff-dash-calendar-card {
+  @apply bg-[#EAF0FE] rounded-2xl p-6 border border-[#D5E0FA] shadow-sm;
+}
+
+.staff-dash-calendar-top {
+  @apply flex flex-col sm:flex-row sm:items-center justify-between gap-4;
+}
+
+.staff-dash-calendar-title-wrap {
+  @apply flex items-center gap-4;
+}
+
+.staff-dash-calendar-icon {
+  @apply w-12 h-12 bg-blue-500/20 text-blue-600 rounded-xl flex items-center justify-center shrink-0;
+}
+
+.staff-dash-calendar-range-badge {
+  @apply text-xs font-semibold text-blue-700 bg-blue-100/80 px-2.5 py-0.5 rounded-full;
+}
+
+.staff-dash-calendar-selected-badge {
+  @apply text-xs font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full flex items-center gap-1;
+}
+
+.staff-dash-calendar-heading {
+  @apply text-xl font-bold text-slate-900 mt-1;
+}
+
+.staff-dash-calendar-nav {
+  @apply flex items-center gap-2 self-start sm:self-auto;
+}
+
+.staff-dash-nav-btn {
+  @apply p-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shadow-sm cursor-pointer active:scale-95;
+}
+
+.staff-dash-today-btn {
+  @apply px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50;
+}
+
+.staff-dash-today-btn.active {
+  @apply bg-[#000080] text-white border-[#000080] hover:bg-[#000066];
+}
+
+.staff-dash-calendar-grid-box {
+  @apply bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm mt-5;
+}
+
+.staff-dash-calendar-weekdays {
+  @apply grid grid-cols-7 bg-[#C7D7FE] border-b border-slate-200 text-center;
+}
+
+.staff-dash-calendar-weekday {
+  @apply py-2.5 font-bold text-xs text-[#0A0A7C] border-r last:border-r-0 border-slate-300/60 truncate px-1;
+}
+
+.staff-dash-calendar-days {
+  @apply grid grid-cols-7 divide-x divide-slate-200 min-h-[175px];
+}
+
+.staff-dash-calendar-day {
+  @apply p-2 sm:p-2.5 flex flex-col justify-between cursor-pointer transition-all hover:bg-blue-50/50 select-none;
+}
+
+.staff-dash-calendar-day.selected {
+  @apply bg-blue-100/60 ring-2 ring-inset ring-[#000080];
+}
+
+.staff-dash-calendar-day.today {
+  @apply bg-blue-50/40 ring-1 ring-inset ring-blue-400/50;
+}
+
+.staff-dash-calendar-more-wrap {
+  @apply mt-4 flex justify-center;
+}
+
+.staff-dash-calendar-more-btn {
+  @apply text-[#0A0A7C] font-bold text-sm flex items-center gap-1 hover:underline cursor-pointer transition-all;
+}
+
+.staff-dash-requests-card {
+  @apply bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 sm:p-8;
+}
+
+.staff-dash-requests-header {
+  @apply flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5;
+}
+
+.staff-dash-requests-title {
+  @apply text-xl font-bold text-slate-900;
+}
+
+.staff-dash-requests-filter-pill {
+  @apply text-xs bg-blue-100 text-[#000080] px-2.5 py-0.5 rounded-full font-bold;
+}
+
+.staff-dash-requests-subtitle {
+  @apply text-xs text-slate-400 mt-0.5;
+}
+
+.staff-dash-btn-clear {
+  @apply px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer;
+}
+
+.staff-dash-btn-view-all {
+  @apply px-5 py-2 rounded-lg bg-[#000080] hover:bg-[#000066] text-white text-xs font-semibold transition-colors cursor-pointer shadow-sm active:scale-95;
+}
+
+.staff-dash-table-wrap {
+  @apply overflow-x-auto;
+}
+
+.staff-dash-table {
+  @apply w-full text-left border-collapse;
+}
+
+.staff-dash-table-head-row {
+  @apply border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-400;
+}
+
+.staff-dash-th {
+  @apply py-3 px-4;
+}
+
+.staff-dash-tbody {
+  @apply divide-y divide-slate-100 text-xs;
+}
+
+.staff-dash-tr {
+  @apply hover:bg-slate-50/70 transition-colors;
+}
+
+.staff-dash-td {
+  @apply py-4 px-4;
+}
+
+.staff-dash-td-id {
+  @apply py-4 px-4 font-bold text-slate-900 whitespace-nowrap;
+}
+
+.staff-dash-student-name {
+  @apply font-bold text-slate-900 leading-tight;
+}
+
+.staff-dash-student-id {
+  @apply text-[11px] text-slate-400 mt-0.5;
+}
+
+.staff-dash-doc-type {
+  @apply text-slate-800 font-medium;
+}
+
+.staff-dash-doc-copies {
+  @apply text-[11px] text-slate-400 mt-0.5;
+}
+
+.staff-dash-date {
+  @apply py-4 px-4 font-semibold text-slate-700 whitespace-nowrap;
+}
+
+.staff-dash-view-btn {
+  @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 hover:border-slate-400 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95;
+}
+
+.staff-dash-status-badge {
+  @apply inline-block px-3 py-1 rounded-full text-xs font-semibold shadow-sm;
+}
+
+.staff-dash-status-badge.pending {
+  @apply bg-[#FEF9C3] text-[#854D0E];
+}
+
+.staff-dash-status-badge.for-payment {
+  @apply bg-[#FEF08A] text-[#854D0E] border border-[#FACC15];
+}
+
+.staff-dash-status-badge.for-processing {
+  @apply bg-blue-100 text-blue-800 border border-blue-200;
+}
+
+.staff-dash-status-badge.processing {
+  @apply bg-[#E0F2FE] text-[#0369A1];
+}
+
+.staff-dash-status-badge.for-release {
+  @apply bg-[#DCFCE7] text-[#166534];
+}
+
+.staff-dash-status-badge.claimed {
+  @apply bg-[#BBF7D0] text-[#15803D];
+}
+
+.staff-dash-status-badge.on-hold {
+  @apply bg-[#FFE4E6] text-[#BE123C];
+}
+
+.staff-dash-status-badge.default {
+  @apply bg-slate-100 text-slate-700;
+}
+
