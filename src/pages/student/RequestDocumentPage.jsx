@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import requestsApi, { saveStoredRequest } from '../../api/requests';
 import { saveStoredNotification } from '../../api/notifications';
 import credentialTypesApi from '../../api/credentialTypes';
-import clearancesApi from '../../api/clearances';
+import clearancesApi, { saveClearanceAttachment } from '../../api/clearances';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
 import ustpLogo from '../../assets/USTP Logo against Light Background 1.png';
@@ -119,7 +119,18 @@ export default function RequestDocumentPage() {
 
       const reader = new FileReader();
       reader.onloadend = () => {
-        setClearancePreview(reader.result);
+        const previewUrl = reader.result;
+        setClearancePreview(previewUrl);
+        saveClearanceAttachment('current_student_preview', previewUrl, {
+          isPdf: isDoc,
+          fileName: file.name,
+        });
+        if (studentId) {
+          saveClearanceAttachment(studentId, previewUrl, {
+            isPdf: isDoc,
+            fileName: file.name,
+          });
+        }
       };
       reader.readAsDataURL(file);
       toast.success(`Clearance ${isDoc ? 'PDF' : 'file'} attached successfully.`);
@@ -149,6 +160,13 @@ export default function RequestDocumentPage() {
     if (!docName || !Array.isArray(typesList) || typesList.length === 0) return 1;
     const lower = docName.toLowerCase();
 
+    // 1. Exact match by name or code if DB has it
+    const exact = typesList.find(
+      (t) => (t.name && t.name.toLowerCase() === lower) || (t.code && t.code.toLowerCase() === lower)
+    );
+    if (exact) return exact.id;
+
+    // 2. Standard categories
     if (lower.includes('transcript') || lower.includes('tor')) {
       const tor = typesList.find((t) => t.code?.toUpperCase() === 'TOR' || t.name.toLowerCase().includes('transcript'));
       if (tor) return tor.id;
@@ -161,13 +179,20 @@ export default function RequestDocumentPage() {
       const ev = typesList.find((t) => t.code?.toUpperCase() === 'EVAL' || t.name.toLowerCase().includes('evaluation'));
       if (ev) return ev.id;
     }
-    if (lower.includes('car')) {
+    if (lower === 'car' || lower === 'certification - car' || lower.includes('- car')) {
       const car = typesList.find((t) => t.code?.toUpperCase() === 'CAR' || t.name.toLowerCase().includes('car'));
       if (car) return car.id;
     }
     if (lower.includes('enrolled') || lower.includes('coe')) {
       const coe = typesList.find((t) => t.code?.toUpperCase() === 'COE' || t.name.toLowerCase().includes('enrolled'));
       if (coe) return coe.id;
+    }
+
+    // 3. For any other Certification options (GPA, Earned Units, Endorsement, Subjects w/ grades, General Certification)
+    // Map to a valid DB credential type (CAR / id: 4 or COE / id: 5) so the backend accepts the foreign key
+    if (lower.includes('cert') || lower.includes('gpa') || lower.includes('unit') || lower.includes('endorsement') || lower.includes('grade') || lower.includes('auth')) {
+      const certType = typesList.find((t) => t.code?.toUpperCase() === 'CAR' || t.code?.toUpperCase() === 'COE' || t.name.toLowerCase().includes('car') || t.name.toLowerCase().includes('enrolled'));
+      if (certType) return certType.id;
     }
 
     const matched = typesList.find((t) => lower.includes(t.name.toLowerCase()) || t.name.toLowerCase().includes(lower));
@@ -209,39 +234,71 @@ export default function RequestDocumentPage() {
       };
     }
 
-    const matched = credentialTypes.find(
-      (t) => (selectedCredTypeId && t.id === selectedCredTypeId) || (t.name && t.name.toLowerCase() === selectedDocName.toLowerCase())
-    );
-    if (matched) {
-      const unitPrice = parseFloat(matched.price) || 0;
-      return {
-        title: matched.name,
-        description: matched.description || 'Official academic credential',
-        unitPrice,
-        totalPrice: unitPrice * copies,
-      };
+    let cleanTitle = selectedDocName;
+    let desc = 'Official academic credential';
+    let unitPrice = 80;
+
+    const lower = selectedDocName.toLowerCase();
+    if (lower.includes('transcript') || lower.includes('tor')) {
+      cleanTitle = 'Transcript of Records (TOR)';
+      desc = 'Official academic record of courses taken and grades earned.';
+      unitPrice = 125;
+    } else if (lower.includes('honorable') || lower.includes('dismissal') || lower.includes('hd')) {
+      cleanTitle = 'Honorable Dismissal';
+      desc = 'Certificate of honorable dismissal and transfer credentials.';
+      unitPrice = 100;
+    } else if (lower.includes('evaluation') || lower.includes('eval')) {
+      cleanTitle = 'Evaluation';
+      desc = 'Curriculum evaluation of academic credits and standing.';
+      unitPrice = 50;
+    } else if (lower.includes('authentication') || lower.includes('auth')) {
+      cleanTitle = 'Authentication';
+      desc = 'Official verification and certified authentication of university records.';
+      unitPrice = 5;
+    } else if (lower.includes('gpa')) {
+      cleanTitle = 'Certification - GPA';
+      desc = 'Official certification of your overall Grade Point Average and academic standing.';
+      unitPrice = 80;
+    } else if (lower.includes('earned') || lower.includes('unit')) {
+      cleanTitle = 'Certification - Earned Units';
+      desc = 'Official certification of academic units completed toward your degree.';
+      unitPrice = 80;
+    } else if (lower.includes('endorsement')) {
+      cleanTitle = 'Certification - Endorsement';
+      desc = 'Official university letter of endorsement for employment, OJT, or scholarships.';
+      unitPrice = 80;
+    } else if (lower.includes('subject') || lower.includes('grade')) {
+      cleanTitle = 'Certification - Subjects w/ grades';
+      desc = 'Official certification of enrolled courses and corresponding grades earned.';
+      unitPrice = 80;
+    } else if (lower.includes('enrolled') || lower.includes('coe')) {
+      cleanTitle = 'Certification - Officially enrolled';
+      desc = 'Certificate verifying active enrollment and academic load for the current semester.';
+      unitPrice = 50;
+    } else if (lower === 'car' || lower === 'certification - car' || lower.includes('- car')) {
+      cleanTitle = 'Certification - CAR';
+      desc = 'Cumulative Academic Record summarizing your complete academic history.';
+      unitPrice = 75;
+    } else if (lower.startsWith('cert')) {
+      cleanTitle = 'Certification (P80)';
+      desc = 'Official university certification for academic or professional use.';
+      unitPrice = 80;
     }
 
-    const priceMatch = selectedDocName.match(/P(\d+)/i);
-    const unitPrice = priceMatch ? parseInt(priceMatch[1], 10) : 80;
-
-    let desc = 'Official academic record';
-    let cleanTitle = selectedDocName;
-    if (selectedDocName.includes('Transcript')) {
-      cleanTitle = 'Transcript of Records (TOR)';
-      desc = 'Official academic record';
-    } else if (selectedDocName.includes('Honorable Dismissal')) {
-      cleanTitle = 'Honorable Dismissal';
-      desc = 'Certificate of honorable dismissal and transfer credentials';
-    } else if (selectedDocName.includes('Evaluation')) {
-      cleanTitle = 'Evaluation';
-      desc = 'Curriculum evaluation of academic credits and standing';
-    } else if (selectedDocName.includes('Authentication')) {
-      cleanTitle = 'Authentication';
-      desc = 'Certified authentication of university records';
-    } else if (selectedDocName.includes('Certification')) {
-      cleanTitle = selectedDocName;
-      desc = 'Official certification of student enrollment and standing';
+    // Check if an exact DB credential type exists matching the chosen name
+    const exactDb = credentialTypes.find((t) => t.name.toLowerCase() === selectedDocName.toLowerCase());
+    if (exactDb) {
+      cleanTitle = exactDb.name;
+      if (exactDb.description) desc = exactDb.description;
+      if (exactDb.price) unitPrice = parseFloat(exactDb.price) || unitPrice;
+    } else {
+      // If user selected a custom DB credential (not one of the certification sub-options)
+      const typeMatch = credentialTypes.find((t) => selectedCredTypeId && t.id === selectedCredTypeId);
+      if (typeMatch && !selectedDocName.includes('Certification - ') && !lower.includes('gpa') && !lower.includes('unit') && !lower.includes('endorsement') && !lower.includes('subject')) {
+        cleanTitle = typeMatch.name;
+        if (typeMatch.description) desc = typeMatch.description;
+        if (typeMatch.price) unitPrice = parseFloat(typeMatch.price) || unitPrice;
+      }
     }
 
     return {
@@ -308,9 +365,9 @@ export default function RequestDocumentPage() {
           const part2El = document.getElementById('ustp-part-2-section');
           if (part2El) {
             part2El.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            part2El.classList.add('ring-2', 'ring-amber-400', 'bg-amber-50/40');
+            part2El.classList.add('ustp-part2-highlight');
             setTimeout(() => {
-              part2El.classList.remove('ring-2', 'ring-amber-400', 'bg-amber-50/40');
+              part2El.classList.remove('ustp-part2-highlight');
             }, 1800);
           }
         };
@@ -398,18 +455,34 @@ export default function RequestDocumentPage() {
           const clRes = await clearancesApi.submit(clearanceFile);
           if (clRes?.id) backendClearanceId = clRes.id;
         } catch (clErr) {
-          console.warn('Backend clearance upload notice:', clErr);
+          console.warn('Backend clearance upload notice (may already be cleared):', clErr);
+          try {
+            const myClearances = await clearancesApi.list();
+            if (Array.isArray(myClearances) && myClearances.length > 0) {
+              backendClearanceId = myClearances[0]?.id;
+            }
+          } catch {}
         }
+      } else {
+        try {
+          const myClearances = await clearancesApi.list();
+          if (Array.isArray(myClearances) && myClearances.length > 0) {
+            backendClearanceId = myClearances[0]?.id;
+          }
+        } catch {}
       }
 
       const targetCredTypeId = selectedCredTypeId || resolveCredentialTypeId(selectedDocName, credentialTypes);
+      const exactDocTitle = currentDocDetails.title || selectedDocName || 'Document Request';
+      const cleanPurpose = purposeInput || purposeOption || 'Official Academic Credential Request';
+      const formattedRemarks = `[${exactDocTitle}] ${cleanPurpose}`;
 
       // Submit directly to backend API so it persists in the database for Admin and Staff
       if (targetCredTypeId) {
         try {
           createdItem = await requestsApi.create({
             credential_type: targetCredTypeId,
-            remarks: purposeInput || purposeOption || 'Academic request',
+            remarks: formattedRemarks,
           });
         } catch (apiErr) {
           console.warn('Backend create request returned validation response:', apiErr);
@@ -438,12 +511,12 @@ export default function RequestDocumentPage() {
         student_id: studentId,
         course: course,
         email: email,
-        credential_type: selectedCredTypeId,
+        credential_type: targetCredTypeId,
         credential_type_details: {
-          name: currentDocDetails.title,
+          name: exactDocTitle,
           price: currentDocDetails.unitPrice,
         },
-        document_type: currentDocDetails.title,
+        document_type: exactDocTitle,
         copies: `${copies} ${copies > 1 ? 'copies' : 'copy'}`,
         amount: `P${currentDocDetails.totalPrice}`,
         price: currentDocDetails.totalPrice,
@@ -451,8 +524,8 @@ export default function RequestDocumentPage() {
         rawStatus: 'PENDING',
         batch_status: 'Pending',
         assigned_staff: '',
-        purpose: purposeInput || purposeOption || 'Official Academic Credential Request',
-        remarks: purposeInput || purposeOption || 'Official Academic Credential Request',
+        purpose: cleanPurpose,
+        remarks: formattedRemarks,
         created_at: new Date().toISOString(),
         request_date: new Date().toISOString().split('T')[0],
         release_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -465,8 +538,39 @@ export default function RequestDocumentPage() {
       };
 
       saveStoredRequest(requestRecord);
+
+      // Cache student profile so Staff and Admin can resolve student details
+      try {
+        const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+        const pObj = {
+          full_name: fullName,
+          first_name: fullName.split(' ')[0] || fullName,
+          last_name: fullName.split(' ').slice(1).join(' ') || '',
+          student_id: studentId,
+          course: course,
+          email: email,
+        };
+        if (studentId) profiles[studentId] = pObj;
+        if (user?.id) profiles[String(user.id)] = pObj;
+        if (user?.username) profiles[user.username] = pObj;
+        localStorage.setItem('regquest_student_profiles', JSON.stringify(profiles));
+      } catch {}
+
       if (clearancePreview) {
-        localStorage.setItem('regquest_latest_clearance_file', clearancePreview);
+        const clMeta = {
+          isPdf: clearanceIsPdf,
+          fileName: clearanceFile?.name || (clearanceIsPdf ? 'Student_Clearance.pdf' : 'Student_Clearance.jpg'),
+        };
+        saveClearanceAttachment(trackingCode, clearancePreview, clMeta);
+        if (studentId) {
+          saveClearanceAttachment(studentId, clearancePreview, clMeta);
+        }
+        if (user?.id) {
+          saveClearanceAttachment(String(user.id), clearancePreview, clMeta);
+        }
+        if (user?.userId) {
+          saveClearanceAttachment(String(user.userId), clearancePreview, clMeta);
+        }
       }
 
       // Create notification for student that document request has been created
@@ -475,6 +579,8 @@ export default function RequestDocumentPage() {
         message: `Your credential request (${trackingCode}) for ${currentDocDetails.title} has been created.`,
         related_object_type: 'CredentialRequest',
         related_object_id: trackingCode,
+        target_role: 'student',
+        target_roles: ['student'],
         target_user_id: user?.userId || user?.id || null,
         target_username: user?.username || fullName,
         target_student_id: studentId || null,
@@ -486,6 +592,7 @@ export default function RequestDocumentPage() {
         message: `New credential request submitted by ${fullName} (${studentId || 'Student'}): ${currentDocDetails.title} (${trackingCode}).`,
         related_object_type: 'CredentialRequest',
         related_object_id: trackingCode,
+        target_role: 'staff',
         target_roles: ['admin', 'staff', 'registrar'],
       });
 
@@ -501,31 +608,23 @@ export default function RequestDocumentPage() {
   };
 
   return (
-    <div className="w-full flex flex-col items-center">
+    <div className="student-page-wrapper">
       <div className="student-page-container">
-        {/* ------------------------------------------------------------------
-            Top Step Progress Bar (Matching Images 1, 3, 4)
-            ------------------------------------------------------------------ */}
         <div className="student-step-nav">
           <div className="student-step-labels">
-            <span className={`student-step-label ${currentStep >= 1 ? 'active font-extrabold text-[#0B0B36]' : ''}`}>
+            <span className={`student-step-label ${currentStep >= 1 ? 'active-step' : ''}`}>
               Select Document
             </span>
-            <span className={`student-step-label ${currentStep >= 2 ? 'active font-extrabold text-[#0B0B36]' : ''}`}>
+            <span className={`student-step-label ${currentStep >= 2 ? 'active-step' : ''}`}>
               Review Data
             </span>
-            <span className={`student-step-label ${currentStep >= 3 ? 'active font-extrabold text-[#0B0B36]' : ''}`}>
+            <span className={`student-step-label ${currentStep >= 3 ? 'active-step' : ''}`}>
               Complete
             </span>
           </div>
 
           <div className="student-step-track">
-            <div
-              className="student-step-fill"
-              style={{
-                width: currentStep === 1 ? '33.3%' : currentStep === 2 ? '66.6%' : '100%',
-              }}
-            />
+            <div className={`student-step-fill step-${currentStep}`} />
           </div>
         </div>
 
@@ -544,7 +643,7 @@ export default function RequestDocumentPage() {
               <div className="ustp-header-text">
                 <h1 className="ustp-univ-title">
                   UNIVERSITY OF SCIENCE AND TECHNOLOGY
-                  <br className="hidden sm:inline" /> OF SOUTHERN PHILIPPINES
+                  <br className="ustp-univ-br" /> OF SOUTHERN PHILIPPINES
                 </h1>
                 <p className="ustp-univ-campuses">
                   Alubijid | Cagayan de Oro | Claveria | Jasaan | Oroquieta | Panaon
@@ -559,51 +658,51 @@ export default function RequestDocumentPage() {
             {/* Outlined Form Container */}
             <form onSubmit={handleProceedToReview} className="ustp-outer-box">
               {/* Row 1: Signature over Printed Name, Course, Date of Request */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700">Signature over Printed Name:</label>
+              <div className="ustp-form-row-3">
+                <div className="ustp-field-wrap">
+                  <label className="ustp-field-label">Signature over Printed Name:</label>
                   <input
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     required
-                    className="ustp-underline-field w-full"
+                    className="ustp-underline-field ustp-flex-1"
                   />
                 </div>
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700">Course:</label>
+                <div className="ustp-field-wrap">
+                  <label className="ustp-field-label">Course:</label>
                   <input
                     type="text"
                     value={course}
                     onChange={(e) => setCourse(e.target.value)}
                     required
-                    className="ustp-underline-field w-full"
+                    className="ustp-underline-field ustp-flex-1"
                   />
                 </div>
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700">Date of Request:</label>
+                <div className="ustp-field-wrap">
+                  <label className="ustp-field-label">Date of Request:</label>
                   <input
                     type="date"
                     value={dateOfRequest}
                     onChange={(e) => setDateOfRequest(e.target.value)}
                     required
-                    className="ustp-underline-field w-full"
+                    className="ustp-underline-field ustp-flex-1"
                   />
                 </div>
               </div>
 
               {/* Row 2: Birth date & Category checkboxes */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700">Birth date:</label>
+              <div className="ustp-form-row-2-items">
+                <div className="ustp-field-wrap">
+                  <label className="ustp-field-label">Birth date:</label>
                   <input
                     type="date"
                     value={birthDate}
                     onChange={(e) => setBirthDate(e.target.value)}
-                    className="ustp-underline-field w-full"
+                    className="ustp-underline-field ustp-flex-1"
                   />
                 </div>
-                <div className="md:col-span-2 flex flex-wrap gap-6 items-center pt-2">
+                <div className="ustp-category-radios">
                   <label className="ustp-checkbox-row">
                     <input
                       type="radio"
@@ -613,7 +712,7 @@ export default function RequestDocumentPage() {
                       onChange={() => setUserCategory('student')}
                       className="ustp-checkbox-input"
                     />
-                    <span className="font-semibold text-slate-800">Student (Undergraduate/Graduate)</span>
+                    <span className="ustp-category-text">Student (Undergraduate/Graduate)</span>
                   </label>
                   <label className="ustp-checkbox-row">
                     <input
@@ -624,7 +723,7 @@ export default function RequestDocumentPage() {
                       onChange={() => setUserCategory('alumnus')}
                       className="ustp-checkbox-input"
                     />
-                    <span className="font-semibold text-slate-800">Alumnus (High School/Undergrad/Graduate)</span>
+                    <span className="ustp-category-text">Alumnus (High School/Undergrad/Graduate)</span>
                   </label>
                 </div>
               </div>
@@ -632,44 +731,44 @@ export default function RequestDocumentPage() {
               <div className="ustp-dashed-divider" />
 
               {/* Part 1 */}
-              <div className="ustp-section-box space-y-2.5">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div className="ustp-section-box">
+                <div className="ustp-part-header">
                   <span className="ustp-section-title">Part 1: Please complete entries below.</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-[11px] text-slate-800">CONTACT NO.:</span>
+                  <div className="ustp-contact-wrap">
+                    <span className="ustp-contact-label">CONTACT NO.:</span>
                     <input
                       type="text"
                       value={contactNo}
                       onChange={(e) => setContactNo(e.target.value)}
-                      className="ustp-underline-field w-36"
+                      className="ustp-underline-field ustp-contact-input"
                     />
                   </div>
                 </div>
 
-                <div className="text-xs space-y-2 pt-1">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                    <span className="text-slate-800">If a graduate, state the <strong>Date of Graduation</strong>:</span>
+                <div className="ustp-part1-entries">
+                  <div className="ustp-part1-row">
+                    <span className="ustp-part1-text">If a graduate, state the <strong>Date of Graduation</strong>:</span>
                     <input
                       type="text"
                       placeholder="e.g. June 2025"
                       value={dateOfGraduation}
                       onChange={(e) => setDateOfGraduation(e.target.value)}
-                      className="ustp-underline-field flex-1"
+                      className="ustp-underline-field ustp-flex-1"
                     />
                   </div>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                    <span className="text-slate-800">If not, state the <strong>Last Semester &amp; SY of Attendance in USTP</strong>:</span>
+                  <div className="ustp-part1-row">
+                    <span className="ustp-part1-text">If not, state the <strong>Last Semester &amp; SY of Attendance in USTP</strong>:</span>
                     <input
                       type="text"
                       value={lastSemAttendance}
                       onChange={(e) => setLastSemAttendance(e.target.value)}
-                      className="ustp-underline-field flex-1"
+                      className="ustp-underline-field ustp-flex-1"
                     />
                   </div>
                 </div>
 
-                <div className="pt-1 text-xs flex flex-wrap gap-4 items-center">
-                  <span className="text-slate-800">Already requested credential/s (as stated below) before:</span>
+                <div className="ustp-part1-prev-wrap">
+                  <span className="ustp-part1-text">Already requested credential/s (as stated below) before:</span>
                   <label className="ustp-checkbox-row">
                     <input
                       type="radio"
@@ -693,23 +792,23 @@ export default function RequestDocumentPage() {
                 </div>
 
                 {alreadyRequested === 'yes' && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pl-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-700">If yes, specify document:</span>
+                  <div className="ustp-part1-prev-details">
+                    <div className="ustp-prev-item">
+                      <span>If yes, specify document:</span>
                       <input
                         type="text"
                         value={prevDocRequested}
                         onChange={(e) => setPrevDocRequested(e.target.value)}
-                        className="ustp-underline-field flex-1"
+                        className="ustp-underline-field ustp-flex-1"
                       />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-700">Date requested:</span>
+                    <div className="ustp-prev-item">
+                      <span>Date requested:</span>
                       <input
                         type="text"
                         value={prevDateRequested}
                         onChange={(e) => setPrevDateRequested(e.target.value)}
-                        className="ustp-underline-field flex-1"
+                        className="ustp-underline-field ustp-flex-1"
                       />
                     </div>
                   </div>
@@ -717,16 +816,14 @@ export default function RequestDocumentPage() {
 
                 <div
                   id="ustp-clearance-section"
-                  className={`pt-1 text-xs space-y-2 transition-all rounded ${
-                    clearanceError ? 'p-2.5 bg-amber-50 border border-amber-300' : ''
-                  }`}
+                  className={`ustp-clearance-section ${clearanceError ? 'has-error' : ''}`}
                 >
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-slate-900 block text-xs">Cleared?</span>
-                    <span className="text-red-500 font-bold">*</span>
+                  <div className="ustp-clearance-header">
+                    <span className="ustp-clearance-heading">Cleared?</span>
+                    <span className="ustp-req-star">*</span>
                   </div>
 
-                  <div className="pl-3 space-y-1.5">
+                  <div className="ustp-clearance-radios">
                     <label className="ustp-checkbox-row">
                       <input
                         type="radio"
@@ -758,52 +855,52 @@ export default function RequestDocumentPage() {
                   </div>
 
                   {isCleared === 'no' && (
-                    <div className="ml-3 mt-1.5 p-2 bg-red-50 border border-red-200 rounded text-[11px] text-red-700 font-semibold flex items-center gap-1.5">
+                    <div className="ustp-alert-banner danger">
                       <span>⚠️ Cannot proceed: You must avail of the clearance form and obtain clearance first.</span>
                     </div>
                   )}
 
                   {clearanceError && isCleared === 'yes' && !clearanceFile && !clearancePreview && (
-                    <div className="ml-3 mt-1.5 p-2 bg-amber-100 border border-amber-300 rounded text-[11px] text-amber-900 font-semibold flex items-center gap-1.5">
+                    <div className="ustp-alert-banner warning">
                       <span>⚠️ Clearance document is required. Please click "Attach clearance here" below.</span>
                     </div>
                   )}
 
                   {/* "Attach clearance here" on the Cleared? question */}
                   {isCleared === 'yes' && (
-                    <div className="ml-3 mt-2">
+                    <div className="ustp-clearance-attachment-box">
                       {clearanceFile || clearancePreview ? (
-                        <div className="p-3 bg-white border border-emerald-300 rounded-xl shadow-xs space-y-2.5 max-w-md">
+                        <div className="ustp-attached-card">
                           {/* Top: Attached Photo / Document Preview */}
-                          <div className="flex items-center gap-3">
+                          <div className="ustp-attached-media">
                             {clearanceIsPdf || clearanceFile?.name?.toLowerCase().endsWith('.pdf') ? (
-                              <div className="w-12 h-12 rounded-lg bg-red-100 text-red-700 flex flex-col items-center justify-center font-extrabold text-[10px] flex-shrink-0 border border-red-200">
-                                <span className="text-sm">📄</span>
+                              <div className="ustp-pdf-badge">
+                                <span className="ustp-pdf-icon">📄</span>
                                 <span>PDF</span>
                               </div>
                             ) : clearancePreview ? (
                               <img
                                 src={clearancePreview}
                                 alt="Clearance Preview"
-                                className="w-14 h-14 rounded-lg object-cover border border-slate-200 flex-shrink-0 shadow-xs"
+                                className="ustp-img-preview"
                               />
                             ) : (
-                              <div className="w-12 h-12 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-sm flex-shrink-0">
-                                📄
+                              <div className="ustp-pdf-badge">
+                                <span>📄</span>
                               </div>
                             )}
-                            <div className="flex flex-col min-w-0">
-                              <span className="font-bold text-slate-800 text-xs truncate">
+                            <div className="ustp-attached-text">
+                              <span className="ustp-attached-filename">
                                 {clearanceFile?.name || 'Clearance Document'}
                               </span>
-                              <span className="text-[11px] text-emerald-700 font-bold flex items-center gap-1 mt-0.5">
+                              <span className="ustp-attached-status">
                                 <span>✓ Attached Photo / Document</span>
                                 {clearancePreview && (
                                   <a
                                     href={clearancePreview}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="text-indigo-600 hover:underline font-semibold ml-1"
+                                    className="ustp-preview-link"
                                   >
                                     (Preview)
                                   </a>
@@ -812,21 +909,21 @@ export default function RequestDocumentPage() {
                             </div>
                           </div>
 
-                          {/* Action Buttons Row - Placed BELOW the attached photo */}
-                          <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
-                            <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg font-bold text-xs shadow-xs transition-all">
+                          {/* Action Buttons Row */}
+                          <div className="ustp-attached-actions">
+                            <label className="ustp-btn-change">
                               <span>Change Photo / File</span>
                               <input
                                 type="file"
                                 accept="application/pdf,image/png,image/jpeg,image/jpg"
                                 onChange={handleClearanceUpload}
-                                className="hidden"
+                                className="ustp-file-input-hidden"
                               />
                             </label>
                             <button
                               type="button"
                               onClick={handleRemoveClearance}
-                              className="px-2.5 py-1 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer"
+                              className="ustp-btn-remove"
                               title="Remove clearance document"
                             >
                               Remove
@@ -834,9 +931,9 @@ export default function RequestDocumentPage() {
                           </div>
                         </div>
                       ) : (
-                        <div className="flex flex-wrap items-center gap-3">
-                          <label className="ustp-attach-clearance-btn cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-[#0b0b36] border-2 border-dashed border-amber-400 hover:border-amber-500 rounded-lg font-bold text-xs shadow-xs transition-all active:scale-95">
-                            <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="ustp-upload-trigger-wrap">
+                          <label className="ustp-attach-clearance-btn">
+                            <svg className="ustp-attach-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                             </svg>
                             <span>Attach clearance here</span>
@@ -844,10 +941,10 @@ export default function RequestDocumentPage() {
                               type="file"
                               accept="application/pdf,image/png,image/jpeg,image/jpg"
                               onChange={handleClearanceUpload}
-                              className="hidden"
+                              className="ustp-file-input-hidden"
                             />
                           </label>
-                          <span className={`text-[11px] ${clearanceError ? 'text-amber-800 font-bold' : 'text-slate-500 italic'}`}>
+                          <span className={`ustp-attach-hint ${clearanceError ? 'error' : ''}`}>
                             * Attach clearance PDF or image here (Required)
                           </span>
                         </div>
@@ -858,16 +955,16 @@ export default function RequestDocumentPage() {
               </div>
 
               {/* Part 2: Please check the document/s you need */}
-              <div id="ustp-part-2-section" className="ustp-section-box space-y-2.5 transition-all scroll-mt-20">
+              <div id="ustp-part-2-section" className="ustp-part2-box">
                 <span className="ustp-section-title">Part 2: Please check the document/s you need.</span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-1">
+                <div className="ustp-part2-grid">
                   {/* Column 1 */}
-                  <div className="space-y-2">
+                  <div className="ustp-doc-col">
                     {/* Evaluation */}
                     {(() => {
                       const isSelected = Boolean(selectedDocName) && (selectedDocName === 'Evaluation (P50)' || selectedDocName.toLowerCase().includes('evaluation') || selectedDocName.toLowerCase() === 'eval');
                       return (
-                        <label className={`ustp-checkbox-row transition-all duration-150 ${isSelected ? 'bg-amber-100/80 border border-amber-400 font-bold text-slate-950 p-1.5 rounded-md shadow-xs' : 'p-1 hover:bg-slate-50 rounded'}`}>
+                        <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
                           <input
                             type="radio"
                             name="selectedDoc"
@@ -884,7 +981,7 @@ export default function RequestDocumentPage() {
                     {(() => {
                       const isSelected = Boolean(selectedDocName) && (selectedDocName === 'Honorable Dismissal (P100)' || selectedDocName.toLowerCase().includes('honorable') || selectedDocName.toLowerCase().includes('dismissal') || selectedDocName.toLowerCase() === 'hd');
                       return (
-                        <label className={`ustp-checkbox-row transition-all duration-150 ${isSelected ? 'bg-amber-100/80 border border-amber-400 font-bold text-slate-950 p-1.5 rounded-md shadow-xs' : 'p-1 hover:bg-slate-50 rounded'}`}>
+                        <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
                           <input
                             type="radio"
                             name="selectedDoc"
@@ -901,7 +998,7 @@ export default function RequestDocumentPage() {
                     {(() => {
                       const isSelected = Boolean(selectedDocName) && (selectedDocName.toLowerCase().includes('transcript') || selectedDocName.toLowerCase().includes('tor'));
                       return (
-                        <label className={`ustp-checkbox-row transition-all duration-150 ${isSelected ? 'bg-amber-100/80 border border-amber-400 font-bold text-slate-950 p-1.5 rounded-md shadow-xs' : 'p-1 hover:bg-slate-50 rounded'}`}>
+                        <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
                           <input
                             type="radio"
                             name="selectedDoc"
@@ -918,7 +1015,7 @@ export default function RequestDocumentPage() {
                     {(() => {
                       const isSelected = Boolean(selectedDocName) && (selectedDocName.toLowerCase().includes('authentication') || selectedDocName.toLowerCase().includes('auth'));
                       return (
-                        <label className={`ustp-checkbox-row transition-all duration-150 ${isSelected ? 'bg-amber-100/80 border border-amber-400 font-bold text-slate-950 p-1.5 rounded-md shadow-xs' : 'p-1 hover:bg-slate-50 rounded'}`}>
+                        <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
                           <input
                             type="radio"
                             name="selectedDoc"
@@ -931,7 +1028,7 @@ export default function RequestDocumentPage() {
                       );
                     })()}
 
-                    {/* Extra Dynamic Credentials from Database (avoiding duplicates of standard items above) */}
+                    {/* Extra Dynamic Credentials from Database */}
                     {credentialTypes
                       .filter((ctype) => {
                         const n = (ctype.name || '').toLowerCase();
@@ -957,9 +1054,7 @@ export default function RequestDocumentPage() {
                         return (
                           <label
                             key={ctype.id}
-                            className={`ustp-checkbox-row transition-all duration-150 ${
-                              isSelected ? 'bg-amber-100/80 border border-amber-400 font-bold text-slate-950 p-1.5 rounded-md shadow-xs' : 'p-1 hover:bg-slate-50 rounded'
-                            }`}
+                            className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}
                           >
                             <input
                               type="radio"
@@ -968,7 +1063,7 @@ export default function RequestDocumentPage() {
                               onChange={() => handleDocumentSelect(ctype.name, ctype.id)}
                               className="ustp-checkbox-input"
                             />
-                            <span className="font-medium text-indigo-950">
+                            <span className="ustp-dynamic-cred-name">
                               {ctype.name} (P{parseFloat(ctype.price).toFixed(0)})
                             </span>
                           </label>
@@ -977,12 +1072,12 @@ export default function RequestDocumentPage() {
                   </div>
 
                   {/* Column 2: Certification and Sub-items */}
-                  <div className="space-y-2">
+                  <div className="ustp-doc-col">
                     {/* General Certification */}
                     {(() => {
                       const isCertGeneralSelected = Boolean(selectedDocName) && (selectedDocName === 'Certification (P80)' || selectedDocName === 'Certification');
                       return (
-                        <label className={`ustp-checkbox-row font-semibold transition-all duration-150 ${isCertGeneralSelected ? 'bg-amber-100/80 border border-amber-400 font-bold text-slate-950 p-1.5 rounded-md shadow-xs' : 'p-1 hover:bg-slate-50 rounded'}`}>
+                        <label className={`ustp-doc-label ${isCertGeneralSelected ? 'selected' : ''}`}>
                           <input
                             type="radio"
                             name="selectedDoc"
@@ -996,7 +1091,7 @@ export default function RequestDocumentPage() {
                     })()}
 
                     {/* Specific Certification Sub-options */}
-                    <div className="grid grid-cols-2 gap-2 pl-6 pt-1 text-[11px]">
+                    <div className="ustp-cert-subgrid">
                       {[
                         { label: 'CAR', key: 'CAR' },
                         { label: 'Officially enrolled', key: 'Officially enrolled' },
@@ -1020,11 +1115,7 @@ export default function RequestDocumentPage() {
                         return (
                           <label
                             key={cert.key}
-                            className={`ustp-checkbox-row transition-all duration-150 ${
-                              isSubSelected
-                                ? 'bg-amber-100 border border-amber-400 font-extrabold text-[#0B0B36] px-2 py-1 rounded-md shadow-xs'
-                                : 'p-1 hover:bg-slate-50 rounded'
-                            }`}
+                            className={`ustp-cert-subitem ${isSubSelected ? 'selected' : ''}`}
                           >
                             <input
                               type="radio"
@@ -1043,13 +1134,13 @@ export default function RequestDocumentPage() {
               </div>
 
               {/* Part 3: Purpose of Request */}
-              <div className="ustp-section-box space-y-2.5">
+              <div className="ustp-section-box">
                 <span className="ustp-section-title">Part 3: Please check the purpose of your request.</span>
                 
                 {/* 2-Column layout matching the original form */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs pt-1">
+                <div className="ustp-purpose-grid">
                   {/* Left Column */}
-                  <div className="space-y-2">
+                  <div className="ustp-purpose-col">
                     {['For Evaluation', 'For Scholarship', 'For Passport', 'For Board Exam'].map((p) => (
                       <label key={p} className="ustp-checkbox-row">
                         <input
@@ -1065,7 +1156,7 @@ export default function RequestDocumentPage() {
                   </div>
 
                   {/* Right Column */}
-                  <div className="space-y-2">
+                  <div className="ustp-purpose-col">
                     {['For Employment', 'For Personal File', 'For Advanced Studies', 'For Ranking'].map((p) => (
                       <label key={p} className="ustp-checkbox-row">
                         <input
@@ -1082,8 +1173,8 @@ export default function RequestDocumentPage() {
                 </div>
 
                 {/* Others (Specify) */}
-                <div className="flex items-center gap-2 pt-2 text-xs">
-                  <label className="ustp-checkbox-row whitespace-nowrap">
+                <div className="ustp-purpose-other-row">
+                  <label className="ustp-checkbox-row">
                     <input
                       type="radio"
                       name="purposeSelection"
@@ -1101,52 +1192,51 @@ export default function RequestDocumentPage() {
                       setPurposeInput(e.target.value);
                     }}
                     placeholder="Specify other purpose..."
-                    className="ustp-underline-field flex-1"
+                    className="ustp-underline-field ustp-flex-1"
                   />
                 </div>
 
                 {/* Note */}
-                <p className="text-[10px] text-slate-600 italic pt-1 leading-normal">
+                <p className="ustp-purpose-note">
                   <strong>Note:</strong> For board exam requests, please attach a passport sized picture (person in photo wears a blouse with collar/collared polo; with name tag and photo must be in white background)
                 </p>
 
                 {/* Photo Upload Section */}
                 <div className="ustp-upload-section">
                   {photoFile ? (
-                    <div className="p-3 bg-white border border-slate-300 rounded-xl shadow-xs space-y-2.5 max-w-md">
-                      <div className="flex items-center gap-3">
+                    <div className="ustp-photo-attached-card">
+                      <div className="ustp-attached-media">
                         {photoPreview && (
                           <img
                             src={photoPreview}
                             alt="Uploaded Preview"
-                            className="w-14 h-14 rounded-lg object-cover border border-slate-200 shadow-xs shrink-0"
+                            className="ustp-img-preview"
                           />
                         )}
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-bold text-slate-800 text-xs truncate">
+                        <div className="ustp-attached-text">
+                          <span className="ustp-attached-filename">
                             {photoFile.name}
                           </span>
-                          <span className="text-[11px] text-emerald-700 font-semibold mt-0.5">
+                          <span className="ustp-attached-status">
                             ✓ Attached 2x2 / Passport Photo
                           </span>
                         </div>
                       </div>
 
-                      {/* Action button placed BELOW the attached photo */}
-                      <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
-                        <label className="cursor-pointer inline-flex items-center gap-1 px-3 py-1 bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg font-bold text-xs shadow-xs transition-all">
+                      <div className="ustp-attached-actions">
+                        <label className="ustp-btn-change">
                           <span>Change Photo</span>
                           <input
                             type="file"
                             accept="image/*"
                             onChange={handlePhotoUpload}
-                            className="hidden"
+                            className="ustp-file-input-hidden"
                           />
                         </label>
                         <button
                           type="button"
                           onClick={handleRemovePhoto}
-                          className="px-2.5 py-1 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer"
+                          className="ustp-btn-remove"
                           title="Remove photo"
                         >
                           Remove Photo
@@ -1154,7 +1244,7 @@ export default function RequestDocumentPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="ustp-upload-trigger-wrap">
                       <label className="ustp-upload-btn">
                         <svg className="ustp-upload-btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1164,7 +1254,7 @@ export default function RequestDocumentPage() {
                           type="file"
                           accept="image/*"
                           onChange={handlePhotoUpload}
-                          className="hidden"
+                          className="ustp-file-input-hidden"
                         />
                       </label>
                       <span className="ustp-upload-hint">
@@ -1176,43 +1266,43 @@ export default function RequestDocumentPage() {
               </div>
 
               {/* Front Desk / Administrative Sign-Off */}
-              <div className="space-y-3 pt-2 text-slate-800 text-[11px]">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <span className="font-bold whitespace-nowrap">Verified:</span>
-                  <span className="border-b border-slate-700 flex-1 min-w-[140px] h-4"></span>
-                  <span className="text-[11px] text-slate-700 whitespace-nowrap">Name &amp; Signature of Front Desk Personnel</span>
+              <div className="ustp-signoff-section">
+                <div className="ustp-signoff-verified-row">
+                  <span className="ustp-signoff-label">Verified:</span>
+                  <span className="ustp-signoff-underline"></span>
+                  <span className="ustp-signoff-subtext">Name &amp; Signature of Front Desk Personnel</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-                  <div className="space-y-0.5 text-center sm:text-left">
-                    <span className="font-bold block text-left">Approved:</span>
-                    <div className="pl-6 pt-1">
-                      <p className="font-extrabold text-xs text-slate-900 tracking-wide">Jonalin T. Lagrada, MPSM</p>
-                      <p className="text-[11px] text-slate-600">University Registrar</p>
+                <div className="ustp-signoff-officials-grid">
+                  <div className="ustp-signoff-approved">
+                    <span className="ustp-signoff-label">Approved:</span>
+                    <div className="ustp-registrar-name">
+                      <p className="ustp-registrar-title">Jonalin T. Lagrada, MPSM</p>
+                      <p className="ustp-registrar-role">University Registrar</p>
                     </div>
                   </div>
-                  <div className="flex flex-col items-center sm:items-end">
-                    <div className="w-48 border-b border-slate-700 h-6"></div>
-                    <span className="text-[11px] text-slate-700 pt-1">Cashier</span>
+                  <div className="ustp-signoff-cashier">
+                    <div className="ustp-cashier-line"></div>
+                    <span className="ustp-signoff-subtext">Cashier</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-                  <div className="flex items-center gap-1">
-                    <span className="font-bold">Amount:</span>
-                    <span className="border-b border-slate-700 flex-1 h-4"></span>
+                <div className="ustp-receipt-row">
+                  <div className="ustp-receipt-field">
+                    <span className="ustp-receipt-label">Amount:</span>
+                    <span className="ustp-receipt-line"></span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span className="font-bold">O.R. No.:</span>
-                    <span className="border-b border-slate-700 flex-1 h-4"></span>
+                  <div className="ustp-receipt-field">
+                    <span className="ustp-receipt-label">O.R. No.:</span>
+                    <span className="ustp-receipt-line"></span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span className="font-bold">Payment Date:</span>
-                    <span className="border-b border-slate-700 flex-1 h-4"></span>
+                  <div className="ustp-receipt-field">
+                    <span className="ustp-receipt-label">Payment Date:</span>
+                    <span className="ustp-receipt-line"></span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span className="font-bold">Date of Release:</span>
-                    <span className="border-b border-slate-700 flex-1 h-4"></span>
+                  <div className="ustp-receipt-field">
+                    <span className="ustp-receipt-label">Date of Release:</span>
+                    <span className="ustp-receipt-line"></span>
                   </div>
                 </div>
               </div>
@@ -1227,9 +1317,7 @@ export default function RequestDocumentPage() {
           </div>
         )}
 
-        {/* ------------------------------------------------------------------
-            STEP 2: Review Data (Image 3)
-            ------------------------------------------------------------------ */}
+        {/* STEP 2: Review Data (Image 3) */}
         {currentStep === 2 && (
           <div className="review-card">
             <h2 className="review-main-title">Review Data</h2>
@@ -1239,25 +1327,25 @@ export default function RequestDocumentPage() {
                 {/* Document Request */}
                 <div>
                   <h3 className="review-sub-title">Document Request:</h3>
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div className="review-doc-header">
                     <div>
-                      <h4 className="text-base font-bold text-slate-900">{currentDocDetails.title}</h4>
-                      <p className="text-xs text-slate-500">{currentDocDetails.description}</p>
+                      <h4 className="review-doc-name">{currentDocDetails.title}</h4>
+                      <p className="review-doc-sub">{currentDocDetails.description}</p>
                       {currentDocDetails.unitPrice > 0 && (
-                        <p className="text-xs font-semibold text-indigo-950 mt-1">
+                        <p className="review-doc-pricing">
                           ₱{currentDocDetails.unitPrice.toFixed(2)} per copy
                           {copies > 1 && ` • Estimated Total: ₱${currentDocDetails.totalPrice.toFixed(2)}`}
                         </p>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-slate-700">Number of copies</span>
+                    <div className="review-copies-control">
+                      <span className="review-copies-label">Number of copies</span>
                       <div className="review-copies-stepper">
                         <button
                           type="button"
                           onClick={() => setCopies((c) => Math.max(1, c - 1))}
-                          className="px-1 text-slate-600 font-bold hover:text-black cursor-pointer"
+                          className="review-stepper-btn"
                         >
                           -
                         </button>
@@ -1271,7 +1359,7 @@ export default function RequestDocumentPage() {
                         <button
                           type="button"
                           onClick={() => setCopies((c) => Math.min(10, c + 1))}
-                          className="px-1 text-slate-600 font-bold hover:text-black cursor-pointer"
+                          className="review-stepper-btn"
                         >
                           +
                         </button>
@@ -1285,9 +1373,9 @@ export default function RequestDocumentPage() {
                 {/* Personal Data */}
                 <div>
                   <h3 className="review-sub-title">Personal Data:</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="review-fields-grid">
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Full Name</label>
+                      <label className="review-input-label">Full Name</label>
                       <input
                         type="text"
                         value={fullName}
@@ -1297,7 +1385,7 @@ export default function RequestDocumentPage() {
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Year Level</label>
+                      <label className="review-input-label">Year Level</label>
                       <input
                         type="text"
                         value={yearLevel}
@@ -1308,7 +1396,7 @@ export default function RequestDocumentPage() {
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Student ID</label>
+                      <label className="review-input-label">Student ID</label>
                       <input
                         type="text"
                         value={studentId}
@@ -1318,7 +1406,7 @@ export default function RequestDocumentPage() {
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Email</label>
+                      <label className="review-input-label">Email</label>
                       <input
                         type="email"
                         value={email}
@@ -1327,8 +1415,8 @@ export default function RequestDocumentPage() {
                       />
                     </div>
 
-                    <div className="sm:col-span-2">
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Program / Course</label>
+                    <div className="review-field-span-2">
+                      <label className="review-input-label">Program / Course</label>
                       <input
                         type="text"
                         value={course}
@@ -1338,7 +1426,7 @@ export default function RequestDocumentPage() {
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Contact No.</label>
+                      <label className="review-input-label">Contact No.</label>
                       <input
                         type="text"
                         value={contactNo}
@@ -1348,7 +1436,7 @@ export default function RequestDocumentPage() {
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Birth Date</label>
+                      <label className="review-input-label">Birth Date</label>
                       <input
                         type="date"
                         value={birthDate}
@@ -1358,24 +1446,24 @@ export default function RequestDocumentPage() {
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Category</label>
+                      <label className="review-input-label">Category</label>
                       <input
                         type="text"
                         value={userCategory === 'alumnus' ? 'Alumnus (High School/Undergraduate/Graduate)' : 'Student (Undergraduate/Graduate)'}
                         readOnly
-                        className="review-pill-input bg-slate-50 cursor-default"
+                        className="review-pill-input readonly"
                       />
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                      <label className="review-input-label">
                         {userCategory === 'alumnus' || dateOfGraduation ? 'Date of Graduation' : 'Last Semester of Attendance'}
                       </label>
                       <input
                         type="text"
                         value={dateOfGraduation || lastSemAttendance || '2nd Sem, AY 2025-2026'}
                         readOnly
-                        className="review-pill-input bg-slate-50 cursor-default"
+                        className="review-pill-input readonly"
                       />
                     </div>
                   </div>
@@ -1387,8 +1475,8 @@ export default function RequestDocumentPage() {
                 <div>
                   <h3 className="review-sub-title">Purpose of Request:</h3>
                   <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Purpose of the request <span className="text-red-500">*</span>
+                    <label className="review-input-label">
+                      Purpose of the request <span className="review-req-star">*</span>
                     </label>
                     <input
                       type="text"
@@ -1423,8 +1511,8 @@ export default function RequestDocumentPage() {
                           <div className="review-attached-card">
                             <div className="review-attached-media">
                               {clearanceIsPdf || clearanceFile?.name?.toLowerCase().endsWith('.pdf') ? (
-                                <div className="w-16 h-16 rounded-lg bg-red-100 text-red-700 flex flex-col items-center justify-center font-bold text-xs shrink-0 border border-red-200">
-                                  <span className="text-base">📄</span>
+                                <div className="review-pdf-badge">
+                                  <span className="review-pdf-icon">📄</span>
                                   <span>PDF</span>
                                 </div>
                               ) : (
@@ -1452,7 +1540,7 @@ export default function RequestDocumentPage() {
                                   type="file"
                                   accept="application/pdf,image/png,image/jpeg,image/jpg"
                                   onChange={handleClearanceUpload}
-                                  className="hidden"
+                                  className="ustp-file-input-hidden"
                                 />
                               </label>
                               <button
@@ -1493,7 +1581,7 @@ export default function RequestDocumentPage() {
                                   type="file"
                                   accept="image/*"
                                   onChange={handlePhotoUpload}
-                                  className="hidden"
+                                  className="ustp-file-input-hidden"
                                 />
                               </label>
                               <button
@@ -1547,7 +1635,7 @@ export default function RequestDocumentPage() {
           <div className="complete-card">
             {/* Green Check Circle */}
             <div className="complete-icon-circle">
-              <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="complete-icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
               </svg>
             </div>

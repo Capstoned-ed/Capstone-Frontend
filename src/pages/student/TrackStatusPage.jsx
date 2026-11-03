@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import requestsApi from '../../api/requests';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import requestsApi, { resolveRequestDocType } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
 import '../../styles/student/TrackStatusPage.css';
 
 const DEFAULT_TIMELINE_STEPS = [
-  { id: 'pending', name: 'Pending', label: 'Request Submitted' },
-  { id: 'processing', name: 'Processing', label: 'Document Preparation' },
-  { id: 'for_release', name: 'For release', label: 'Ready for Release' },
-  { id: 'claimed', name: 'Claimed', label: 'Claimed / Released' },
+  { id: 'pending', name: 'Pending', label: 'Review & Clearance Verification' },
+  { id: 'pending_payment', name: 'For Payment', label: 'Pay at Cashier & Submit OR' },
+  { id: 'for_processing', name: 'For Processing', label: 'Payment Verified by Staff' },
+  { id: 'processing', name: 'Processing', label: 'Document Preparation & Printing' },
+  { id: 'releasing', name: 'Releasing', label: 'Ready for Claiming' },
 ];
 
 function formatStatusDisplay(rawStatus) {
@@ -23,12 +24,22 @@ function formatStatusDisplay(rawStatus) {
     case 'RECEIVED':
     case 'REQUEST SUBMITTED':
       return 'Pending';
+    case 'FOR_PAYMENT':
+    case 'FOR PAYMENT':
+    case 'PAYMENT_PENDING':
+    case 'PAYMENT PENDING':
+    case 'PENDING_PAYMENT':
+    case 'PENDING PAYMENT':
+    case 'CLEARED FOR PAYMENT':
+      return 'For Payment';
+    case 'PAYMENT_VERIFIED':
+    case 'PAYMENT VERIFIED':
+    case 'FOR_PROCESSING':
+    case 'FOR PROCESSING':
+      return 'For Processing';
     case 'PROCESSING':
     case 'DOCUMENT_PREPARATION':
     case 'DOCUMENT PREPARATION':
-    case 'RELEASE_SCHEDULE_CONFIRMED':
-    case 'SCHEDULE_CONFIRMED':
-    case 'RELEASE SCHEDULE CONFIRMED':
       return 'Processing';
     case 'READY_FOR_RELEASE':
     case 'READY FOR RELEASE':
@@ -36,7 +47,8 @@ function formatStatusDisplay(rawStatus) {
     case 'READY FOR PICKUP':
     case 'FOR_RELEASE':
     case 'FOR RELEASE':
-      return 'For release';
+    case 'RELEASING':
+      return 'Releasing';
     case 'RELEASED':
     case 'CLAIMED':
     case 'CLAIMED / RELEASED':
@@ -47,8 +59,6 @@ function formatStatusDisplay(rawStatus) {
     case 'HOLD':
     case 'REQUIREMENTS_VERIFICATION':
     case 'CLEARANCE_VERIFIED':
-    case 'PAYMENT_PENDING':
-    case 'PAYMENT_VERIFIED':
     case 'CANCELLED':
     case 'REJECTED':
       return 'On Hold';
@@ -194,14 +204,20 @@ export default function TrackStatusPage() {
     return displayStatus === 'On Hold';
   }, [displayStatus]);
 
-  // Step Index for Timeline (0 to 3)
+  // Step Index for 5-Step Timeline (0 to 4)
   const currentStepIndex = useMemo(() => {
     switch (displayStatus) {
       case 'Claimed':
-        return 3;
+      case 'Released':
+        return 5;
+      case 'Releasing':
       case 'For release':
-        return 2;
+        return 4;
       case 'Processing':
+        return 3;
+      case 'For Processing':
+        return 2;
+      case 'Pending Payment':
         return 1;
       case 'Pending':
       default:
@@ -286,7 +302,7 @@ export default function TrackStatusPage() {
                 const code = req.tracking_number || req.trackingId || String(req.id);
                 const isActive = activeTrackingId.toUpperCase() === code.toUpperCase();
                 const cred = credTypeMap.get(req.credential_type);
-                const docTitle = req.document_type || cred?.name || req.credential_type_details?.name || 'Document';
+                const docTitle = resolveRequestDocType(req, cred);
                 const status = formatStatusDisplay(req.status);
 
                 return (
@@ -304,10 +320,14 @@ export default function TrackStatusPage() {
                         ? 'on-hold'
                         : status === 'Claimed'
                         ? 'claimed'
-                        : status === 'For release'
-                        ? 'for-release'
+                        : status === 'Releasing' || status === 'For release'
+                        ? 'releasing'
                         : status === 'Processing'
                         ? 'processing'
+                        : status === 'For Processing'
+                        ? 'for-processing'
+                        : status === 'Pending Payment'
+                        ? 'payment-pending'
                         : 'pending'
                     }`}>
                       {status}
@@ -366,7 +386,7 @@ export default function TrackStatusPage() {
           </div>
         )}
 
-        {/* Case 1: Matched Request Display */}
+        {/* Case 1: Matched Request Display - Tracking Status Only */}
         {matchedRequest ? (
           <div className="track-timeline-card">
             {/* Header Row: Tracking ID on left, Estimate Completion on right */}
@@ -388,12 +408,16 @@ export default function TrackStatusPage() {
                   <span className={`status-pill ${
                     isOnHold
                       ? 'on-hold'
-                      : currentStepIndex === 3
+                      : displayStatus === 'Claimed'
                       ? 'claimed'
-                      : currentStepIndex === 2
-                      ? 'for-release'
-                      : currentStepIndex === 1
+                      : displayStatus === 'Releasing'
+                      ? 'releasing'
+                      : displayStatus === 'Processing'
                       ? 'processing'
+                      : displayStatus === 'For Processing'
+                      ? 'for-processing'
+                      : displayStatus === 'Pending Payment'
+                      ? 'payment-pending'
                       : 'pending'
                   }`}>
                     {displayStatus}
@@ -410,8 +434,8 @@ export default function TrackStatusPage() {
             <div className="track-info-grid">
               <div className="track-info-item">
                 <span className="track-info-lbl">Document Requested</span>
-                <span className="track-info-val" title={matchedRequest.document_type || matchedCred?.name || 'Document'}>
-                  {matchedRequest.document_type || matchedCred?.name || 'Document Request'}
+                <span className="track-info-val" title={resolveRequestDocType(matchedRequest, matchedCred)}>
+                  {resolveRequestDocType(matchedRequest, matchedCred)}
                 </span>
               </div>
               <div className="track-info-item">
@@ -423,7 +447,7 @@ export default function TrackStatusPage() {
               <div className="track-info-item">
                 <span className="track-info-lbl">Amount Due / Paid</span>
                 <span className="track-info-val text-[#0B0B36]">
-                  {matchedRequest.amount || (matchedCred?.price ? `₱${parseFloat(matchedCred.price).toFixed(0)}` : '₱0')}
+                  {matchedRequest.assessed_amount || matchedRequest.amount || (matchedCred?.price ? `₱${parseFloat(matchedCred.price).toFixed(0)}` : '₱100.00')}
                 </span>
               </div>
               <div className="track-info-item">
@@ -434,7 +458,7 @@ export default function TrackStatusPage() {
               </div>
             </div>
 
-            {/* Vertical Timeline */}
+            {/* Vertical Status Timeline Only */}
             <div className="track-timeline">
               {DEFAULT_TIMELINE_STEPS.map((step, index) => {
                 const isPastOrCurrent = index <= currentStepIndex;
@@ -444,49 +468,69 @@ export default function TrackStatusPage() {
                 let stepDesc = '';
 
                 if (index === 0) {
-                  // Step 0: Pending / Submitted
-                  dateText = matchedRequest.created_at
-                    ? new Date(matchedRequest.created_at).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })
-                    : 'Submitted';
-                  stepDesc = 'Request submitted to registrar queue.';
+                  // Step 0: Pending (Review & Clearance Verification)
+                  if (currentStepIndex > 0) {
+                    dateText = 'Verified';
+                    stepDesc = 'Clearance reviewed and verified by Registrar Staff.';
+                  } else {
+                    dateText = matchedRequest.created_at
+                      ? new Date(matchedRequest.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })
+                      : 'Submitted';
+                    stepDesc = 'Request submitted. Staff is verifying uploaded clearance and calculating payment fee.';
+                  }
                 } else if (index === 1) {
-                  // Step 1: Processing
+                  // Step 1: Pending Payment (Pay at Cashier & Submit OR)
                   if (currentStepIndex > 1) {
+                    dateText = 'Verified';
+                    stepDesc = 'Payment completed at Cashier and Official Receipt submitted.';
+                  } else if (isCurrent) {
+                    dateText = 'Ready for Payment';
+                    stepDesc = 'Clearance verified. Awaiting Cashier payment and payment verification.';
+                  } else {
+                    dateText = 'Pending Approval';
+                    stepDesc = 'Awaiting clearance verification and payment assessment by Staff.';
+                  }
+                } else if (index === 2) {
+                  // Step 2: For Processing (Payment Verified by Staff)
+                  if (currentStepIndex > 2) {
+                    dateText = 'Verified';
+                    stepDesc = 'Official Receipt verified by Staff. Document preparation queued.';
+                  } else if (isCurrent) {
+                    dateText = 'Payment Verified';
+                    stepDesc = 'Staff verified Official Receipt. Request queued for document processing.';
+                  } else {
+                    dateText = 'Awaiting Payment';
+                    stepDesc = 'Staff verification of Official Receipt is strictly required.';
+                  }
+                } else if (index === 3) {
+                  // Step 3: Processing (Document Preparation & Printing)
+                  if (currentStepIndex > 3) {
                     dateText = 'Completed';
-                    stepDesc = 'Documents verified and prepared.';
+                    stepDesc = 'Credential document prepared and printed.';
                   } else if (isCurrent) {
                     dateText = isOnHold ? 'On Hold' : 'In Progress';
                     stepDesc = isOnHold
                       ? 'Temporarily on hold for verification.'
-                      : 'Registrar is evaluating records and preparing credentials.';
+                      : 'Staff is currently preparing and printing your credential document.';
                   } else {
-                    dateText = 'Pending verification';
-                    stepDesc = 'Awaiting registrar document preparation.';
+                    dateText = 'Queued';
+                    stepDesc = 'Document preparation and printing begins once payment is verified.';
                   }
-                } else if (index === 2) {
-                  // Step 2: For Release
-                  if (currentStepIndex > 2) {
-                    dateText = 'Completed';
-                    stepDesc = 'Confirmed ready for release.';
-                  } else if (isCurrent) {
-                    dateText = 'Ready for Release';
-                    stepDesc = 'Your document is ready for pickup at the Registrar Office.';
+                } else if (index === 4) {
+                  // Step 4: Releasing (Ready for Claiming)
+                  if (isCurrent) {
+                    dateText = 'Ready for Pickup';
+                    stepDesc = 'Your credential is ready! You may claim your document at the Registrar window.';
+                  } else if (currentStepIndex > 4) {
+                    dateText = 'Claimed / Released';
+                    stepDesc = 'Document claimed and released to student.';
                   } else {
                     dateText = `Target: ${estimatedCompletion}`;
-                    stepDesc = 'Scheduled release upon preparation.';
-                  }
-                } else if (index === 3) {
-                  // Step 3: Claimed
-                  if (isCurrent) {
-                    dateText = 'Document Claimed';
-                    stepDesc = 'Document received by student.';
-                  } else {
-                    dateText = 'Pending release';
-                    stepDesc = 'Sign claim stub upon physical claiming.';
+                    stepDesc = 'Document will be available for pickup once released.';
                   }
                 }
 
@@ -544,24 +588,6 @@ export default function TrackStatusPage() {
                 );
               })}
             </div>
-
-            {/* Quick Action Buttons */}
-            <div className="mt-8 pt-5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.STUDENT.NEW_REQUEST)}
-                className="track-btn-secondary"
-              >
-                + Request Another Document
-              </button>
-              <button
-                type="button"
-                onClick={() => toast.info(`Claim Stub for ${activeTrackingId} available at Registrar window.`)}
-                className="text-xs font-bold text-[#1F1F9B] hover:underline cursor-pointer"
-              >
-                Print / View Claim Stub
-              </button>
-            </div>
           </div>
         ) : searchInput.trim() ? (
           /* Case 2: Tracking ID searched but not found */
@@ -582,13 +608,6 @@ export default function TrackStatusPage() {
                 className="track-btn-secondary"
               >
                 Clear Search
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.STUDENT.NEW_REQUEST)}
-                className="track-btn-primary"
-              >
-                Submit New Request
               </button>
             </div>
           </div>

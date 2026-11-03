@@ -216,7 +216,12 @@ export default function UserTable({
                     >
                       {/* Name */}
                       <td className="user-table-cell-name">
-                        {displayName}
+                        <div className="font-semibold text-slate-800">{displayName}</div>
+                        {user.username && (
+                          <div className="text-[11px] text-slate-400 font-normal">
+                            ID: {user.username}
+                          </div>
+                        )}
                       </td>
 
                       {/* Email */}

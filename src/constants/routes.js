@@ -5,8 +5,11 @@ export const ROUTES = {
     CLEARANCE: '/student/clearance',
     REQUESTS: '/student/requests',
     NEW_REQUEST: '/student/requests/new',
+    PAYMENTS: '/student/payments',
     CREDENTIALS: '/student/credentials',
     PROFILE: '/student/profile',
+    FORM: '/student/form/:trackingId',
+    REQUEST_FORM: '/request-form/:trackingId',
   },
   STAFF: {
     DASHBOARD: '/staff/dashboard',

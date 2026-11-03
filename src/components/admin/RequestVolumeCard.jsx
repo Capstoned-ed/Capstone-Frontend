@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
-export default function RequestVolumeCard({ dailyData = [], monthlyData = [], loading = false }) {
-  const [activePeriod, setActivePeriod] = useState('monthly');
+export default function RequestVolumeCard({ dailyData = [], monthlyData = [], loading = false, initialPeriod = 'daily' }) {
+  const [activePeriod, setActivePeriod] = useState(initialPeriod);
   const [showAllDetails, setShowAllDetails] = useState(false);
   const [hoveredItem, setHoveredItem] = useState(null);
 

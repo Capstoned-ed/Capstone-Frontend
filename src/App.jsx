@@ -24,6 +24,8 @@ import StudentDashboard from './pages/student/StudentDashboard';
 import RequestDocumentPage from './pages/student/RequestDocumentPage';
 import TrackStatusPage from './pages/student/TrackStatusPage';
 import StudentProfilePage from './pages/student/StudentProfilePage';
+import DownloadRequestFormPage from './pages/student/DownloadRequestFormPage';
+import StudentPaymentsPage from './pages/student/StudentPaymentsPage';
 
 // Staff & Registrar Pages
 import StaffDashboard from './pages/staff/StaffDashboard';
@@ -41,24 +43,11 @@ import AnalyticsGraphsPage from './pages/admin/AnalyticsGraphsPage';
 
 // Shared Pages
 import NotificationsPage from './pages/notifications/NotificationsPage';
-import { isValidRequest } from './api/requests';
+import { isValidRequest, purgeCorruptRequests } from './api/requests';
 
 // Self-healing purge of corrupt/blank/dummy requests from localStorage
 if (typeof window !== 'undefined') {
-  try {
-    ['regquest_submitted_requests', 'student_my_requests', 'regquest_stored_requests'].forEach((key) => {
-      const raw = localStorage.getItem(key);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          const cleaned = parsed.filter(isValidRequest);
-          if (cleaned.length !== parsed.length) {
-            localStorage.setItem(key, JSON.stringify(cleaned));
-          }
-        }
-      }
-    });
-  } catch {}
+  purgeCorruptRequests();
 }
 
 function RootRedirect() {
@@ -106,6 +95,32 @@ export default function App() {
             {/* Root Role Dispatcher */}
             <Route path="/" element={<RootRedirect />} />
 
+            {/* Dedicated Standalone Request Form Page (NO MainLayout - ONLY the Form!) */}
+            <Route
+              path="/student/form/:trackingId"
+              element={
+                <ProtectedRoute>
+                  <DownloadRequestFormPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/request-form/:trackingId"
+              element={
+                <ProtectedRoute>
+                  <DownloadRequestFormPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/request-form"
+              element={
+                <ProtectedRoute>
+                  <DownloadRequestFormPage />
+                </ProtectedRoute>
+              }
+            />
+
             {/* Protected Routes inside Shared MainLayout */}
             <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
               {/* Shared Authenticated Routes */}
@@ -117,6 +132,7 @@ export default function App() {
                 <Route path={ROUTES.STUDENT.CLEARANCE} element={<Navigate to={ROUTES.STUDENT.NEW_REQUEST} replace />} />
                 <Route path={ROUTES.STUDENT.NEW_REQUEST} element={<RequestDocumentPage />} />
                 <Route path={ROUTES.STUDENT.REQUESTS} element={<TrackStatusPage />} />
+                <Route path={ROUTES.STUDENT.PAYMENTS} element={<StudentPaymentsPage />} />
                 <Route path={ROUTES.STUDENT.CREDENTIALS} element={<Navigate to={ROUTES.STUDENT.NEW_REQUEST} replace />} />
                 <Route path={ROUTES.STUDENT.PROFILE} element={<StudentProfilePage />} />
               </Route>
