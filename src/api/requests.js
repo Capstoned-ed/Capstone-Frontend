@@ -766,6 +766,61 @@ export const requestsApi = {
     const response = await apiClient.get('/api/credential-types/');
     return Array.isArray(response.data) ? response.data : (response.data?.results || []);
   },
+
+  /**
+   * ML Turnaround Prediction: Predict estimated turnaround duration for a credential request.
+   * @param {Object} [params] - { credentialType, purpose, dateRequested, numDocuments }
+   * @returns {Promise<Object>}
+   */
+  predictTurnaround: async (params = {}) => {
+    const response = await apiClient.get('/api/credentials/predict-turnaround/', {
+      params: {
+        credential_type: params.credentialType || params.credential_type || 'TOR',
+        purpose: params.purpose || 'Employment',
+        date_requested: params.dateRequested || params.date_requested,
+        num_documents: params.numDocuments || params.num_documents || 1,
+      },
+    });
+    return response.data;
+  },
+
+  /**
+   * ML Demand Forecasting: Get daily incoming request forecast for upcoming operating days.
+   * @param {Object} [params] - { startDate, operatingDays }
+   * @returns {Promise<Object>}
+   */
+  getDailyForecast: async (params = {}) => {
+    const response = await apiClient.get('/api/credentials/forecast/daily/', {
+      params: {
+        start_date: params.startDate || params.start_date,
+        operating_days: params.operatingDays || params.operating_days || 5,
+      },
+    });
+    return response.data;
+  },
+
+  /**
+   * ML Workload Forecasting: Get monthly workload volume forecast and 4-tier classification.
+   * @param {Object} [params] - { targetMonth }
+   * @returns {Promise<Object>}
+   */
+  getMonthlyWorkload: async (params = {}) => {
+    const response = await apiClient.get('/api/credentials/forecast/monthly-workload/', {
+      params: {
+        target_month: params.targetMonth || params.target_month,
+      },
+    });
+    return response.data;
+  },
+
+  /**
+   * ML Microservice Health Check: Inspect ML service availability and loaded models.
+   * @returns {Promise<Object>}
+   */
+  getMLHealth: async () => {
+    const response = await apiClient.get('/api/credentials/ml-health/');
+    return response.data;
+  },
 };
 
 export default requestsApi;
