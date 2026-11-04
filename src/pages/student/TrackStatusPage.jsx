@@ -225,7 +225,47 @@ export default function TrackStatusPage() {
     }
   }, [displayStatus]);
 
-  // Dynamic Estimated Completion Date
+  const [mlEstimatedCompletion, setMlEstimatedCompletion] = useState(null);
+
+  // Non-blocking query to ML Turnaround Prediction API
+  useEffect(() => {
+    let ignore = false;
+    if (!matchedRequest) {
+      setMlEstimatedCompletion(null);
+      return;
+    }
+
+    // If request already has an explicit release date set by registrar, respect it
+    if (matchedRequest.release_date && matchedRequest.release_date !== 'N/A') {
+      setMlEstimatedCompletion(null);
+      return;
+    }
+
+    const credCode = matchedCred?.code || matchedRequest.document_type || matchedRequest.credential_type || 'TOR';
+    const reqDate = matchedRequest.created_at ? String(matchedRequest.created_at).substring(0, 10) : undefined;
+    const purpose = matchedRequest.purpose || 'Employment';
+
+    requestsApi.predictTurnaround({ credentialType: credCode, dateRequested: reqDate, purpose })
+      .then((res) => {
+        if (!ignore && res?.estimated_completion_date) {
+          const d = new Date(res.estimated_completion_date);
+          if (!isNaN(d.getTime())) {
+            const formatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            setMlEstimatedCompletion(formatted);
+          }
+        }
+      })
+      .catch((err) => {
+        // Silently fallback to calculateReleaseDate arithmetic without UI disruption
+        console.debug('predictTurnaround fallback note:', err);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [matchedRequest?.id, matchedRequest?.release_date, matchedCred?.code, matchedRequest?.created_at]);
+
+  // Dynamic Estimated Completion Date (ML predicted operating date with arithmetic fallback)
   const estimatedCompletion = useMemo(() => {
     if (!matchedRequest) return 'N/A';
     if (matchedRequest.release_date && matchedRequest.release_date !== 'N/A') {
@@ -235,8 +275,11 @@ export default function TrackStatusPage() {
       }
       return matchedRequest.release_date;
     }
+    if (mlEstimatedCompletion) {
+      return mlEstimatedCompletion;
+    }
     return calculateReleaseDate(matchedRequest.created_at, matchedCred?.processing_days || 5);
-  }, [matchedRequest, matchedCred]);
+  }, [matchedRequest, matchedCred, mlEstimatedCompletion]);
 
   // Handle Search Input Change
   const handleInputChange = (e) => {
