@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import requestsApi, { resolveRequestDocType } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
@@ -139,7 +139,7 @@ export default function TrackStatusPage() {
     return map;
   }, [credentialTypes]);
 
-  // Student's Requests List (filtered for this student if user information is available)
+  // Student's Requests List (filtered for this student, sorted strictly from OLDEST to NEWEST)
   const studentRequests = useMemo(() => {
     const currentUserId = user?.userId || user?.id;
     const currentStudentId = user?.student_id || user?.username;
@@ -154,13 +154,24 @@ export default function TrackStatusPage() {
       return false;
     });
 
-    // If filtering by logged-in user yields results, return those; otherwise return all available requests for viewing
-    return list.length > 0 ? list : rawRequests;
+    const targetList = list.length > 0 ? list : rawRequests;
+
+    // Sort strictly from oldest to newest (ascending date)
+    return [...targetList].sort((a, b) => {
+      const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      if (dateA && dateB && dateA !== dateB) {
+        return dateA - dateB;
+      }
+      const numA = parseInt(String(a.tracking_number || a.id).replace(/\D/g, ''), 10) || 0;
+      const numB = parseInt(String(b.tracking_number || b.id).replace(/\D/g, ''), 10) || 0;
+      return numA - numB;
+    });
   }, [rawRequests, user]);
 
   // Determine active tracking ID:
   // 1. Search input / url query if present
-  // 2. Or default to the student's most recent request
+  // 2. Or default to the student's request
   const activeTrackingId = useMemo(() => {
     if (searchInput.trim()) return searchInput.trim();
     if (urlTrackId.trim()) return urlTrackId.trim();
@@ -282,11 +293,25 @@ export default function TrackStatusPage() {
           </p>
         </div>
 
-        {/* Dynamic Request Selector Pills (if student has requests) */}
+        {/* Submitted Requests Card (Oldest to Newest, Single-Row Items, Max 3 Visible with Scroll) */}
         {studentRequests.length > 0 && (
-          <div className="track-selector-wrap">
-            <div className="track-selector-label">
-              <span>Your Submitted Requests ({studentRequests.length})</span>
+          <div className="track-selector-card">
+            <div className="track-selector-card-header">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-[#0B0B36]/10 text-[#0B0B36] flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800 leading-tight">
+                    Select a Request to Track
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Showing {studentRequests.length} {studentRequests.length === 1 ? 'request' : 'requests'} • Oldest to Newest
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => fetchData(true)}
@@ -294,10 +319,12 @@ export default function TrackStatusPage() {
                 className="track-copy-btn"
                 title="Refresh live status from registrar"
               >
-                {refreshing ? 'Refreshing...' : '🔄 Refresh Status'}
+                {refreshing ? 'Refreshing...' : '🔄 Refresh'}
               </button>
             </div>
-            <div className="track-selector-pills">
+
+            {/* Single column, 1 item per line (NO DOUBLE LINE), limited to 3 items with vertical scroll */}
+            <div className="track-selector-list-scroll">
               {studentRequests.map((req) => {
                 const code = req.tracking_number || req.trackingId || String(req.id);
                 const isActive = activeTrackingId.toUpperCase() === code.toUpperCase();
@@ -310,12 +337,18 @@ export default function TrackStatusPage() {
                     key={code}
                     type="button"
                     onClick={() => handleSelectRequest(req)}
-                    className={`track-selector-pill ${isActive ? 'active' : ''}`}
+                    className={`track-selector-row-item ${isActive ? 'active' : ''}`}
                   >
-                    <span className="track-selector-pill-dot" />
-                    <span>{code}</span>
-                    <span className="opacity-70 text-xs">({docTitle})</span>
-                    <span className={`status-pill ${
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2">
+                      <span className="track-row-dot" />
+                      <span className="font-bold text-xs sm:text-sm tracking-tight text-slate-900 shrink-0">
+                        {code}
+                      </span>
+                      <span className="text-xs text-slate-500 truncate max-w-[160px] sm:max-w-[280px]">
+                        ({docTitle})
+                      </span>
+                    </div>
+                    <span className={`status-pill shrink-0 ${
                       status === 'On Hold'
                         ? 'on-hold'
                         : status === 'Claimed'
@@ -378,9 +411,15 @@ export default function TrackStatusPage() {
                 <h4 className="track-on-hold-title">Request is Currently On Hold</h4>
               </div>
               <p className="track-on-hold-desc">
-                {matchedRequest?.remarks
-                  ? `Registrar Note: ${matchedRequest.remarks}`
-                  : 'Your document request requires additional verification or clearance document before proceeding. Please contact or visit the Registrar Office.'}
+                {(() => {
+                  const remarks = (matchedRequest?.notes || matchedRequest?.remarks || '').trim();
+                  const isInitialStudentPurpose = remarks.startsWith('[') && (remarks.includes(']') || remarks === `[${matchedRequest.document_type}] ${matchedRequest.purpose}`);
+                  const hasActualStaffNote = remarks && !isInitialStudentPurpose;
+
+                  return hasActualStaffNote
+                    ? `Registrar Note: ${remarks}`
+                    : 'Your document request requires additional verification or clearance document before proceeding. Please contact or visit the Registrar Office.';
+                })()}
               </p>
             </div>
           </div>

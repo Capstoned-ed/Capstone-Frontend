@@ -5,6 +5,7 @@ import '../../styles/admin/StudentTableCard.css';
 
 export default function StudentTableCard({ users = [], onStudentUpdated }) {
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [showAllStudents, setShowAllStudents] = useState(false);
 
   // Filter ONLY student role accounts
   const students = users.filter((u) => u.role === ROLES.STUDENT);
@@ -90,7 +91,7 @@ export default function StudentTableCard({ users = [], onStudentUpdated }) {
                 </td>
               </tr>
             ) : (
-              students.map((student) => {
+              (showAllStudents ? students : students.slice(0, 10)).map((student) => {
                 const displayName = formatStudentName(student);
                 const idNumber = student.student_id || student.username || '—';
                 const program = student.program || 'B.S in Information Technology';
@@ -140,6 +141,28 @@ export default function StudentTableCard({ users = [], onStudentUpdated }) {
             )}
           </tbody>
         </table>
+        {students.length > 10 && (
+          <div className="table-see-more-wrap">
+            <button
+              type="button"
+              onClick={() => setShowAllStudents((prev) => !prev)}
+              className="table-see-more-btn"
+            >
+              <span>
+                {showAllStudents ? 'See Less' : 'See More'}
+              </span>
+              <svg
+                className={`w-4 h-4 transition-transform ${showAllStudents ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Student Profile Edit Modal */}

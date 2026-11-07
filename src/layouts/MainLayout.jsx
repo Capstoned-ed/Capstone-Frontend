@@ -8,15 +8,15 @@ import { useAuth } from '../hooks/useAuth';
 export default function MainLayout({ children }) {
   const { user } = useAuth();
   const location = useLocation();
-  const isAdminDashboard = location.pathname === '/admin/dashboard';
+  const isAdminDashboard = location.pathname === '/admin/dashboard' || location.pathname === '/registrar/dashboard';
   const isStudentDashboard = location.pathname === '/student/dashboard' || location.pathname === '/student';
-  const isStaffDashboard = location.pathname === '/staff/dashboard' || location.pathname === '/staff' || location.pathname === '/registrar/dashboard';
+  const isStaffDashboard = location.pathname === '/staff/dashboard' || location.pathname === '/staff';
   const isStudentView = location.pathname.startsWith('/student') || user?.role === 'student';
 
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem('regquest_sidebar_collapsed');
     if (saved !== null) return JSON.parse(saved);
-    return window.location.pathname.startsWith('/admin');
+    return window.location.pathname.startsWith('/admin') || window.location.pathname.startsWith('/registrar');
   });
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -31,7 +31,6 @@ export default function MainLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans text-slate-800">
-      {/* Mobile Top Header */}
       <header className="md:hidden bg-[#0B0B36] text-white px-4 py-3 flex items-center justify-between sticky top-0 z-40 shadow-md">
         <div className="flex items-center space-x-2">
           <span className="font-bold text-lg tracking-tight">RegQuest</span>
@@ -54,7 +53,6 @@ export default function MainLayout({ children }) {
         </div>
       </header>
 
-      {/* Mobile Backdrop & Slide-over Drawer */}
       {mobileMenuOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm md:hidden flex"
@@ -72,7 +70,6 @@ export default function MainLayout({ children }) {
         </div>
       )}
 
-      {/* Desktop Persistent Sidebar */}
       <div className="hidden md:block flex-shrink-0 sticky top-0 h-screen overflow-y-auto">
         <Sidebar
           isCollapsed={isCollapsed}
@@ -80,14 +77,11 @@ export default function MainLayout({ children }) {
         />
       </div>
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-y-auto">
-        {/* Page Body Viewport */}
         <main className={`flex-1 w-full ${isAdminDashboard || isStudentDashboard || isStaffDashboard ? 'p-0 max-w-none' : isStudentView ? 'px-4 sm:px-8 pt-4 sm:pt-6 pb-6 max-w-7xl mx-auto' : 'p-6 sm:p-8 max-w-7xl mx-auto'}`}>
           {children ? children : <Outlet />}
         </main>
 
-        {/* Student Footer spanning 100% width and flush to sides and bottom */}
         {isStudentView && <StudentFooter />}
       </div>
     </div>

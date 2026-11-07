@@ -4,7 +4,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { ROLES } from '../../constants/roles';
 import { ROUTES } from '../../constants/routes';
 import logoExpanded from '../../assets/RegQuest-Logo-2-cropped.png';
-import logoShrunk from '../../assets/RegQuest-Logo-3-cropped.png';
 import { useNotifications } from '../../context/NotificationContext';
 import StudentProfileModal from '../student/StudentProfileModal';
 import StaffProfileModal from '../staff/StaffProfileModal';
@@ -18,7 +17,6 @@ export default function Sidebar({ isCollapsed, onToggle }) {
 
   const userRole = user?.role;
 
-  // Build role-specific navigation links
   const getNavLinks = () => {
     if (userRole === ROLES.STUDENT) {
       return [
@@ -75,8 +73,8 @@ export default function Sidebar({ isCollapsed, onToggle }) {
       ];
     }
 
-    if (userRole === ROLES.STAFF || userRole === ROLES.REGISTRAR) {
-      const links = [
+    if (userRole === ROLES.STAFF) {
+      return [
         {
           label: 'Home',
           to: ROUTES.STAFF.DASHBOARD,
@@ -109,31 +107,60 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           ),
         },
       ];
+    }
 
-      if (userRole === ROLES.REGISTRAR) {
-        links.push(
-          {
-            label: 'Batch Staff Assignment',
-            to: ROUTES.ADMIN.REQUESTS,
-            icon: (
-              <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-              </svg>
-            ),
-          },
-          {
-            label: 'Credential Types',
-            to: ROUTES.REGISTRAR.CREDENTIALS,
-            icon: (
-              <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            ),
-          }
-        );
-      }
-
-      return links;
+    if (userRole === ROLES.REGISTRAR) {
+      return [
+        {
+          label: 'Home',
+          to: ROUTES.REGISTRAR.DASHBOARD,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+          ),
+        },
+        {
+          label: 'Analytics & Graphs',
+          to: ROUTES.REGISTRAR.ANALYTICS,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+          ),
+        },
+        {
+          label: 'Processing Calendar',
+          to: ROUTES.REGISTRAR.CALENDAR,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <rect x="3" y="4" width="18" height="18" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+              <line x1="16" y1="2" x2="16" y2="6" strokeLinecap="round" />
+              <line x1="8" y1="2" x2="8" y2="6" strokeLinecap="round" />
+              <line x1="3" y1="10" x2="21" y2="10" strokeLinecap="round" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01" />
+            </svg>
+          ),
+        },
+        {
+          label: 'Batch Staff Assignment',
+          to: ROUTES.REGISTRAR.REQUESTS,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+            </svg>
+          ),
+        },
+        {
+          label: 'Credential Types',
+          to: ROUTES.REGISTRAR.CREDENTIALS,
+          icon: (
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          ),
+        },
+      ];
     }
 
     if (userRole === ROLES.ADMIN) {
@@ -178,24 +205,6 @@ export default function Sidebar({ isCollapsed, onToggle }) {
             </svg>
           ),
         },
-        {
-          label: 'Batch Staff Assignment',
-          to: ROUTES.ADMIN.REQUESTS,
-          icon: (
-            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-            </svg>
-          ),
-        },
-        {
-          label: 'Credential Types',
-          to: ROUTES.ADMIN.CREDENTIALS,
-          icon: (
-            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          ),
-        },
       ];
     }
 
@@ -226,11 +235,9 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           isCollapsed ? 'w-[80px]' : 'w-[270px]'
         }`}
       >
-        {/* Top Header Section */}
         <div>
           {isCollapsed ? (
             <div className="pt-8 pb-6 flex items-center justify-center">
-              {/* Toggle Button */}
               <button
                 type="button"
                 onClick={onToggle}
@@ -245,7 +252,6 @@ export default function Sidebar({ isCollapsed, onToggle }) {
             </div>
           ) : (
             <div className="pt-8 pb-6 flex items-center justify-between px-6">
-              {/* Expanded Sidebar Logo (RegQuest-Logo-2) */}
               <div className="flex items-center">
                 <img
                   src={logoExpanded}
@@ -253,7 +259,6 @@ export default function Sidebar({ isCollapsed, onToggle }) {
                   className="h-9 w-auto object-contain max-w-[155px]"
                 />
               </div>
-              {/* Toggle Button */}
               <button
                 type="button"
                 onClick={onToggle}
@@ -268,7 +273,6 @@ export default function Sidebar({ isCollapsed, onToggle }) {
             </div>
           )}
 
-          {/* Navigation Items (Middle Section) */}
           <nav className={`mt-4 space-y-4 ${isCollapsed ? 'px-2' : 'px-4'}`}>
             {navLinks.map((item) => (
               <NavLink
@@ -309,9 +313,7 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           </nav>
         </div>
 
-        {/* Bottom Section: Notifications & User Profile */}
         <div className={`pb-8 space-y-2 ${isCollapsed ? 'px-2' : 'px-4'}`}>
-          {/* Notifications Item (positioned directly above the profile icon) */}
           <NavLink
             to={ROUTES.NOTIFICATIONS}
             end
@@ -348,7 +350,6 @@ export default function Sidebar({ isCollapsed, onToggle }) {
             )}
           </NavLink>
 
-          {/* User Profile Card / Toggle Button */}
           <button
             type="button"
             onClick={() => setShowUserMenu((prev) => !prev)}
@@ -359,14 +360,12 @@ export default function Sidebar({ isCollapsed, onToggle }) {
                 : 'px-4 py-2.5 gap-4 hover:bg-white/10'
             }`}
           >
-            {/* Avatar */}
             <div className="w-10 h-10 rounded-full bg-[#64748B] flex items-center justify-center overflow-hidden flex-shrink-0 text-white shadow-inner">
               <svg className="w-7 h-7 text-white mt-1" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
               </svg>
             </div>
 
-            {/* User Info (when expanded) */}
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
                 <p className="text-[15px] font-bold text-white truncate leading-tight">
@@ -379,10 +378,8 @@ export default function Sidebar({ isCollapsed, onToggle }) {
             )}
           </button>
 
-          {/* Inline Profile Sub-menu (Rendered directly beneath profile when showUserMenu is true) */}
           {showUserMenu && (
             <div className={`space-y-1 pt-1 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
-              {/* My Profile */}
               <button
                 type="button"
                 onClick={() => setShowProfileModal(true)}
@@ -399,7 +396,6 @@ export default function Sidebar({ isCollapsed, onToggle }) {
                 {!isCollapsed && <span className="truncate">My Profile</span>}
               </button>
 
-              {/* Logout */}
               <button
                 type="button"
                 onClick={handleLogout}
@@ -420,7 +416,6 @@ export default function Sidebar({ isCollapsed, onToggle }) {
         </div>
       </aside>
 
-      {/* Role-specific Profile Modal (Student vs Admin/Staff) */}
       {userRole === ROLES.STUDENT ? (
         <StudentProfileModal
           isOpen={showProfileModal}

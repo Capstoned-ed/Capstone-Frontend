@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 export default function StaffRequestsTable({
   loading,
@@ -8,6 +8,9 @@ export default function StaffRequestsTable({
   getStatusBadge,
   onOpenProcess,
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const visibleRequests = showAll ? filteredRequests : filteredRequests.slice(0, 10);
+
   return (
     <div className="staff-list-card">
       <div className="staff-list-header">
@@ -45,12 +48,12 @@ export default function StaffRequestsTable({
               <tr>
                 <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
                   {totalRequestsCount === 0
-                    ? 'No student requests have been submitted yet.'
+                    ? 'No requests assigned to you yet.'
                     : 'No requests found matching your filter criteria.'}
                 </td>
               </tr>
             ) : (
-              filteredRequests.map((item) => (
+              visibleRequests.map((item) => (
                 <tr key={item.rawId || item.id}>
                   <td className="staff-req-id">{item.id}</td>
                   <td>
@@ -83,6 +86,29 @@ export default function StaffRequestsTable({
           </tbody>
         </table>
       </div>
+
+      {!loading && !error && filteredRequests.length > 10 && (
+        <div className="table-see-more-wrap">
+          <button
+            type="button"
+            onClick={() => setShowAll((prev) => !prev)}
+            className="table-see-more-btn"
+          >
+            <span>
+              {showAll ? 'See Less' : 'See More'}
+            </span>
+            <svg
+              className={`w-4 h-4 transition-transform ${showAll ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.5}
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

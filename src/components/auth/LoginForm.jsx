@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
+import ForgotPasswordModal from './ForgotPasswordModal';
 
 export default function LoginForm({ onSuccess }) {
   const { login } = useAuth();
@@ -9,7 +10,7 @@ export default function LoginForm({ onSuccess }) {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [noticeModal, setNoticeModal] = useState(null); // 'forgot' | 'register' | null
+  const [isForgotOpen, setIsForgotOpen] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -24,7 +25,6 @@ export default function LoginForm({ onSuccess }) {
 
     try {
       let loginIdentifier = username.trim();
-      // If the user entered an email address, try resolving to their ID number / username
       if (loginIdentifier.includes('@')) {
         try {
           const cachedUsers = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
@@ -37,20 +37,18 @@ export default function LoginForm({ onSuccess }) {
         } catch {}
       }
 
-      // If the user set an optional custom password and entered it, map to the backend provisioned password
       let backendPassword = password;
       try {
         const customPasswords = JSON.parse(localStorage.getItem('regquest_custom_passwords') || '{}');
         const userCustom =
           customPasswords[loginIdentifier] ||
+          customPasswords[String(loginIdentifier).toLowerCase()] ||
           customPasswords[username.trim().toLowerCase()] ||
           customPasswords[username.trim()];
         if (userCustom && userCustom.newPassword && password === userCustom.newPassword) {
           backendPassword = userCustom.originalPassword || loginIdentifier;
         }
-      } catch (err) {
-        console.warn('Error reading custom password:', err);
-      }
+      } catch {}
 
       const result = await login(loginIdentifier, backendPassword);
       if (onSuccess) {
@@ -82,7 +80,6 @@ export default function LoginForm({ onSuccess }) {
 
   return (
     <div className="w-full">
-      {/* Title & Subtitle */}
       <h1 className="text-2xl sm:text-[28px] font-bold text-[#1a237e] tracking-tight">
         Log In
       </h1>
@@ -90,7 +87,6 @@ export default function LoginForm({ onSuccess }) {
         Please enter your credentials to continue
       </p>
 
-      {/* Error Message Alert */}
       {errorMessage && (
         <div className="mb-5 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs flex items-start space-x-2 animate-fadeIn">
           <svg className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -100,9 +96,7 @@ export default function LoginForm({ onSuccess }) {
         </div>
       )}
 
-      {/* Form Fields */}
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
-        {/* Username / ID Number / Email Field */}
         <div>
           <label
             htmlFor="username"
@@ -111,7 +105,6 @@ export default function LoginForm({ onSuccess }) {
             ID Number / Email Address
           </label>
           <div className="relative flex items-center">
-            {/* User Icon */}
             <div className="absolute left-3.5 text-slate-400 pointer-events-none flex items-center justify-center">
               <svg
                 className="w-4 h-4"
@@ -140,7 +133,6 @@ export default function LoginForm({ onSuccess }) {
           </div>
         </div>
 
-        {/* Password Field */}
         <div>
           <label
             htmlFor="password"
@@ -149,7 +141,6 @@ export default function LoginForm({ onSuccess }) {
             Password
           </label>
           <div className="relative flex items-center">
-            {/* Lock Icon */}
             <div className="absolute left-3.5 text-slate-400 pointer-events-none flex items-center justify-center">
               <svg
                 className="w-4 h-4"
@@ -175,7 +166,6 @@ export default function LoginForm({ onSuccess }) {
               placeholder="Enter your password"
               className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg py-2.5 sm:py-3 pl-10 pr-10 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#fbb643] focus:border-transparent transition-all"
             />
-            {/* Toggle Password Visibility */}
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
@@ -196,7 +186,6 @@ export default function LoginForm({ onSuccess }) {
           </div>
         </div>
 
-        {/* Submit Button (Amber / Warm Yellow) */}
         <button
           type="submit"
           disabled={isLoading}
@@ -216,40 +205,27 @@ export default function LoginForm({ onSuccess }) {
         </button>
       </form>
 
-      {/* Footer Link */}
       <div className="mt-5 text-center">
         <button
           type="button"
-          onClick={() => setNoticeModal('forgot')}
-          className="text-xs font-semibold text-[#1a237e] hover:underline focus:outline-none"
+          onClick={() => setIsForgotOpen(true)}
+          className="text-xs font-semibold text-[#1a237e] hover:underline focus:outline-none cursor-pointer"
         >
           Forgot password?
         </button>
       </div>
 
-      {/* Institutional Account Recovery Notice Modal */}
-      {noticeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl text-center border border-slate-100">
-            <div className="w-12 h-12 rounded-full bg-blue-50 text-[#1a237e] mx-auto flex items-center justify-center text-xl font-bold mb-3">
-              🏛️
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-2">
-              Account Recovery
-            </h3>
-            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed mb-6">
-              RegQuest passwords can only be reset by institutional staff or campus administrators. Please visit your Registrar office or submit an institutional ticket.
-            </p>
-            <button
-              type="button"
-              onClick={() => setNoticeModal(null)}
-              className="w-full py-2.5 px-4 rounded-lg bg-[#1a237e] text-white text-xs sm:text-sm font-semibold hover:bg-[#141b63] transition-colors"
-            >
-              Understood
-            </button>
-          </div>
-        </div>
-      )}
+      <ForgotPasswordModal
+        isOpen={isForgotOpen}
+        onClose={() => setIsForgotOpen(false)}
+        initialIdentifier={username}
+        onPasswordResetSuccess={(resetUser) => {
+          if (resetUser) {
+            setUsername(resetUser);
+          }
+          setPassword('');
+        }}
+      />
     </div>
   );
 }
