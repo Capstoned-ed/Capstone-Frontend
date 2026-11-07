@@ -1,28 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType } from '../../api/requests';
+import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, ASSIGNMENTS_KEY } from '../../api/requests';
+import { saveStoredNotification } from '../../api/notifications';
+import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
 import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
 import useToast from '../../hooks/useToast';
 import '../../styles/admin/AdminRequestsPage.css';
-
-const ASSIGNMENTS_KEY = 'regquest_staff_assignments';
+import '../../styles/staff/StaffRequestsPage.css';
 
 function loadStoredAssignments() {
-  try {
-    const raw = localStorage.getItem(ASSIGNMENTS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+  return getStaffAssignments();
 }
 
 function saveStoredAssignments(map) {
-  try {
-    localStorage.setItem(ASSIGNMENTS_KEY, JSON.stringify(map));
-  } catch (err) {
-    console.error('Failed to save staff assignments to localStorage:', err);
-  }
+  saveStaffAssignments(map);
 }
 
 function calculateReleaseDate(createdAt, processingDays = 5) {
@@ -40,6 +32,7 @@ const REQUEST_STATUSES = [
   'Processing',
   'Releasing',
   'Claimed',
+  'Rejected',
 ];
 
 function formatStatusDisplay(rawStatus) {
@@ -89,49 +82,19 @@ function formatStatusDisplay(rawStatus) {
     case 'HOLD':
     case 'REQUIREMENTS_VERIFICATION':
     case 'CLEARANCE_VERIFIED':
+      return 'On Hold';
     case 'CANCELLED':
     case 'REJECTED':
-      return 'On Hold';
+      return 'Rejected';
     default:
       return s;
   }
 }
 
-function getStatusBadge(status) {
-  const norm = String(status || '').trim();
-  switch (norm) {
-    case 'Pending':
-    case 'PENDING':
-      return <span className="status-badge pending">Pending</span>;
-    case 'For Payment':
-    case 'FOR PAYMENT':
-    case 'FOR_PAYMENT':
-    case 'Pending Payment':
-    case 'PAYMENT_PENDING':
-    case 'Payment Pending':
-      return <span className="status-badge payment-pending">For Payment</span>;
-    case 'For Processing':
-    case 'FOR_PROCESSING':
-    case 'PAYMENT_VERIFIED':
-      return <span className="status-badge for-processing">For Processing</span>;
-    case 'Processing':
-    case 'PROCESSING':
-      return <span className="status-badge processing">Processing</span>;
-    case 'Releasing':
-    case 'RELEASING':
-    case 'For release':
-    case 'READY_FOR_RELEASE':
-      return <span className="status-badge releasing">Releasing</span>;
-    case 'Claimed':
-    case 'RELEASED':
-      return <span className="status-badge claimed">Claimed</span>;
-    default:
-      return <span className="status-badge on-hold">{norm || 'On Hold'}</span>;
-  }
-}
-
-export default function AdminRequestsPage() {
+export default function RegistrarRequestsPage() {
   const toast = useToast();
+  const { user: currentUser } = useAuth();
+  const isStaff = currentUser?.role === 'staff';
 
   const [rawRequests, setRawRequests] = useState([]);
   const [users, setUsers] = useState([]);
@@ -149,6 +112,8 @@ export default function AdminRequestsPage() {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [processModalOpen, setProcessModalOpen] = useState(false);
   const [clearances, setClearances] = useState([]);
+  const [showAllBatch, setShowAllBatch] = useState(false);
+  const [showAllRequests, setShowAllRequests] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -197,11 +162,18 @@ export default function AdminRequestsPage() {
     const handleSync = () => {
       loadData();
     };
+    const handleAssignmentsSync = () => {
+      setAssignments(getStaffAssignments());
+    };
     window.addEventListener('regquest_requests_updated', handleSync);
+    window.addEventListener('regquest_assignments_updated', handleAssignmentsSync);
+    window.addEventListener('storage', handleAssignmentsSync);
 
     return () => {
       ignore = true;
       window.removeEventListener('regquest_requests_updated', handleSync);
+      window.removeEventListener('regquest_assignments_updated', handleAssignmentsSync);
+      window.removeEventListener('storage', handleAssignmentsSync);
     };
   }, []);
 
@@ -249,205 +221,205 @@ export default function AdminRequestsPage() {
     return rawRequests
       .filter(isValidRequest)
       .filter((r) => Boolean(String(r.tracking_number || '').trim()))
-      .map((r, idx) => {
-      const user = userMap.get(r.user);
-      const cred = credTypeMap.get(r.credential_type);
+      .map((r) => {
+        const user = userMap.get(r.user);
+        const cred = credTypeMap.get(r.credential_type);
 
-      let cachedClearancePreview = null;
-      let cachedClearanceFileName = null;
-      let cachedClearanceIsPdf = false;
-      let matchedStored = null;
-      try {
-        const storedList = JSON.parse(localStorage.getItem('regquest_stored_requests') || '[]');
-        matchedStored = storedList.find(
-          (s) =>
-            String(s.id) === String(r.id) ||
-            String(s.id) === String(r.tracking_number) ||
-            String(s.tracking_number) === String(r.tracking_number) ||
-            String(s.rawId) === String(r.id)
-        );
-        if (matchedStored?.clearance_preview) {
-          cachedClearancePreview = matchedStored.clearance_preview;
-          cachedClearanceFileName = matchedStored.clearance_file_name;
-          cachedClearanceIsPdf = matchedStored.clearance_is_pdf;
+        let cachedClearancePreview = null;
+        let cachedClearanceFileName = null;
+        let cachedClearanceIsPdf = false;
+        let matchedStored = null;
+        try {
+          const storedList = JSON.parse(localStorage.getItem('regquest_stored_requests') || '[]');
+          matchedStored = storedList.find(
+            (s) =>
+              String(s.id) === String(r.id) ||
+              String(s.id) === String(r.tracking_number) ||
+              String(s.tracking_number) === String(r.tracking_number) ||
+              String(s.rawId) === String(r.id)
+          );
+          if (matchedStored?.clearance_preview) {
+            cachedClearancePreview = matchedStored.clearance_preview;
+            cachedClearanceFileName = matchedStored.clearance_file_name;
+            cachedClearanceIsPdf = matchedStored.clearance_is_pdf;
+          }
+        } catch {}
+
+        const localClearance = getClearanceAttachment([
+          r.tracking_number,
+          r.id,
+          r.rawId,
+          r.student_id,
+          r.user,
+          String(r.user),
+        ]);
+
+        const userClearance =
+          clearanceMap.get(r.user) ||
+          clearanceMap.get(String(r.user)) ||
+          clearanceMap.get(r.student_id) ||
+          (user ? clearanceMap.get(user.id) : null) ||
+          (user ? clearanceMap.get(String(user.id)) : null) ||
+          (user ? clearanceMap.get(user.student_id) : null) ||
+          (user ? clearanceMap.get(user.username) : null);
+
+        const effectiveClearancePreview =
+          r.clearance_preview ||
+          localClearance?.dataUrl ||
+          cachedClearancePreview ||
+          userClearance?.file ||
+          null;
+
+        const effectiveClearanceIsPdf =
+          Boolean(r.clearance_is_pdf) ||
+          Boolean(localClearance?.meta?.isPdf) ||
+          Boolean(localClearance?.dataUrl?.startsWith('data:application/pdf')) ||
+          Boolean(cachedClearanceIsPdf) ||
+          Boolean(r.clearance_file_name?.toLowerCase().endsWith('.pdf'));
+
+        const effectiveClearanceFileName =
+          r.clearance_file_name ||
+          localClearance?.meta?.fileName ||
+          cachedClearanceFileName ||
+          (userClearance?.file ? 'Clearance Document' : null);
+
+        let profileName = null;
+        let profileStudentId = null;
+        try {
+          const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+          const p =
+            profiles[r.user] ||
+            profiles[r.student_id] ||
+            (user ? profiles[user.id] : null) ||
+            (user ? profiles[user.username] : null);
+          if (p) {
+            profileName = p.full_name || [p.first_name, p.last_name].filter(Boolean).join(' ');
+            profileStudentId = p.student_id || p.username;
+          }
+        } catch {}
+
+        const userFullName = user
+          ? [user.first_name, user.last_name].filter(Boolean).join(' ')
+          : '';
+
+        const fallbackKnownName =
+          user?.username === '2023301564' || r.student_id === '2023301564' || r.student_name === '2023301564' || r.user === 11 || String(r.user) === '11'
+            ? 'Daisy Traya'
+            : user?.username === 'Love' || r.student_name === 'Love' || r.user === 2 || String(r.user) === '2'
+            ? 'Love'
+            : null;
+
+        const isStudentNameId =
+          !r.student_name ||
+          r.student_name === 'Student' ||
+          /^\d{6,}$/.test(r.student_name) ||
+          r.student_name === r.student_id ||
+          (user && r.student_name === user.username);
+
+        const studentName = !isStudentNameId
+          ? r.student_name
+          : userFullName || profileName || fallbackKnownName || (user?.username && !/^\d{6,}$/.test(user.username) ? user.username : null) || r.student_name || (r.student_id ? `Student (${r.student_id})` : 'Student');
+
+        const studentId =
+          r.student_id && /^\d+$/.test(r.student_id)
+            ? r.student_id
+            : profileStudentId || user?.student_id || user?.username || (r.user === 11 || String(r.user) === '11' ? '2023301564' : null) || (r.user === 2 || String(r.user) === '2' ? '20231029' : null) || (r.user ? String(r.user) : 'N/A');
+
+        const documentType = resolveRequestDocType(r, cred);
+
+        const amount =
+          matchedStored?.assessed_amount ||
+          matchedStored?.amount ||
+          r.assessed_amount ||
+          r.amount ||
+          (cred?.price ? `P${parseFloat(cred.price).toFixed(0)}` : 'P0');
+
+        const requestDate = r.request_date || (r.created_at ? r.created_at.split('T')[0] : 'N/A');
+        const releaseDate =
+          matchedStored?.date_of_release ||
+          matchedStored?.release_date ||
+          r.date_of_release ||
+          r.release_date ||
+          calculateReleaseDate(r.created_at, cred?.processing_days);
+
+        const effectiveRawStatus =
+          matchedStored?.status && String(matchedStored.status).toUpperCase() !== 'PENDING'
+            ? matchedStored.status
+            : r.status;
+
+        let batchId = r.batchId || 'BATCH-000001';
+        if (r.created_at) {
+          const d = new Date(r.created_at);
+          if (!isNaN(d.getTime())) {
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            batchId = `BATCH-${year}${month}`;
+          }
         }
-      } catch {}
 
-      const localClearance = getClearanceAttachment([
-        r.tracking_number,
-        r.id,
-        r.rawId,
-        r.student_id,
-        r.user,
-        String(r.user),
-      ]);
+        const assignedStaff = assignments[r.id] || assignments[r.tracking_number] || assignments[r.rawId] || '';
 
-      const userClearance =
-        clearanceMap.get(r.user) ||
-        clearanceMap.get(String(r.user)) ||
-        clearanceMap.get(r.student_id) ||
-        (user ? clearanceMap.get(user.id) : null) ||
-        (user ? clearanceMap.get(String(user.id)) : null) ||
-        (user ? clearanceMap.get(user.student_id) : null) ||
-        (user ? clearanceMap.get(user.username) : null);
-
-      const effectiveClearancePreview =
-        r.clearance_preview ||
-        localClearance?.dataUrl ||
-        cachedClearancePreview ||
-        userClearance?.file ||
-        null;
-
-      const effectiveClearanceIsPdf =
-        Boolean(r.clearance_is_pdf) ||
-        Boolean(localClearance?.meta?.isPdf) ||
-        Boolean(localClearance?.dataUrl?.startsWith('data:application/pdf')) ||
-        Boolean(cachedClearanceIsPdf) ||
-        Boolean(r.clearance_file_name?.toLowerCase().endsWith('.pdf'));
-
-      const effectiveClearanceFileName =
-        r.clearance_file_name ||
-        localClearance?.meta?.fileName ||
-        cachedClearanceFileName ||
-        (userClearance?.file ? 'Clearance Document' : null);
-
-      let profileName = null;
-      let profileStudentId = null;
-      try {
-        const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
-        const p =
-          profiles[r.user] ||
-          profiles[r.student_id] ||
-          (user ? profiles[user.id] : null) ||
-          (user ? profiles[user.username] : null);
-        if (p) {
-          profileName = p.full_name || [p.first_name, p.last_name].filter(Boolean).join(' ');
-          profileStudentId = p.student_id || p.username;
+        return {
+          rawId: r.rawId || r.id,
+          id: r.tracking_number || r.id,
+          tracking_number: r.tracking_number || r.id,
+          user: r.user,
+          student_name: studentName,
+          student_id: studentId,
+          document_type: documentType,
+          copies: r.copies || '1 copy',
+          status: formatStatusDisplay(effectiveRawStatus),
+          rawStatus: effectiveRawStatus,
+          batch_status: formatStatusDisplay(effectiveRawStatus),
+          assigned_staff: assignedStaff,
+          created_at: r.created_at,
+          request_date: requestDate,
+          release_date: releaseDate,
+          date_of_release: releaseDate,
+          amount,
+          assessed_amount: matchedStored?.assessed_amount || r.assessed_amount || amount,
+          verified_by_name: matchedStored?.verified_by_name || r.verified_by_name || null,
+          purpose: r.purpose || r.remarks || 'Official Academic Credential Request',
+          remarks: matchedStored?.remarks || r.remarks || '',
+          batchId,
+          clearance_preview: effectiveClearancePreview,
+          clearance_id: r.clearance_id || userClearance?.id || null,
+          clearance_status:
+            matchedStored?.clearance_status ||
+            r.clearance_status ||
+            (effectiveClearancePreview ? 'PENDING' : null),
+          clearance_file_name: effectiveClearanceFileName,
+          clearance_is_pdf: effectiveClearanceIsPdf,
+          photo_preview: r.photo_preview || null,
+          payment_status: matchedStored?.payment_status || r.payment_status || null,
+          payment_proof: matchedStored?.payment_proof || r.payment_proof || null,
+          or_number: matchedStored?.or_number || r.or_number || '',
+          receipt_image: matchedStored?.receipt_image || r.receipt_image || null,
+          is_confirmed: Boolean(matchedStored?.is_confirmed || r.is_confirmed),
+          confirmed_for_payment: Boolean(matchedStored?.confirmed_for_payment || r.confirmed_for_payment),
+        };
+      })
+      .filter((r) => {
+        const sName = String(r.student_name || '').toLowerCase();
+        const sId = String(r.student_id || '').toLowerCase();
+        if (/^student\s*#?\s*[1-4]$/i.test(sName) || /^student\s*#?\s*[1-4]$/i.test(sId)) {
+          return false;
         }
-      } catch {}
-
-      const userFullName = user
-        ? [user.first_name, user.last_name].filter(Boolean).join(' ')
-        : '';
-
-      const fallbackKnownName =
-        (user?.username === '2023301564' || r.student_id === '2023301564' || r.student_name === '2023301564' || r.user === 11 || String(r.user) === '11')
-          ? 'Daisy Traya'
-          : (user?.username === 'Love' || r.student_name === 'Love' || r.user === 2 || String(r.user) === '2')
-          ? 'Love'
-          : null;
-
-      const isStudentNameId =
-        !r.student_name ||
-        r.student_name === 'Student' ||
-        /^\d{6,}$/.test(r.student_name) ||
-        r.student_name === r.student_id ||
-        (user && r.student_name === user.username);
-
-      const studentName = !isStudentNameId
-        ? r.student_name
-        : (userFullName || profileName || fallbackKnownName || (user?.username && !/^\d{6,}$/.test(user.username) ? user.username : null) || r.student_name || (r.student_id ? `Student (${r.student_id})` : 'Student'));
-
-      const studentId =
-        (r.student_id && /^\d+$/.test(r.student_id))
-          ? r.student_id
-          : profileStudentId || user?.student_id || user?.username || (r.user === 11 || String(r.user) === '11' ? '2023301564' : null) || (r.user === 2 || String(r.user) === '2' ? '20231029' : null) || (r.user ? String(r.user) : 'N/A');
-
-      const documentType = resolveRequestDocType(r, cred);
-
-      const amount =
-        matchedStored?.assessed_amount ||
-        matchedStored?.amount ||
-        r.assessed_amount ||
-        r.amount ||
-        (cred?.price ? `P${parseFloat(cred.price).toFixed(0)}` : 'P0');
-
-      const requestDate = r.request_date || (r.created_at ? r.created_at.split('T')[0] : 'N/A');
-      const releaseDate =
-        matchedStored?.date_of_release ||
-        matchedStored?.release_date ||
-        r.date_of_release ||
-        r.release_date ||
-        calculateReleaseDate(r.created_at, cred?.processing_days);
-
-      const effectiveRawStatus =
-        matchedStored?.status && String(matchedStored.status).toUpperCase() !== 'PENDING'
-          ? matchedStored.status
-          : r.status;
-
-      let batchId = r.batchId || 'BATCH-000001';
-      if (r.created_at) {
-        const d = new Date(r.created_at);
-        if (!isNaN(d.getTime())) {
-          const year = d.getFullYear();
-          const month = String(d.getMonth() + 1).padStart(2, '0');
-          batchId = `BATCH-${year}${month}`;
+        if (r.id || r.tracking_number) {
+          return true;
         }
-      }
-
-      const assignedStaff = assignments[r.id] || assignments[r.tracking_number] || assignments[r.rawId] || '';
-
-      return {
-        rawId: r.rawId || r.id,
-        id: r.tracking_number || r.id,
-        tracking_number: r.tracking_number || r.id,
-        user: r.user,
-        student_name: studentName,
-        student_id: studentId,
-        document_type: documentType,
-        copies: r.copies || '1 copy',
-        status: formatStatusDisplay(effectiveRawStatus),
-        rawStatus: effectiveRawStatus,
-        batch_status: formatStatusDisplay(effectiveRawStatus),
-        assigned_staff: assignedStaff,
-        created_at: r.created_at,
-        request_date: requestDate,
-        release_date: releaseDate,
-        date_of_release: releaseDate,
-        amount,
-        assessed_amount: matchedStored?.assessed_amount || r.assessed_amount || amount,
-        verified_by_name: matchedStored?.verified_by_name || r.verified_by_name || null,
-        purpose: r.purpose || r.remarks || 'Official Academic Credential Request',
-        remarks: matchedStored?.remarks || r.remarks || '',
-        batchId,
-        clearance_preview: effectiveClearancePreview,
-        clearance_id: r.clearance_id || userClearance?.id || null,
-        clearance_status:
-          matchedStored?.clearance_status ||
-          r.clearance_status ||
-          (effectiveClearancePreview ? 'PENDING' : null),
-        clearance_file_name: effectiveClearanceFileName,
-        clearance_is_pdf: effectiveClearanceIsPdf,
-        photo_preview: r.photo_preview || null,
-        payment_status: matchedStored?.payment_status || r.payment_status || null,
-        payment_proof: matchedStored?.payment_proof || r.payment_proof || null,
-        or_number: matchedStored?.or_number || r.or_number || '',
-        receipt_image: matchedStored?.receipt_image || r.receipt_image || null,
-        is_confirmed: Boolean(matchedStored?.is_confirmed || r.is_confirmed),
-        confirmed_for_payment: Boolean(matchedStored?.confirmed_for_payment || r.confirmed_for_payment),
-      };
-    })
-    .filter((r) => {
-      const sName = String(r.student_name || '').toLowerCase();
-      const sId = String(r.student_id || '').toLowerCase();
-      if (/^student\s*#?\s*[1-4]$/i.test(sName) || /^student\s*#?\s*[1-4]$/i.test(sId)) {
-        return false;
-      }
-      if (r.id || r.tracking_number) {
+        if (
+          (r.student_name === 'Student' || r.student_name === 'N/A' || !r.student_name) &&
+          (r.student_id === 'N/A' || !r.student_id)
+        ) {
+          return false;
+        }
+        if (r.request_date === 'N/A' && r.release_date === 'N/A') {
+          return false;
+        }
         return true;
-      }
-      if (
-        (r.student_name === 'Student' || r.student_name === 'N/A' || !r.student_name) &&
-        (r.student_id === 'N/A' || !r.student_id)
-      ) {
-        return false;
-      }
-      if (r.request_date === 'N/A' && r.release_date === 'N/A') {
-        return false;
-      }
-      return true;
-    })
-    .sort(sortRequestsNewestFirst);
+      })
+      .sort(sortRequestsNewestFirst);
   }, [rawRequests, userMap, credTypeMap, clearanceMap, assignments]);
 
   const batchOptions = useMemo(() => {
@@ -486,8 +458,51 @@ export default function AdminRequestsPage() {
       return updated;
     });
 
+    try {
+      updateStoredRequest(requestId || rawId, { assigned_staff: staffName || '' });
+    } catch {}
+
     if (staffName) {
       toast.success(`Assigned ${staffName} to ${requestId}`);
+
+      const targetStaff =
+        staffMembers.find(
+          (s) =>
+            s.name === staffName ||
+            s.username === staffName ||
+            String(s.id) === String(staffName)
+        ) ||
+        users.find(
+          (u) =>
+            u.username === staffName ||
+            [u.first_name, u.last_name].filter(Boolean).join(' ') === staffName ||
+            String(u.id) === String(staffName)
+        );
+
+      const req = requests.find(
+        (r) =>
+          String(r.id) === String(requestId) ||
+          String(r.rawId) === String(rawId) ||
+          String(r.tracking_number) === String(requestId) ||
+          String(r.tracking_number) === String(rawId)
+      );
+
+      const trackingNum = req?.tracking_number || req?.id || requestId;
+      const docType = req?.document_type || 'Credential Request';
+      const studentName = req?.student_name || 'Student';
+
+      saveStoredNotification({
+        event_type: 'REQUEST_ASSIGNED',
+        title: 'New Assigned Request',
+        message: `New assigned request: You have been assigned to process ${docType} (${trackingNum}) for ${studentName}.`,
+        related_object_type: 'CredentialRequest',
+        related_object_id: trackingNum,
+        target_role: 'staff',
+        target_roles: ['staff'],
+        target_user_id: targetStaff?.id || null,
+        target_username: targetStaff?.username || null,
+        target_name: staffName,
+      });
     } else {
       toast.info(`Unassigned staff from ${requestId}`);
     }
@@ -545,26 +560,32 @@ export default function AdminRequestsPage() {
   }, [staffMembers, batchRequests, totalRequests]);
 
   const filteredRequests = useMemo(() => {
-    return requests.filter((r) => {
-      const q = searchQuery.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        r.id.toLowerCase().includes(q) ||
-        r.student_name.toLowerCase().includes(q) ||
-        r.student_id.toLowerCase().includes(q);
+    return requests
+      .filter((r) => {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesSearch =
+          !q ||
+          r.id.toLowerCase().includes(q) ||
+          r.student_name.toLowerCase().includes(q) ||
+          r.student_id.toLowerCase().includes(q);
 
-      if (!matchesSearch) return false;
+        if (!matchesSearch) return false;
 
-      if (docTypeFilter && !r.document_type.toLowerCase().includes(docTypeFilter.toLowerCase())) {
-        return false;
-      }
+        if (docTypeFilter) {
+          const filterLow = docTypeFilter.toLowerCase();
+          const docLow = (r.document_type || '').toLowerCase();
+          if (!docLow.includes(filterLow) && !filterLow.includes(docLow)) {
+            return false;
+          }
+        }
 
-      if (statusFilter && r.status.toLowerCase() !== statusFilter.toLowerCase()) {
-        return false;
-      }
+        if (statusFilter && r.status.toLowerCase() !== statusFilter.toLowerCase()) {
+          return false;
+        }
 
-      return true;
-    }).sort(sortRequestsNewestFirst);
+        return true;
+      })
+      .sort(sortRequestsNewestFirst);
   }, [requests, searchQuery, docTypeFilter, statusFilter]);
 
   const getStatusBadge = (status) => {
@@ -601,6 +622,9 @@ export default function AdminRequestsPage() {
       case 'on Hold':
       case 'ON_HOLD':
         return <span className="status-pill on-hold">On Hold</span>;
+      case 'Rejected':
+      case 'REJECTED':
+        return <span className="status-pill rejected">Rejected</span>;
       default:
         return <span className="status-pill pending">{s}</span>;
     }
@@ -622,7 +646,11 @@ export default function AdminRequestsPage() {
           </div>
           <div className="batch-title-area">
             <h2 className="batch-main-title">Batch staff Assignment</h2>
-            <p className="batch-subtitle">Assign staff members to process document requests</p>
+            <p className="batch-subtitle">
+              {isStaff
+                ? 'Process approved requests, prepare documents, update request statuses, and manage batches'
+                : 'Review & approve/reject credential requests and assign staff members'}
+            </p>
             <div className="batch-select-row">
               <span className="batch-select-label">Select Batch:</span>
               <select
@@ -729,7 +757,7 @@ export default function AdminRequestsPage() {
                   </td>
                 </tr>
               ) : (
-                batchRequests.map((item) => (
+                (showAllBatch ? batchRequests : batchRequests.slice(0, 10)).map((item) => (
                   <tr key={item.rawId || item.id}>
                     <td className="req-id-text">{item.id}</td>
                     <td>
@@ -775,6 +803,28 @@ export default function AdminRequestsPage() {
             </tbody>
           </table>
         </div>
+        {!loading && batchRequests.length > 10 && (
+          <div className="table-see-more-wrap">
+            <button
+              type="button"
+              onClick={() => setShowAllBatch((prev) => !prev)}
+              className="table-see-more-btn"
+            >
+              <span>
+                {showAllBatch ? 'See Less' : 'See More'}
+              </span>
+              <svg
+                className={`w-4 h-4 transition-transform ${showAllBatch ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="req-search-card">
@@ -834,7 +884,11 @@ export default function AdminRequestsPage() {
       <div className="requests-list-card">
         <div className="requests-list-header">
           <h3 className="requests-list-title">Requests</h3>
-          <p className="requests-list-subtitle">Latest document requests from students</p>
+          <p className="requests-list-subtitle">
+            {isStaff
+              ? 'Process approved requests, prepare documents, and update request statuses'
+              : 'Review and approve/reject credential requests from students'}
+          </p>
         </div>
 
         <div className="table-responsive">
@@ -872,7 +926,7 @@ export default function AdminRequestsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredRequests.map((item) => (
+                (showAllRequests ? filteredRequests : filteredRequests.slice(0, 10)).map((item) => (
                   <tr key={item.rawId || item.id}>
                     <td className="req-id-text">{item.id}</td>
                     <td>
@@ -887,17 +941,19 @@ export default function AdminRequestsPage() {
                     <td className="font-semibold text-slate-800">{item.request_date}</td>
                     <td className="font-semibold text-slate-800">{item.release_date}</td>
                     <td className="text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenProcess(item)}
-                        className="btn-view-req"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <circle cx="12" cy="12" r="3" strokeWidth={2} />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                        <span>View</span>
-                      </button>
+                      <div className="inline-flex items-center justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenProcess(item)}
+                          className="btn-view-req"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="3" strokeWidth={2} />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          <span>View</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -905,6 +961,28 @@ export default function AdminRequestsPage() {
             </tbody>
           </table>
         </div>
+        {!loading && !error && filteredRequests.length > 10 && (
+          <div className="table-see-more-wrap">
+            <button
+              type="button"
+              onClick={() => setShowAllRequests((prev) => !prev)}
+              className="table-see-more-btn"
+            >
+              <span>
+                {showAllRequests ? 'See Less' : 'See More'}
+              </span>
+              <svg
+                className={`w-4 h-4 transition-transform ${showAllRequests ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
 
       <ProcessRequestModal

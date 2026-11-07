@@ -20,7 +20,7 @@
 
 @media (min-width: 1024px) {
   .user-stat-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
   }
 }
 
@@ -49,6 +49,10 @@
 
 .user-stat-pill-slate {
   background-color: #64748b;
+}
+
+.user-stat-pill-indigo {
+  background-color: #6366f1;
 }
 
 .user-stat-pill-green {

@@ -236,6 +236,47 @@ export default function UserManagementPage() {
         console.warn('Could not cache user profile:', e);
       }
 
+      // Persist active email in staff/student profile so it appears in their profile immediately
+      try {
+        const emailLower = addUserEmail.trim().toLowerCase();
+        if (addUserRole === ROLES.STUDENT) {
+          const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+          const pData = {
+            id: newUser.id,
+            username: finalIdNumber,
+            student_id: finalIdNumber,
+            first_name: firstName,
+            last_name: lastName,
+            full_name: addUserName.trim(),
+            email: emailLower,
+            program: 'B.S. in Information Technology',
+            year_level: '1st year',
+          };
+          profiles[finalIdNumber] = { ...(profiles[finalIdNumber] || {}), ...pData };
+          if (newUser.id) profiles[String(newUser.id)] = { ...(profiles[String(newUser.id)] || {}), ...pData };
+          localStorage.setItem('regquest_student_profiles', JSON.stringify(profiles));
+        } else {
+          const staffProfiles = JSON.parse(localStorage.getItem('regquest_staff_profiles') || '{}');
+          const sData = {
+            id: newUser.id,
+            username: finalIdNumber,
+            employee_id: finalIdNumber,
+            full_name: addUserName.trim(),
+            email: emailLower,
+            role: addUserRole,
+          };
+          staffProfiles[finalIdNumber] = { ...(staffProfiles[finalIdNumber] || {}), ...sData };
+          if (newUser.id) staffProfiles[String(newUser.id)] = { ...(staffProfiles[String(newUser.id)] || {}), ...sData };
+          localStorage.setItem('regquest_staff_profiles', JSON.stringify(staffProfiles));
+        }
+
+        window.dispatchEvent(new CustomEvent('regquest_profile_updated', {
+          detail: { username: finalIdNumber, email: emailLower, full_name: addUserName.trim() }
+        }));
+      } catch (profileErr) {
+        console.warn('Could not cache role profile:', profileErr);
+      }
+
       // Record creation date so new account never receives historical notifications
       try {
         const creationDates = JSON.parse(localStorage.getItem('regquest_account_creation_dates') || '{}');
@@ -423,11 +464,16 @@ export default function UserManagementPage() {
 
   // Metric Stats Calculations
   const totalUsers = users.length;
-  const staffMembers = users.filter(
-    (u) => u.role === ROLES.STAFF || u.role === ROLES.REGISTRAR
-  ).length;
+  const registrars = users.filter((u) => u.role === ROLES.REGISTRAR).length;
+  const staffMembers = users.filter((u) => u.role === ROLES.STAFF).length;
   const administrators = users.filter((u) => u.role === ROLES.ADMIN).length;
   const students = users.filter((u) => u.role === ROLES.STUDENT).length;
+
+  const roleDescriptionMap = {
+    [ROLES.REGISTRAR]: 'Review and approve/reject credential requests.',
+    [ROLES.STAFF]: 'Process approved requests, prepare documents, and update request statuses.',
+    [ROLES.ADMIN]: 'Manage user accounts, assign roles, system settings, reports, and monitor overall system activities.',
+  };
 
   const stats = [
     {
@@ -437,6 +483,16 @@ export default function UserManagementPage() {
       icon: (
         <svg className="user-stat-icon text-slate-600" fill="currentColor" viewBox="0 0 24 24">
           <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+        </svg>
+      ),
+    },
+    {
+      title: 'Registrar',
+      value: registrars,
+      pillClass: 'user-stat-pill-indigo',
+      icon: (
+        <svg className="user-stat-icon text-[#6366F1]" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
         </svg>
       ),
     },
@@ -553,11 +609,16 @@ export default function UserManagementPage() {
                   onChange={(e) => setAddUserRole(e.target.value)}
                   className="add-user-select"
                 >
+                  <option value={ROLES.REGISTRAR}>Registrar</option>
                   <option value={ROLES.STAFF}>Staff</option>
                   <option value={ROLES.ADMIN}>Administrator</option>
-                  <option value={ROLES.REGISTRAR}>Registrar</option>
                 </select>
               </div>
+            </div>
+
+            <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 flex items-center gap-2">
+              <span className="font-bold text-slate-800 capitalize">{addUserRole} Role:</span>
+              <span>{roleDescriptionMap[addUserRole]}</span>
             </div>
 
             <p className="add-user-hint">

@@ -1,4 +1,5 @@
 import apiClient from './client';
+import credentialTypesApi from './credentialTypes';
 import { saveStoredNotification } from './notifications';
 import { saveClearanceAttachment, getClearanceAttachment } from './clearances';
 import { getStoredPaymentProof } from './payments';
@@ -6,6 +7,114 @@ import { getStoredPaymentProof } from './payments';
 export const STORAGE_KEY = 'regquest_submitted_requests';
 export const STUDENT_REQUESTS_KEY = 'student_my_requests';
 export const PROCESSED_ACTIONS_KEY = 'regquest_processed_actions';
+export const ASSIGNMENTS_KEY = 'regquest_staff_assignments';
+
+export function getStaffAssignments() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(ASSIGNMENTS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveStaffAssignments(map) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(ASSIGNMENTS_KEY, JSON.stringify(map));
+    window.dispatchEvent(new Event('regquest_assignments_updated'));
+    window.dispatchEvent(new Event('regquest_requests_updated'));
+  } catch (err) {
+    console.error('Failed to save staff assignments to localStorage:', err);
+  }
+}
+
+export function isRequestAssignedToUser(request, currentUser, assignmentsMap = null, usersList = []) {
+  if (!currentUser) return false;
+
+  const assignments = assignmentsMap || getStaffAssignments();
+
+  const candidates = new Set();
+  const addCandidate = (val) => {
+    if (val !== undefined && val !== null) {
+      const s = String(val).trim().toLowerCase();
+      if (s) candidates.add(s);
+    }
+  };
+
+  addCandidate(currentUser.username);
+  addCandidate(currentUser.full_name);
+  addCandidate([currentUser.first_name, currentUser.last_name].filter(Boolean).join(' '));
+  addCandidate(currentUser.id);
+  addCandidate(currentUser.userId);
+
+  if (Array.isArray(usersList) && usersList.length > 0) {
+    const matched = usersList.find(
+      (u) =>
+        (u.id && String(u.id) === String(currentUser.id || currentUser.userId)) ||
+        (u.username && currentUser.username && String(u.username).toLowerCase() === String(currentUser.username).toLowerCase())
+    );
+    if (matched) {
+      addCandidate(matched.username);
+      addCandidate([matched.first_name, matched.last_name].filter(Boolean).join(' '));
+      addCandidate(matched.id);
+    }
+  }
+
+  const reqKeys = [
+    request.id,
+    request.tracking_number,
+    request.rawId,
+    request.trackingId,
+    request.raw?.id,
+    request.raw?.tracking_number,
+    request.raw?.rawId,
+  ].filter((v) => v !== undefined && v !== null);
+
+  let assignedVal = null;
+  for (const k of reqKeys) {
+    const kStr = String(k).trim();
+    if (assignments[kStr] !== undefined && assignments[kStr] !== '') {
+      assignedVal = assignments[kStr];
+      break;
+    }
+    if (assignments[k] !== undefined && assignments[k] !== '') {
+      assignedVal = assignments[k];
+      break;
+    }
+  }
+
+  if (assignedVal === null || assignedVal === undefined || assignedVal === '') {
+    assignedVal =
+      request.assigned_staff ||
+      request.assigned_to ||
+      request.assignedStaff ||
+      request.raw?.assigned_staff ||
+      request.raw?.assigned_to ||
+      '';
+  }
+
+  if (!assignedVal) return false;
+
+  let assignedStr = '';
+  if (typeof assignedVal === 'object') {
+    assignedStr = String(assignedVal.name || assignedVal.username || assignedVal.id || '').trim().toLowerCase();
+  } else {
+    assignedStr = String(assignedVal).trim().toLowerCase();
+  }
+
+  if (!assignedStr) return false;
+
+  for (const candidate of candidates) {
+    if (assignedStr === candidate) return true;
+    if (candidate.length >= 3 && (assignedStr.includes(candidate) || candidate.includes(assignedStr))) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 // Cross-tab broadcast channel for instant real-time requests sync across Student, Staff, and Admin
 let requestsBroadcastChannel = null;
@@ -30,9 +139,11 @@ if (typeof window !== 'undefined') {
     if (
       event.key === STORAGE_KEY ||
       event.key === STUDENT_REQUESTS_KEY ||
-      event.key === 'regquest_stored_requests'
+      event.key === 'regquest_stored_requests' ||
+      event.key === ASSIGNMENTS_KEY
     ) {
       window.dispatchEvent(new CustomEvent('regquest_requests_updated'));
+      window.dispatchEvent(new CustomEvent('regquest_assignments_updated'));
     }
   });
 }
@@ -763,8 +874,7 @@ export const requestsApi = {
    * Fetch all credential types.
    */
   getCredentialTypes: async () => {
-    const response = await apiClient.get('/api/credential-types/');
-    return Array.isArray(response.data) ? response.data : (response.data?.results || []);
+    return credentialTypesApi.list();
   },
 };
 

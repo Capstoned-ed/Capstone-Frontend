@@ -28,6 +28,8 @@ export default function UserTable({
   const [editingUser, setEditingUser] = useState(null);
   const [deactivatingUser, setDeactivatingUser] = useState(null);
   const [actionLoadingId, setActionLoadingId] = useState(null);
+  const [showAllUsers, setShowAllUsers] = useState(false);
+  const [roleFilter, setRoleFilter] = useState('ALL');
 
   const fetchUsers = useCallback(async () => {
     if (propOnRetry) {
@@ -128,13 +130,15 @@ export default function UserTable({
       .join(' ');
   };
 
-  // ONLY Admin and Staff accounts (exclude students from Staff & Role Management table)
-  const staffAndAdminUsers = users.filter((user) => user.role !== ROLES.STUDENT);
+  // ONLY Admin, Registrar, and Staff accounts (exclude students from Staff & Role Management table)
+  const staffAndAdminUsers = users
+    .filter((user) => user.role !== ROLES.STUDENT)
+    .filter((user) => (roleFilter === 'ALL' ? true : user.role === roleFilter));
 
   return (
     <div className="user-table-card">
       {/* Card Header Bar (Light Blue/Periwinkle matching the photo) */}
-      <div className="user-table-header-bar">
+      <div className="user-table-header-bar flex flex-wrap items-center justify-between gap-3">
         {/* Left Title & Shield Icon */}
         <div className="user-table-header-left">
           <div className="w-8 h-8 text-[#3B82F6] flex items-center justify-center flex-shrink-0">
@@ -144,12 +148,38 @@ export default function UserTable({
           </div>
           <div>
             <h3 className="user-table-card-title">
-              Staff &amp; Role Management
+              Staff, Registrar &amp; Role Management
             </h3>
             <p className="user-table-card-desc">
-              Set roles and access levels for registrar staff
+              Assign roles and access levels for Registrar, Staff, and Administrator
             </p>
           </div>
+        </div>
+
+        {/* Role Filter Pills */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {[
+            { key: 'ALL', label: 'All Roles' },
+            { key: ROLES.REGISTRAR, label: 'Registrar' },
+            { key: ROLES.STAFF, label: 'Staff' },
+            { key: ROLES.ADMIN, label: 'Administrator' },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => {
+                setRoleFilter(tab.key);
+                setShowAllUsers(false);
+              }}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
+                roleFilter === tab.key
+                  ? 'bg-[#0B0B36] text-white shadow-sm'
+                  : 'bg-white/80 text-slate-600 hover:bg-white border border-slate-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -206,7 +236,7 @@ export default function UserTable({
                   </td>
                 </tr>
               ) : (
-                staffAndAdminUsers.map((user) => {
+                (showAllUsers ? staffAndAdminUsers : staffAndAdminUsers.slice(0, 10)).map((user) => {
                   const displayName = formatDisplayName(user);
 
                   return (
@@ -232,17 +262,32 @@ export default function UserTable({
                       {/* Current Role (matching color pills) */}
                       <td className="user-table-cell">
                         {user.role === ROLES.ADMIN ? (
-                          <span className="role-badge role-badge-admin">
-                            Administrator
-                          </span>
+                          <div>
+                            <span className="role-badge role-badge-admin">
+                              Administrator
+                            </span>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              Manage accounts, roles, settings &amp; reports
+                            </div>
+                          </div>
                         ) : user.role === ROLES.STAFF ? (
-                          <span className="role-badge role-badge-staff">
-                            Staff
-                          </span>
+                          <div>
+                            <span className="role-badge role-badge-staff">
+                              Staff
+                            </span>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              Process requests, prepare docs &amp; update status
+                            </div>
+                          </div>
                         ) : (
-                          <span className="role-badge role-badge-registrar">
-                            Registrar
-                          </span>
+                          <div>
+                            <span className="role-badge role-badge-registrar">
+                              Registrar
+                            </span>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              Review &amp; approve/reject credential requests
+                            </div>
+                          </div>
                         )}
                       </td>
 
@@ -301,6 +346,28 @@ export default function UserTable({
               )}
             </tbody>
           </table>
+          {staffAndAdminUsers.length > 10 && (
+            <div className="table-see-more-wrap">
+              <button
+                type="button"
+                onClick={() => setShowAllUsers((prev) => !prev)}
+                className="table-see-more-btn"
+              >
+                <span>
+                  {showAllUsers ? 'See Less' : 'See More'}
+                </span>
+                <svg
+                  className={`w-4 h-4 transition-transform ${showAllUsers ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
       )}
 

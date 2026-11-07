@@ -2,11 +2,11 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
 import ustpBuilding from '../../assets/USTP.png';
-import requestsApi, { getStoredRequests, updateStoredRequest, isValidRequest, logProcessedAction, sortRequestsNewestFirst, resolveRequestDocType } from '../../api/requests';
+import requestsApi, { getStoredRequests, updateStoredRequest, isValidRequest, logProcessedAction, sortRequestsNewestFirst, resolveRequestDocType, getStaffAssignments, isRequestAssignedToUser } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
-import { StaffProcessModal } from '../../components/staff';
+import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
 import useToast from '../../hooks/useToast';
 import '../../styles/staff/StaffDashboard.css';
 import '../../styles/staff/StaffRequestsPage.css';
@@ -77,6 +77,7 @@ export default function StaffDashboard() {
   const [modalStatus, setModalStatus] = useState('');
   const [modalNotes, setModalNotes] = useState('');
   const [modalUpdating, setModalUpdating] = useState(false);
+  const [showAllDashRequests, setShowAllDashRequests] = useState(false);
 
   const today = useMemo(() => new Date(), []);
   const todayFormatted = useMemo(() => {
@@ -149,7 +150,7 @@ export default function StaffDashboard() {
       } catch {}
 
       if (combinedRaw.length > 0) {
-        const enriched = combinedRaw
+        let enriched = combinedRaw
           .filter(isValidRequest)
           .filter((r) => Boolean(String(r.tracking_number || '').trim()))
           .map((r, idx) => {
@@ -242,6 +243,13 @@ export default function StaffDashboard() {
         })
         .sort(sortRequestsNewestFirst);
 
+        if (user?.role === 'staff') {
+          const currentAssignments = getStaffAssignments();
+          enriched = enriched.filter((r) =>
+            isRequestAssignedToUser(r, user, currentAssignments, usersRes)
+          );
+        }
+
         setRequestsList(enriched);
       } else {
         setRequestsList([]);
@@ -252,7 +260,7 @@ export default function StaffDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     loadDashboardData();
@@ -263,9 +271,11 @@ export default function StaffDashboard() {
 
     window.addEventListener('regquest_requests_updated', handleSync);
     window.addEventListener('regquest_profile_updated', handleSync);
+    window.addEventListener('regquest_assignments_updated', handleSync);
     return () => {
       window.removeEventListener('regquest_requests_updated', handleSync);
       window.removeEventListener('regquest_profile_updated', handleSync);
+      window.removeEventListener('regquest_assignments_updated', handleSync);
     };
   }, [loadDashboardData]);
 
@@ -790,7 +800,7 @@ export default function StaffDashboard() {
               </svg>
             </div>
             <p className="staff-dash-metric-val">{metrics.onHold}</p>
-            <p className="staff-dash-metric-sub">Requires Review</p>
+            <p className="staff-dash-metric-sub">Awaiting Action</p>
           </div>
 
           <div className="staff-dash-metric-card for-release">
@@ -832,7 +842,7 @@ export default function StaffDashboard() {
                 <p className="staff-dash-insight-item">
                   <span className="text-white text-base leading-none">•</span>
                   <span>
-                    Current registrar workload: <strong className="font-bold text-white">{metrics.total} total {metrics.total === 1 ? 'request' : 'requests'}</strong> ({metrics.pending} pending review, {metrics.processing} in progress).
+                    Current registrar workload: <strong className="font-bold text-white">{metrics.total} total {metrics.total === 1 ? 'request' : 'requests'}</strong> ({metrics.pending} pending, {metrics.processing} in progress).
                   </span>
                 </p>
                 {targetedSection.cards.length > 0 && (
@@ -1171,11 +1181,11 @@ export default function StaffDashboard() {
                 {displayedRequests.length === 0 ? (
                   <tr>
                     <td colSpan="7" className="py-12 text-center text-slate-400 text-xs font-medium">
-                      No document requests found.
+                      {user?.role === 'staff' ? 'No requests assigned to you yet.' : 'No document requests found.'}
                     </td>
                   </tr>
                 ) : (
-                  displayedRequests.slice(0, 5).map((req) => (
+                  (showAllDashRequests ? displayedRequests : displayedRequests.slice(0, 10)).map((req) => (
                     <tr key={req.id || req.tracking_number} className="staff-dash-tr">
                       <td className="staff-dash-td-id">
                         {req.tracking_number}
@@ -1224,20 +1234,37 @@ export default function StaffDashboard() {
               </tbody>
             </table>
           </div>
+          {displayedRequests.length > 10 && (
+            <div className="table-see-more-wrap">
+              <button
+                type="button"
+                onClick={() => setShowAllDashRequests((prev) => !prev)}
+                className="table-see-more-btn"
+              >
+                <span>
+                  {showAllDashRequests ? 'See Less' : 'See More'}
+                </span>
+                <svg
+                  className={`w-4 h-4 transition-transform ${showAllDashRequests ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {modalRequest && (
-        <StaffProcessModal
-          selectedRequest={modalRequest}
-          newStatus={modalStatus}
-          setNewStatus={setModalStatus}
-          notes={modalNotes}
-          setNotes={setModalNotes}
-          updating={modalUpdating}
-          onUpdateStatus={handleSaveStatus}
-          onBackToList={handleCloseRequestModal}
-          onRequestUpdated={(updatedReq) => {
+        <ProcessRequestModal
+          isOpen={Boolean(modalRequest)}
+          onClose={handleCloseRequestModal}
+          requestItem={modalRequest}
+          onUpdated={(updatedReq) => {
             setRequestsList((prev) =>
               prev.map((item) =>
                 item.id === updatedReq.id || item.tracking_number === updatedReq.tracking_number || item.tracking_number === updatedReq.id
@@ -1246,8 +1273,6 @@ export default function StaffDashboard() {
               )
             );
           }}
-          requestStatuses={['Pending', 'For Payment', 'For Processing', 'Processing', 'For Release', 'Claimed', 'On Hold']}
-          getStatusBadge={getStatusBadge}
         />
       )}
     </div>

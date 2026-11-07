@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import requestsApi, { updateStoredRequest, isValidRequest, logProcessedAction, sortRequestsNewestFirst, resolveRequestDocType } from '../../api/requests';
+import requestsApi, { updateStoredRequest, isValidRequest, logProcessedAction, sortRequestsNewestFirst, resolveRequestDocType, getStaffAssignments, isRequestAssignedToUser } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
 import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
 import useToast from '../../hooks/useToast';
-import { StaffProcessModal, StaffRequestsTable, StaffSearchFilter } from '../../components/staff';
+import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
+import { StaffRequestsTable, StaffSearchFilter } from '../../components/staff';
 import '../../styles/staff/StaffRequestsPage.css';
 
 const REQUEST_STATUSES = [
@@ -133,6 +134,7 @@ export default function StaffRequestsPage() {
   const [users, setUsers] = useState([]);
   const [credentialTypes, setCredentialTypes] = useState([]);
   const [clearances, setClearances] = useState([]);
+  const [assignments, setAssignments] = useState(getStaffAssignments);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -199,11 +201,18 @@ export default function StaffRequestsPage() {
     const handleSync = () => {
       loadData();
     };
+    const handleAssignmentsSync = () => {
+      setAssignments(getStaffAssignments());
+    };
     window.addEventListener('regquest_requests_updated', handleSync);
+    window.addEventListener('regquest_assignments_updated', handleAssignmentsSync);
+    window.addEventListener('storage', handleAssignmentsSync);
 
     return () => {
       ignore = true;
       window.removeEventListener('regquest_requests_updated', handleSync);
+      window.removeEventListener('regquest_assignments_updated', handleAssignmentsSync);
+      window.removeEventListener('storage', handleAssignmentsSync);
     };
   }, []);
 
@@ -237,7 +246,7 @@ export default function StaffRequestsPage() {
   }, [clearances]);
 
   const requests = useMemo(() => {
-    return rawRequests
+    let built = rawRequests
       .filter(isValidRequest)
       .filter((r) => Boolean(String(r.tracking_number || '').trim()))
       .map((r, idx) => {
@@ -400,6 +409,16 @@ export default function StaffRequestsPage() {
         receipt_image: matchedStored?.receipt_image || r.receipt_image || null,
         is_confirmed: Boolean(matchedStored?.is_confirmed || r.is_confirmed),
         confirmed_for_payment: Boolean(matchedStored?.confirmed_for_payment || r.confirmed_for_payment),
+        assigned_staff:
+          assignments[r.id] ||
+          assignments[String(r.id)] ||
+          assignments[r.tracking_number] ||
+          assignments[String(r.tracking_number)] ||
+          assignments[r.rawId] ||
+          assignments[String(r.rawId)] ||
+          matchedStored?.assigned_staff ||
+          r.assigned_staff ||
+          '',
       };
     })
     .filter((r) => {
@@ -421,9 +440,14 @@ export default function StaffRequestsPage() {
         return false;
       }
       return true;
-    })
-    .sort(sortRequestsNewestFirst);
-  }, [rawRequests, userMap, credTypeMap, clearanceMap]);
+    });
+
+    if (user?.role === 'staff') {
+      built = built.filter((r) => isRequestAssignedToUser(r, user, assignments, users));
+    }
+
+    return built.sort(sortRequestsNewestFirst);
+  }, [rawRequests, userMap, credTypeMap, clearanceMap, assignments, user, users]);
 
   const filteredRequests = useMemo(() => {
     return requests.filter((r) => {
@@ -436,8 +460,12 @@ export default function StaffRequestsPage() {
 
       if (!matchesSearch) return false;
 
-      if (docTypeFilter && !r.document_type.toLowerCase().includes(docTypeFilter.toLowerCase())) {
-        return false;
+      if (docTypeFilter) {
+        const filterLow = docTypeFilter.toLowerCase();
+        const docLow = (r.document_type || '').toLowerCase();
+        if (!docLow.includes(filterLow) && !filterLow.includes(docLow)) {
+          return false;
+        }
       }
 
       if (statusFilter && r.status.toLowerCase() !== statusFilter.toLowerCase()) {
@@ -631,18 +659,11 @@ export default function StaffRequestsPage() {
       />
 
       {selectedRequest && (
-        <StaffProcessModal
-          selectedRequest={selectedRequest}
-          newStatus={newStatus}
-          setNewStatus={setNewStatus}
-          notes={notes}
-          setNotes={setNotes}
-          updating={updating}
-          onUpdateStatus={handleUpdateStatus}
-          onBackToList={handleBackToList}
-          onRequestUpdated={handleRequestUpdated}
-          requestStatuses={REQUEST_STATUSES}
-          getStatusBadge={getStatusBadge}
+        <ProcessRequestModal
+          isOpen={Boolean(selectedRequest)}
+          onClose={() => setSelectedRequest(null)}
+          requestItem={selectedRequest}
+          onUpdated={handleRequestUpdated}
         />
       )}
     </div>

@@ -43,6 +43,32 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
       };
 
       const updated = await usersApi.update(user.id, payload);
+
+      // Persist edited email directly into student or staff profiles
+      try {
+        const emailLower = formData.email.trim().toLowerCase();
+        const uRole = (formData.role || user.role || '').toLowerCase();
+        const uKey = user.username || String(user.id);
+
+        if (uRole === 'student') {
+          const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+          if (profiles[uKey]) profiles[uKey].email = emailLower;
+          if (user.id && profiles[String(user.id)]) profiles[String(user.id)].email = emailLower;
+          localStorage.setItem('regquest_student_profiles', JSON.stringify(profiles));
+        } else {
+          const staffProfiles = JSON.parse(localStorage.getItem('regquest_staff_profiles') || '{}');
+          if (staffProfiles[uKey]) staffProfiles[uKey].email = emailLower;
+          if (user.id && staffProfiles[String(user.id)]) staffProfiles[String(user.id)].email = emailLower;
+          localStorage.setItem('regquest_staff_profiles', JSON.stringify(staffProfiles));
+        }
+
+        window.dispatchEvent(new CustomEvent('regquest_profile_updated', {
+          detail: { username: user.username, email: emailLower }
+        }));
+      } catch (profileErr) {
+        console.warn('Could not update profile email storage:', profileErr);
+      }
+
       toast.success(`User "${user.username}" updated successfully.`);
       onUserUpdated(updated);
       onClose();
@@ -126,9 +152,9 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
           onChange={handleChange}
           className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
         >
-          <option value={ROLES.ADMIN}>Administrator (Full Console Access)</option>
-          <option value={ROLES.STAFF}>Staff (Registrar Operations &amp; Verification)</option>
-          <option value={ROLES.REGISTRAR}>Registrar (Document Generation)</option>
+          <option value={ROLES.REGISTRAR}>Registrar — Review and approve/reject credential requests</option>
+          <option value={ROLES.STAFF}>Staff — Process approved requests, prepare documents, and update statuses</option>
+          <option value={ROLES.ADMIN}>Admin — Manage user accounts, assign roles, system settings, reports &amp; monitor activities</option>
         </select>
       </div>
 

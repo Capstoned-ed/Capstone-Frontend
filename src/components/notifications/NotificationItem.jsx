@@ -12,6 +12,8 @@ function formatEventTitle(eventType) {
       return 'Security Notice';
     case 'REQUEST_CREATED':
       return 'Request Submitted';
+    case 'REQUEST_ASSIGNED':
+      return 'New Assigned Request';
     case 'REQUEST_STATUS_CHANGED':
       return 'Status Update';
     case 'CLEARANCE_SUBMITTED':
@@ -47,6 +49,17 @@ function getEventBadge(eventType) {
         icon: (
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+          </svg>
+        ),
+      };
+    case 'REQUEST_ASSIGNED':
+      return {
+        bg: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+        pill: 'bg-indigo-100 text-indigo-800',
+        label: 'Assigned to You',
+        icon: (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
         ),
       };

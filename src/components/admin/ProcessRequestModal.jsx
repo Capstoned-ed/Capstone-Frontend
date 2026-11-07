@@ -134,6 +134,7 @@ export default function ProcessRequestModal({
       'Releasing',
       'Claimed',
       'On Hold',
+      'Rejected',
     ];
     const currentVal = normalizeStatus(localStatus || newStatus);
     if (currentVal && !base.includes(currentVal)) base.push(currentVal);
@@ -393,6 +394,70 @@ export default function ProcessRequestModal({
     }
 
     toast.success(`Request confirmed! Status updated to "For Payment". Student notified to pay ${cleanAmount}.`);
+  };
+
+  const handleRejectRequest = async () => {
+    const targetId = requestItem.id || requestItem.rawId;
+    const trackingCode = requestItem.tracking_number || requestItem.trackingId || requestItem.id;
+    const reason = notes.trim() || 'Request requirements incomplete or rejected.';
+
+    try {
+      setLoading(true);
+      if (typeof targetId === 'number') {
+        await requestsApi.transition(targetId, {
+          status: 'REJECTED',
+          remarks: reason,
+        }).catch(() => {});
+      }
+
+      const rejectPatch = {
+        status: 'Rejected',
+        rawStatus: 'REJECTED',
+        batch_status: 'Rejected',
+        remarks: reason,
+        rejected_by: user?.full_name || user?.username || 'Staff/Registrar',
+        rejected_at: new Date().toISOString(),
+      };
+
+      updateStoredRequest(targetId, rejectPatch, { fallbackItem: requestItem });
+
+      logProcessedAction({
+        actor: user?.username,
+        actorName: user?.full_name || user?.username,
+        actorId: user?.id,
+        actorRole: user?.role || 'staff',
+        targetName: requestItem.student_name,
+        targetId: requestItem.student_id || trackingCode,
+        trackingNumber: trackingCode,
+        documentType: requestItem.document_type,
+        action: `Request rejected: ${reason}`,
+        status: 'Rejected',
+      });
+
+      saveStoredNotification({
+        user: requestItem.user || requestItem.student_id,
+        title: 'Request Rejected',
+        message: `Your request ${trackingCode} for ${requestItem.document_type || 'credential'} was rejected. Reason: ${reason}`,
+        type: 'error',
+        tracking_number: trackingCode,
+      });
+
+      handleManualStatusChange('Rejected');
+      if (onUpdated) {
+        onUpdated({
+          ...requestItem,
+          ...rejectPatch,
+        });
+      }
+
+      toast.error(`Request ${trackingCode} marked as Rejected.`);
+      onClose();
+    } catch (err) {
+      console.warn('Reject error:', err);
+      toast.error('Failed to reject request.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleVerifyPayment = async (actionToSet = 'VERIFIED') => {
@@ -1056,7 +1121,14 @@ export default function ProcessRequestModal({
                       </svg>
                       <span>Preview Form</span>
                     </button>
-                    {isOrderConfirmed ? (
+                    {localStatus === 'Rejected' || requestItem?.status === 'Rejected' ? (
+                      <div className="px-3.5 py-2 bg-rose-50 border border-rose-300 text-rose-800 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs">
+                        <svg className="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        <span>Request Rejected</span>
+                      </div>
+                    ) : isOrderConfirmed ? (
                       <div className="px-3.5 py-2 bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs">
                         <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -1064,16 +1136,29 @@ export default function ProcessRequestModal({
                         <span>Request Confirmed</span>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={handleConfirmAssessmentAndIssuePayment}
-                        className="px-4 py-2 bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
-                      >
-                        <span>Confirm Request & Order of Payment</span>
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                        </svg>
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleRejectRequest}
+                          className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+                          title="Reject this request"
+                        >
+                          <svg className="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          <span>Reject Request</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleConfirmAssessmentAndIssuePayment}
+                          className="px-4 py-2 bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                        >
+                          <span>Confirm Request & Order of Payment</span>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                          </svg>
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>

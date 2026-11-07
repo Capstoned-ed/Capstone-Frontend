@@ -4,9 +4,14 @@ import PredictedInsightCard from '../../components/admin/PredictedInsightCard';
 import RequestVolumeCard from '../../components/admin/RequestVolumeCard';
 import UserTable from '../../components/admin/UserTable';
 import useDashboardData from '../../hooks/useDashboardData';
+import { useAuth } from '../../hooks/useAuth';
+import { ROLES } from '../../constants/roles';
+import { ROUTES } from '../../constants/routes';
 import '../../styles/admin/AdminDashboard.css';
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
+  const isRegistrar = user?.role === ROLES.REGISTRAR;
   const {
     loading,
     statusDistribution,
@@ -33,10 +38,13 @@ export default function AdminDashboard() {
         {/* Banner Text Content */}
         <div className="admin-banner-content">
           <h1 className="admin-banner-title">
-            Registrar Admin <span className="admin-banner-title-highlight">Dashboard</span>
+            {isRegistrar ? 'Registrar' : 'Registrar Admin'}{' '}
+            <span className="admin-banner-title-highlight">Dashboard</span>
           </h1>
           <p className="admin-banner-subtitle">
-            System Analytics &amp; User Management
+            {isRegistrar
+              ? 'Review and approve/reject credential requests • System Analytics & Operations'
+              : 'Manage user accounts, assign roles, system settings, reports, and monitor overall system activities'}
           </p>
         </div>
       </div>
@@ -185,6 +193,7 @@ export default function AdminDashboard() {
             dailyData={dailyVolume}
             monthlyData={monthlyVolume}
             loading={loading}
+            viewMoreRoute={ROUTES.ADMIN.ANALYTICS}
           />
         </section>
 
