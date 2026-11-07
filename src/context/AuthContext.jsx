@@ -19,8 +19,9 @@ export function AuthProvider({ children }) {
       let program = decoded.program || '';
       let yearLevel = decoded.year_level || '';
       let studentId = decoded.student_id || decoded.username || '';
+      let resolvedRole = decoded.role;
+      let email = decoded.email || '';
 
-      // Check cached student profiles in localStorage
       try {
         const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
         const p = profiles[decoded.user_id] || profiles[decoded.username];
@@ -31,13 +32,28 @@ export function AuthProvider({ children }) {
           if (!program) program = p.program || '';
           if (!yearLevel) yearLevel = p.year_level || '';
           if (!studentId || studentId === decoded.username) studentId = p.student_id || decoded.username;
+          if (p.email) email = p.email;
         }
       } catch {}
 
-      // Check users cache in localStorage
+      try {
+        const staffProfiles = JSON.parse(localStorage.getItem('regquest_staff_profiles') || '{}');
+        const sp = staffProfiles[decoded.user_id] || staffProfiles[decoded.username];
+        if (sp) {
+          if (!fullName) fullName = sp.full_name || '';
+          if (sp.email) email = sp.email;
+        }
+      } catch {}
+
       try {
         const usersCache = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
-        const u = usersCache.find((x) => x.id === decoded.user_id || x.username === decoded.username);
+        const u = usersCache.find(
+          (x) =>
+            String(x.id) === String(decoded.user_id) ||
+            (x.username &&
+              decoded.username &&
+              String(x.username).toLowerCase() === String(decoded.username).toLowerCase())
+        );
         if (u) {
           if (!firstName) firstName = u.first_name || '';
           if (!lastName) lastName = u.last_name || '';
@@ -45,27 +61,37 @@ export function AuthProvider({ children }) {
           if (!program) program = u.program || '';
           if (!yearLevel) yearLevel = u.year_level || '';
           if (!studentId || studentId === decoded.username) studentId = u.student_id || decoded.username;
+          if (u.role) resolvedRole = u.role;
+          if (u.email && !email) email = u.email;
         }
+        const overrides = JSON.parse(localStorage.getItem('regquest_users_overrides') || '{}');
+        const ovById = overrides[String(decoded.user_id)];
+        const ovByUser = decoded.username ? overrides[String(decoded.username).toLowerCase()] : null;
+        if (ovByUser?.role) resolvedRole = ovByUser.role;
+        if (ovById?.role) resolvedRole = ovById.role;
+        if (ovByUser?.email) email = ovByUser.email;
+        if (ovById?.email) email = ovById.email;
       } catch {}
 
-      // Known fallback for student 2023301564 (Daisy Traya)
       if (decoded.username === '2023301564') {
         if (!firstName) firstName = 'Daisy';
         if (!lastName) lastName = 'Traya';
         if (!fullName) fullName = 'Daisy Traya';
+        if (!email) email = 'daisy.traya@ustp.edu.ph';
       }
 
       return {
         userId: decoded.user_id,
         id: decoded.user_id,
         username: decoded.username || '',
+        email: email || '',
         first_name: firstName,
         last_name: lastName,
         full_name: fullName,
         program,
         year_level: yearLevel,
         student_id: studentId,
-        role: decoded.role,
+        role: resolvedRole,
         force_password_change: Boolean(decoded.force_password_change),
         exp: decoded.exp,
       };
@@ -74,7 +100,6 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  // Initialize auth state on application startup
   useEffect(() => {
     const initializeAuth = async () => {
       const accessToken = localStorage.getItem('access_token');
@@ -90,7 +115,6 @@ export function AuthProvider({ children }) {
 
       const decoded = parseToken(accessToken);
 
-      // Check if access token is still valid (with 10-second buffer)
       if (decoded && decoded.exp * 1000 > Date.now() + 10000) {
         try {
           const uKey = (decoded.username || '').toLowerCase();
@@ -110,7 +134,6 @@ export function AuthProvider({ children }) {
         setUser(decoded);
         setLoading(false);
       } else if (refreshToken) {
-        // Attempt silent refresh if access token expired
         try {
           const data = await authApi.refresh(refreshToken);
           localStorage.setItem('access_token', data.access);
@@ -146,7 +169,6 @@ export function AuthProvider({ children }) {
 
     const decoded = parseToken(access);
 
-    // Ensure account creation timestamp is established so this account never inherits past notifications
     try {
       const uKey = (decoded?.username || username || '').toLowerCase();
       if (uKey) {
@@ -173,7 +195,6 @@ export function AuthProvider({ children }) {
         await authApi.logout(refreshToken);
       }
     } catch {
-      // Ignore logout API failures and clear state locally
     } finally {
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
@@ -189,8 +210,8 @@ export function AuthProvider({ children }) {
     loading,
     login,
     logout,
-    // Helper property reflecting that Staff and Registrar share responsibilities
     isStaffOrRegistrar: user?.role === ROLES.STAFF || user?.role === ROLES.REGISTRAR,
+    isAdminOrRegistrar: user?.role === ROLES.ADMIN || user?.role === ROLES.REGISTRAR,
   }), [user, loading, login, logout]);
 
   return (

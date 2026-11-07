@@ -5,6 +5,46 @@ import { ROUTES } from '../../constants/routes';
 import requestsApi from '../../api/requests';
 import useToast from '../../hooks/useToast';
 
+const getStatusBadge = (statusStr) => {
+  const s = String(statusStr || 'Pending').toUpperCase();
+  if (s.includes('HOLD')) {
+    return 'bg-amber-100 text-amber-900 border border-amber-300';
+  }
+  if (s.includes('REJECT')) {
+    return 'bg-rose-100 text-rose-800 border border-rose-300';
+  }
+  if (s.includes('CLAIM') || s.includes('COMPLET') || s.includes('RELEASED')) {
+    return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
+  }
+  if (s.includes('RELEASING') || s.includes('READY')) {
+    return 'bg-purple-100 text-purple-800 border border-purple-300';
+  }
+  if (s.includes('FOR_PROCESSING') || s.includes('FOR PROCESSING')) {
+    return 'bg-sky-100 text-sky-800 border border-sky-300';
+  }
+  if (s.includes('PROCESS')) {
+    return 'bg-blue-100 text-blue-800 border border-blue-300';
+  }
+  if (s.includes('PAYMENT') || s.includes('PAY')) {
+    return 'bg-amber-50 text-amber-800 border border-amber-200';
+  }
+  return 'bg-slate-100 text-slate-700 border border-slate-200';
+};
+
+const formatStatus = (statusStr) => {
+  const s = String(statusStr || 'Pending').trim();
+  const upper = s.toUpperCase();
+  if (upper === 'PENDING') return 'Pending';
+  if (upper === 'FOR_PAYMENT' || upper === 'PENDING PAYMENT') return 'Pending Payment';
+  if (upper === 'FOR_PROCESSING') return 'For Processing';
+  if (upper === 'PROCESSING') return 'Processing';
+  if (upper === 'READY_FOR_RELEASE' || upper === 'RELEASING') return 'Releasing';
+  if (upper === 'RELEASED' || upper === 'CLAIMED') return 'Claimed';
+  if (upper === 'ON_HOLD' || upper === 'ON HOLD') return 'On Hold';
+  if (upper === 'REJECTED') return 'Rejected';
+  return s;
+};
+
 export default function StudentProfilePage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -35,41 +75,64 @@ export default function StudentProfilePage() {
   useEffect(() => {
     try {
       const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+      const usersCache = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
       const userKey = user?.id || user?.username || user?.student_id;
       const p = profiles[userKey] || profiles[user?.username] || {};
+      const cachedUser = usersCache.find(
+        (x) =>
+          String(x.id) === String(user?.id || user?.userId) ||
+          (x.username && user?.username && String(x.username).toLowerCase() === String(user.username).toLowerCase())
+      );
 
-      setEditableEmail(
+      const activeEmail =
         p.email ||
         user?.email ||
-        (user?.username === '2023301564' ? 'daisy.traya@ustp.edu.ph' : 'juan@email.com')
-      );
+        cachedUser?.email ||
+        (user?.username === '2023301564' ? 'daisy.traya@ustp.edu.ph' : '');
+
+      setEditableEmail(activeEmail);
       setEditableMobile(
         p.mobile_number ||
         p.phone ||
         user?.phone ||
         user?.mobile_number ||
+        cachedUser?.phone ||
         '09561236549'
       );
       setEditableYearLevel(
         p.year_level ||
         user?.year_level ||
+        cachedUser?.year_level ||
         '1st year'
       );
     } catch {
-      setEditableEmail(user?.email || 'juan@email.com');
+      setEditableEmail(user?.email || '');
       setEditableMobile('09561236549');
       setEditableYearLevel(user?.year_level || '1st year');
     }
   }, [user]);
 
-  // Load requests
+  // Load requests filtered strictly for authenticated student
   useEffect(() => {
     setLoadingRequests(true);
     requestsApi
       .list()
       .then((res) => {
         if (Array.isArray(res) && res.length > 0) {
-          setRequestsList(res);
+          const currentUserId = user?.userId || user?.id;
+          const currentStudentId = user?.student_id || user?.username;
+          const currentFullName = user?.full_name || (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : '');
+
+          const filtered = res.filter((r) => {
+            if (r.user && currentUserId && String(r.user) === String(currentUserId)) return true;
+            if (r.student_id && currentStudentId && String(r.student_id) === String(currentStudentId)) return true;
+            if (currentStudentId && String(r.student_name || '').includes(String(currentStudentId))) return true;
+            if (currentFullName && r.student_name && r.student_name.toLowerCase().includes(currentFullName.toLowerCase())) return true;
+            if (user?.username && r.student_name && r.student_name.toLowerCase().includes(user.username.toLowerCase())) return true;
+            return false;
+          });
+
+          setRequestsList(filtered);
         } else {
           setRequestsList([]);
         }
@@ -80,7 +143,7 @@ export default function StudentProfilePage() {
       .finally(() => {
         setLoadingRequests(false);
       });
-  }, []);
+  }, [user]);
 
   const handleLogout = async () => {
     await logout();
@@ -141,15 +204,15 @@ export default function StudentProfilePage() {
         style={{ minHeight: '520px' }}
       >
         {/* Left Navigation Panel */}
-        <div className="w-full md:w-56 bg-white border-b md:border-b-0 md:border-r border-slate-200/80 p-6 flex flex-col justify-between shrink-0">
-          <div className="space-y-4">
+        <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200/80 p-5 md:p-6 flex flex-col justify-between shrink-0">
+          <div className="space-y-2">
             {/* Overview Tab Button */}
             <button
               type="button"
               onClick={() => setActiveTab('overview')}
-              className={`w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl transition-colors text-left ${
+              className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl transition-colors text-left cursor-pointer ${
                 activeTab === 'overview'
-                  ? 'text-[#0B0B7A] font-bold'
+                  ? 'text-[#0B0B7A] bg-indigo-50/70 font-bold'
                   : 'text-slate-600 hover:text-slate-900 font-medium hover:bg-slate-50'
               }`}
             >
@@ -157,16 +220,16 @@ export default function StudentProfilePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 9.5L12 3l9 6.5V20a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9.5z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 22V12h6v10" />
               </svg>
-              <span className="text-[15px]">Overview</span>
+              <span className="text-[15px] whitespace-nowrap">Overview</span>
             </button>
 
             {/* My Information Tab Button */}
             <button
               type="button"
               onClick={() => setActiveTab('information')}
-              className={`w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl transition-colors text-left ${
+              className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl transition-colors text-left cursor-pointer ${
                 activeTab === 'information'
-                  ? 'text-[#0B0B7A] font-bold'
+                  ? 'text-[#0B0B7A] bg-indigo-50/70 font-bold'
                   : 'text-slate-600 hover:text-slate-900 font-medium hover:bg-slate-50'
               }`}
             >
@@ -174,7 +237,7 @@ export default function StudentProfilePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
               </svg>
-              <span className="text-[15px]">My Information</span>
+              <span className="text-[15px] whitespace-nowrap">My Information</span>
             </button>
           </div>
 
@@ -183,20 +246,20 @@ export default function StudentProfilePage() {
             <button
               type="button"
               onClick={handleLogout}
-              className="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-slate-600 hover:text-red-600 hover:bg-red-50/50 transition-colors text-left font-medium"
+              className="w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-slate-600 hover:text-red-600 hover:bg-red-50/60 transition-colors text-left font-medium cursor-pointer"
             >
               <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <polyline strokeLinecap="round" strokeLinejoin="round" points="16 17 21 12 16 7" />
                 <line x1="21" y1="12" x2="9" y2="12" strokeLinecap="round" strokeWidth={2} />
               </svg>
-              <span className="text-[15px]">Log out</span>
+              <span className="text-[15px] whitespace-nowrap">Log out</span>
             </button>
           </div>
         </div>
 
         {/* Right Content Area */}
-        <div className="flex-1 p-7 md:p-9 flex flex-col justify-start relative overflow-y-auto">
+        <div className="flex-1 p-6 sm:p-8 md:p-9 flex flex-col justify-start relative overflow-y-auto">
           {/* User Profile Header */}
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-full bg-[#7B8294] flex items-center justify-center overflow-hidden flex-shrink-0 text-white shadow-sm">
@@ -217,20 +280,33 @@ export default function StudentProfilePage() {
           {/* Tab 1: Overview (Request Log) */}
           {activeTab === 'overview' && (
             <div className="mt-7">
-              <h3 className="text-xl font-bold text-[#000080] mb-4">Request Log</h3>
-              <div className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_4px_16px_rgba(0,0,0,0.05)] p-6 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="text-slate-800 font-semibold text-[15px]">
-                        <th className="pb-4 font-semibold pr-6 whitespace-nowrap">Request #</th>
-                        <th className="pb-4 font-semibold pr-6 whitespace-nowrap">Document Type</th>
-                        <th className="pb-4 font-semibold pr-6 whitespace-nowrap">Date</th>
-                        <th className="pb-4 font-semibold whitespace-nowrap">Time</th>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-[#000080]">Request Log</h3>
+                <span className="text-xs font-semibold text-slate-500">
+                  {requestsList.length} {requestsList.length === 1 ? 'request' : 'requests'}
+                </span>
+              </div>
+              <div className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_4px_16px_rgba(0,0,0,0.05)] p-5 sm:p-6 overflow-hidden">
+                <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="sticky top-0 bg-white shadow-2xs z-10">
+                      <tr className="text-slate-800 font-semibold text-[14px] border-b border-slate-200/80">
+                        <th className="pb-3.5 font-bold pr-5 whitespace-nowrap">Request #</th>
+                        <th className="pb-3.5 font-bold pr-5 whitespace-nowrap">Document Type</th>
+                        <th className="pb-3.5 font-bold pr-5 whitespace-nowrap">Date</th>
+                        <th className="pb-3.5 font-bold pr-5 whitespace-nowrap">Time</th>
+                        <th className="pb-3.5 font-bold pr-5 whitespace-nowrap">Status</th>
+                        <th className="pb-3.5 font-bold text-right whitespace-nowrap">Action</th>
                       </tr>
                     </thead>
                     <tbody className="text-sm text-slate-600 divide-y divide-slate-100">
-                      {requestsList.length > 0 ? (
+                      {loadingRequests ? (
+                        <tr>
+                          <td colSpan={6} className="py-10 text-center text-slate-400">
+                            Loading your requests...
+                          </td>
+                        </tr>
+                      ) : requestsList.length > 0 ? (
                         requestsList.map((req, idx) => {
                           const dateObj = req.created_at ? new Date(req.created_at) : new Date();
                           const dateStr = dateObj.toLocaleDateString('en-US', {
@@ -247,6 +323,7 @@ export default function StudentProfilePage() {
 
                           const reqNum =
                             req.tracking_number ||
+                            req.trackingId ||
                             req.request_number ||
                             `RQ-${String(req.id || idx + 97323).padStart(6, '0')}`;
 
@@ -256,21 +333,58 @@ export default function StudentProfilePage() {
                             req.document_type_name ||
                             'Transcript of Records';
 
+                          const reqStatus = req.status || req.rawStatus || 'Pending';
+
                           return (
-                            <tr key={req.id || idx} className="hover:bg-slate-50/60 transition-colors">
-                              <td className="py-3.5 pr-6 text-slate-700 font-medium whitespace-nowrap">{reqNum}</td>
-                              <td className="py-3.5 pr-6 text-slate-600">{docType}</td>
-                              <td className="py-3.5 pr-6 text-slate-600 whitespace-nowrap">{dateStr}</td>
-                              <td className="py-3.5 text-slate-600 whitespace-nowrap">{timeStr}</td>
+                            <tr key={req.id || idx} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="py-3.5 pr-5 text-slate-800 font-bold whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigate(`${ROUTES.STUDENT.REQUESTS}?track=${encodeURIComponent(reqNum)}`);
+                                  }}
+                                  className="text-[#0B0B7A] hover:text-amber-600 hover:underline inline-flex items-center gap-1 cursor-pointer font-bold"
+                                  title="Track this request"
+                                >
+                                  <span>{reqNum}</span>
+                                  <span className="text-xs">↗</span>
+                                </button>
+                              </td>
+                              <td className="py-3.5 pr-5 text-slate-700 font-medium">{docType}</td>
+                              <td className="py-3.5 pr-5 text-slate-600 whitespace-nowrap">{dateStr}</td>
+                              <td className="py-3.5 pr-5 text-slate-500 whitespace-nowrap text-xs">{timeStr}</td>
+                              <td className="py-3.5 pr-5 whitespace-nowrap">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${getStatusBadge(reqStatus)}`}>
+                                  {formatStatus(reqStatus)}
+                                </span>
+                              </td>
+                              <td className="py-3.5 text-right whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigate(`${ROUTES.STUDENT.REQUESTS}?track=${encodeURIComponent(reqNum)}`);
+                                  }}
+                                  className="px-3 py-1 rounded-lg bg-indigo-50 hover:bg-[#0B0B7A] text-[#0B0B7A] hover:text-white font-semibold text-xs transition-colors cursor-pointer"
+                                >
+                                  Track
+                                </button>
+                              </td>
                             </tr>
                           );
                         })
                       ) : (
-                        <tr className="hover:bg-slate-50/60 transition-colors">
-                          <td className="py-3.5 pr-6 text-slate-700 font-medium whitespace-nowrap">RQ-097323</td>
-                          <td className="py-3.5 pr-6 text-slate-600">Transcript of Records</td>
-                          <td className="py-3.5 pr-6 text-slate-600 whitespace-nowrap">May 9, 2026</td>
-                          <td className="py-3.5 text-slate-600 whitespace-nowrap">10:26:13 am</td>
+                        <tr>
+                          <td colSpan={6} className="py-10 text-center text-slate-400">
+                            <div className="flex flex-col items-center justify-center">
+                              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mb-2 text-slate-400">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                </svg>
+                              </div>
+                              <p className="text-sm font-semibold text-slate-700">No requests found</p>
+                              <p className="text-xs text-slate-400 mt-0.5">You haven't submitted any credential requests yet.</p>
+                            </div>
+                          </td>
                         </tr>
                       )}
                     </tbody>

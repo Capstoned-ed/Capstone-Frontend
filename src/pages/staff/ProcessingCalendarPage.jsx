@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import requestsApi, { getStoredRequests, isValidRequest, sortRequestsNewestFirst, resolveRequestDocType } from '../../api/requests';
+import requestsApi, { getStoredRequests, isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, getStaffAssignments, isRequestAssignedToUser } from '../../api/requests';
+import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
 import ProcessCalendarCard from '../../components/calendar/ProcessCalendarCard';
@@ -69,6 +70,7 @@ function formatStatusDisplay(rawStatus) {
 }
 
 export default function ProcessingCalendarPage() {
+  const { user } = useAuth();
   const [requestsList, setRequestsList] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -112,7 +114,7 @@ export default function ProcessingCalendarPage() {
       } catch {}
 
       if (combinedRaw.length > 0) {
-        const enriched = combinedRaw
+        let enriched = combinedRaw
           .filter(isValidRequest)
           .map((r, idx) => {
           const userObj = userMap.get(r.user) || userMap.get(r.student_id);
@@ -191,6 +193,13 @@ export default function ProcessingCalendarPage() {
         })
         .sort(sortRequestsNewestFirst);
 
+        if (user?.role === 'staff') {
+          const currentAssignments = getStaffAssignments();
+          enriched = enriched.filter((r) =>
+            isRequestAssignedToUser(r, user, currentAssignments, usersRes)
+          );
+        }
+
         setRequestsList(enriched);
       } else {
         setRequestsList([]);
@@ -201,7 +210,7 @@ export default function ProcessingCalendarPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     loadData();
@@ -212,9 +221,11 @@ export default function ProcessingCalendarPage() {
 
     window.addEventListener('regquest_requests_updated', handleSync);
     window.addEventListener('regquest_profile_updated', handleSync);
+    window.addEventListener('regquest_assignments_updated', handleSync);
     return () => {
       window.removeEventListener('regquest_requests_updated', handleSync);
       window.removeEventListener('regquest_profile_updated', handleSync);
+      window.removeEventListener('regquest_assignments_updated', handleSync);
     };
   }, [loadData]);
 

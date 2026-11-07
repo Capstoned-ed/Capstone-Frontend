@@ -34,6 +34,20 @@ export default function RequestDocumentPage() {
     return 'Juan Dela Cruz';
   };
 
+  const resolveStudentEmail = (u) => {
+    if (u?.email) return u.email;
+    try {
+      const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+      const p = profiles[u?.username] || profiles[u?.userId] || profiles[u?.id];
+      if (p?.email) return p.email;
+      const usersCache = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
+      const match = usersCache.find((x) => x.username && x.username.toLowerCase() === (u?.username || '').toLowerCase());
+      if (match?.email) return match.email;
+    } catch {}
+    if (u?.username === '2023301564') return 'daisy.traya@ustp.edu.ph';
+    return '';
+  };
+
   // Form State (Step 1)
   const [fullName, setFullName] = useState(() => resolveStudentName(user));
   const [course, setCourse] = useState(user?.program || 'BS in Information Technology');
@@ -148,7 +162,14 @@ export default function RequestDocumentPage() {
   const [copies, setCopies] = useState(1);
   const [yearLevel, setYearLevel] = useState(user?.year_level || '4th year');
   const [studentId, setStudentId] = useState(user?.student_id || user?.username || '2026202666');
-  const [email, setEmail] = useState(user?.email || 'juan@email.com');
+  const [email, setEmail] = useState(() => resolveStudentEmail(user));
+
+  useEffect(() => {
+    const resolvedEmail = resolveStudentEmail(user);
+    if (resolvedEmail) {
+      setEmail(resolvedEmail);
+    }
+  }, [user]);
   const [purposeInput, setPurposeInput] = useState('For Personal Files');
 
   // Step 3 State
@@ -1040,13 +1061,24 @@ export default function RequestDocumentPage() {
                           !n.includes('dismissal') &&
                           !n.includes('evaluation') &&
                           !n.includes('authentication') &&
+                          !n.includes('certification') &&
                           !n.includes('car') &&
                           !n.includes('enrolled') &&
+                          !n.includes('gpa') &&
+                          !n.includes('earned unit') &&
+                          !n.includes('endorsement') &&
+                          !n.includes('subjects w/ grades') &&
                           c !== 'tor' &&
                           c !== 'hd' &&
                           c !== 'eval' &&
+                          c !== 'auth' &&
+                          c !== 'cert' &&
                           c !== 'car' &&
-                          c !== 'coe'
+                          c !== 'coe' &&
+                          c !== 'gpa' &&
+                          c !== 'units' &&
+                          c !== 'endorse' &&
+                          c !== 'grades'
                         );
                       })
                       .map((ctype) => {
