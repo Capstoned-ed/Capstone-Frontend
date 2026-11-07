@@ -7,19 +7,15 @@ import { useAuth } from './hooks/useAuth';
 import { ROUTES } from './constants/routes';
 import { ROLES } from './constants/roles';
 
-// Layouts & Routing Guards
 import MainLayout from './layouts/MainLayout';
 import ProtectedRoute from './components/routing/ProtectedRoute';
 import RoleRoute from './components/routing/RoleRoute';
 
-// Error Pages
 import ForbiddenPage from './pages/error/ForbiddenPage';
 import NotFoundPage from './pages/error/NotFoundPage';
 
-// Public Auth Page
 import LoginPage from './pages/auth/LoginPage';
 
-// Student Pages
 import StudentDashboard from './pages/student/StudentDashboard';
 import RequestDocumentPage from './pages/student/RequestDocumentPage';
 import TrackStatusPage from './pages/student/TrackStatusPage';
@@ -27,25 +23,25 @@ import StudentProfilePage from './pages/student/StudentProfilePage';
 import DownloadRequestFormPage from './pages/student/DownloadRequestFormPage';
 import StudentPaymentsPage from './pages/student/StudentPaymentsPage';
 
-// Staff & Registrar Pages
 import StaffDashboard from './pages/staff/StaffDashboard';
 import StaffRequestsPage from './pages/staff/StaffRequestsPage';
 import ProcessingCalendarPage from './pages/staff/ProcessingCalendarPage';
 import ReleasePage from './pages/staff/ReleasePage';
 
-// Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
 import UserManagementPage from './pages/admin/UserManagementPage';
-import CredentialsPage from './pages/admin/CredentialsPage';
-import AdminRequestsPage from './pages/admin/AdminRequestsPage';
 import AdminProcessingCalendarPage from './pages/admin/ProcessingCalendarPage';
 import AnalyticsGraphsPage from './pages/admin/AnalyticsGraphsPage';
 
-// Shared Pages
-import NotificationsPage from './pages/notifications/NotificationsPage';
-import { isValidRequest, purgeCorruptRequests } from './api/requests';
+import RegistrarDashboard from './pages/registrar/RegistrarDashboard';
+import RegistrarRequestsPage from './pages/registrar/RegistrarRequestsPage';
+import RegistrarAnalyticsGraphsPage from './pages/registrar/AnalyticsGraphsPage';
+import RegistrarProcessingCalendarPage from './pages/registrar/ProcessingCalendarPage';
+import RegistrarCredentialsPage from './pages/registrar/CredentialsPage';
 
-// Self-healing purge of corrupt/blank/dummy requests from localStorage
+import NotificationsPage from './pages/notifications/NotificationsPage';
+import { purgeCorruptRequests } from './api/requests';
+
 if (typeof window !== 'undefined') {
   purgeCorruptRequests();
 }
@@ -73,7 +69,11 @@ function RootRedirect() {
     return <Navigate to={ROUTES.ADMIN.DASHBOARD} replace />;
   }
 
-  if (user?.role === ROLES.STAFF || user?.role === ROLES.REGISTRAR) {
+  if (user?.role === ROLES.REGISTRAR) {
+    return <Navigate to={ROUTES.REGISTRAR.DASHBOARD} replace />;
+  }
+
+  if (user?.role === ROLES.STAFF) {
     return <Navigate to={ROUTES.STAFF.DASHBOARD} replace />;
   }
 
@@ -87,87 +87,81 @@ export default function App() {
         <ToastProvider>
           <NotificationProvider>
             <Routes>
-            {/* Public Auth Routes */}
-            <Route path={ROUTES.LOGIN} element={<LoginPage />} />
-            <Route path={ROUTES.FORBIDDEN} element={<ForbiddenPage />} />
-            <Route path={ROUTES.NOT_FOUND} element={<NotFoundPage />} />
+              <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+              <Route path={ROUTES.FORBIDDEN} element={<ForbiddenPage />} />
+              <Route path={ROUTES.NOT_FOUND} element={<NotFoundPage />} />
 
-            {/* Root Role Dispatcher */}
-            <Route path="/" element={<RootRedirect />} />
+              <Route path="/" element={<RootRedirect />} />
 
-            {/* Dedicated Standalone Request Form Page (NO MainLayout - ONLY the Form!) */}
-            <Route
-              path="/student/form/:trackingId"
-              element={
-                <ProtectedRoute>
-                  <DownloadRequestFormPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/request-form/:trackingId"
-              element={
-                <ProtectedRoute>
-                  <DownloadRequestFormPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/request-form"
-              element={
-                <ProtectedRoute>
-                  <DownloadRequestFormPage />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/student/form/:trackingId"
+                element={
+                  <ProtectedRoute>
+                    <DownloadRequestFormPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/request-form/:trackingId"
+                element={
+                  <ProtectedRoute>
+                    <DownloadRequestFormPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/request-form"
+                element={
+                  <ProtectedRoute>
+                    <DownloadRequestFormPage />
+                  </ProtectedRoute>
+                }
+              />
 
-            {/* Protected Routes inside Shared MainLayout */}
-            <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-              {/* Shared Authenticated Routes */}
-              <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
+              <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+                <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
 
-              {/* Student Role Routes */}
-              <Route element={<RoleRoute allowedRoles={[ROLES.STUDENT]} />}>
-                <Route path={ROUTES.STUDENT.DASHBOARD} element={<StudentDashboard />} />
-                <Route path={ROUTES.STUDENT.CLEARANCE} element={<Navigate to={ROUTES.STUDENT.NEW_REQUEST} replace />} />
-                <Route path={ROUTES.STUDENT.NEW_REQUEST} element={<RequestDocumentPage />} />
-                <Route path={ROUTES.STUDENT.REQUESTS} element={<TrackStatusPage />} />
-                <Route path={ROUTES.STUDENT.PAYMENTS} element={<StudentPaymentsPage />} />
-                <Route path={ROUTES.STUDENT.CREDENTIALS} element={<Navigate to={ROUTES.STUDENT.NEW_REQUEST} replace />} />
-                <Route path={ROUTES.STUDENT.PROFILE} element={<StudentProfilePage />} />
+                <Route element={<RoleRoute allowedRoles={[ROLES.STUDENT]} />}>
+                  <Route path={ROUTES.STUDENT.DASHBOARD} element={<StudentDashboard />} />
+                  <Route path={ROUTES.STUDENT.CLEARANCE} element={<Navigate to={ROUTES.STUDENT.NEW_REQUEST} replace />} />
+                  <Route path={ROUTES.STUDENT.NEW_REQUEST} element={<RequestDocumentPage />} />
+                  <Route path={ROUTES.STUDENT.REQUESTS} element={<TrackStatusPage />} />
+                  <Route path={ROUTES.STUDENT.PAYMENTS} element={<StudentPaymentsPage />} />
+                  <Route path={ROUTES.STUDENT.CREDENTIALS} element={<Navigate to={ROUTES.STUDENT.NEW_REQUEST} replace />} />
+                  <Route path={ROUTES.STUDENT.PROFILE} element={<StudentProfilePage />} />
+                </Route>
+
+                <Route element={<RoleRoute allowedRoles={[ROLES.STAFF, ROLES.REGISTRAR, ROLES.ADMIN]} />}>
+                  <Route path={ROUTES.STAFF.DASHBOARD} element={<StaffDashboard />} />
+                  <Route path={ROUTES.STAFF.CALENDAR} element={<ProcessingCalendarPage />} />
+                  <Route path={ROUTES.STAFF.REQUESTS} element={<StaffRequestsPage />} />
+                  <Route path={ROUTES.STAFF.BATCHES} element={<Navigate to={ROUTES.STAFF.REQUESTS} replace />} />
+                  <Route path={ROUTES.STAFF.VERIFICATION} element={<StaffRequestsPage />} />
+                  <Route path={ROUTES.STAFF.CLEARANCES} element={<Navigate to={ROUTES.STAFF.REQUESTS} replace />} />
+                  <Route path={ROUTES.STAFF.RELEASE} element={<ReleasePage />} />
+                </Route>
+
+                <Route element={<RoleRoute allowedRoles={[ROLES.ADMIN]} />}>
+                  <Route path={ROUTES.ADMIN.DASHBOARD} element={<AdminDashboard />} />
+                  <Route path={ROUTES.ADMIN.ANALYTICS} element={<AnalyticsGraphsPage />} />
+                  <Route path={ROUTES.ADMIN.CALENDAR} element={<AdminProcessingCalendarPage />} />
+                  <Route path={ROUTES.ADMIN.USERS} element={<UserManagementPage />} />
+                </Route>
+
+                <Route element={<RoleRoute allowedRoles={[ROLES.REGISTRAR, ROLES.ADMIN]} />}>
+                  <Route path={ROUTES.REGISTRAR.DASHBOARD} element={<RegistrarDashboard />} />
+                  <Route path={ROUTES.REGISTRAR.ANALYTICS} element={<RegistrarAnalyticsGraphsPage />} />
+                  <Route path={ROUTES.REGISTRAR.CALENDAR} element={<RegistrarProcessingCalendarPage />} />
+                  <Route path={ROUTES.REGISTRAR.CREDENTIALS} element={<RegistrarCredentialsPage />} />
+                  <Route path={ROUTES.REGISTRAR.REQUESTS} element={<RegistrarRequestsPage />} />
+                  <Route path={ROUTES.REGISTRAR.PROCESSING} element={<RegistrarRequestsPage />} />
+                </Route>
               </Route>
 
-              {/* Staff / Registrar Role Routes (Shared Workflow, Admin also permitted) */}
-              <Route element={<RoleRoute allowedRoles={[ROLES.STAFF, ROLES.REGISTRAR, ROLES.ADMIN]} />}>
-                <Route path={ROUTES.STAFF.DASHBOARD} element={<StaffDashboard />} />
-                <Route path={ROUTES.STAFF.CALENDAR} element={<ProcessingCalendarPage />} />
-                <Route path={ROUTES.REGISTRAR.DASHBOARD} element={<Navigate to={ROUTES.STAFF.DASHBOARD} replace />} />
-                <Route path={ROUTES.REGISTRAR.CALENDAR} element={<Navigate to={ROUTES.STAFF.CALENDAR} replace />} />
-                <Route path={ROUTES.STAFF.REQUESTS} element={<StaffRequestsPage />} />
-                <Route path={ROUTES.STAFF.VERIFICATION} element={<StaffRequestsPage />} />
-                <Route path={ROUTES.STAFF.CLEARANCES} element={<Navigate to={ROUTES.STAFF.REQUESTS} replace />} />
-                <Route path={ROUTES.STAFF.RELEASE} element={<ReleasePage />} />
-                <Route path={ROUTES.REGISTRAR.CREDENTIALS} element={<CredentialsPage />} />
-                <Route path={ROUTES.REGISTRAR.PROCESSING} element={<AdminRequestsPage />} />
-                <Route path={ROUTES.REGISTRAR.ANALYTICS} element={<AnalyticsGraphsPage />} />
-              </Route>
-
-              {/* Admin Role Routes */}
-              <Route element={<RoleRoute allowedRoles={[ROLES.ADMIN]} />}>
-                <Route path={ROUTES.ADMIN.DASHBOARD} element={<AdminDashboard />} />
-                <Route path={ROUTES.ADMIN.ANALYTICS} element={<AnalyticsGraphsPage />} />
-                <Route path={ROUTES.ADMIN.CALENDAR} element={<AdminProcessingCalendarPage />} />
-                <Route path={ROUTES.ADMIN.USERS} element={<UserManagementPage />} />
-                <Route path={ROUTES.ADMIN.CREDENTIALS} element={<CredentialsPage />} />
-                <Route path={ROUTES.ADMIN.REQUESTS} element={<AdminRequestsPage />} />
-              </Route>
-            </Route>
-
-            {/* Catch-all 404 Route */}
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
-        </NotificationProvider>
-      </ToastProvider>
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </NotificationProvider>
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

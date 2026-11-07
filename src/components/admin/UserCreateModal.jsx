@@ -56,6 +56,52 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
       if (formData.last_name.trim()) payload.last_name = formData.last_name.trim();
 
       const createdUser = await usersApi.create(payload);
+
+      // Persist active email and profile data immediately
+      try {
+        const email = formData.email.trim().toLowerCase();
+        const username = formData.username.trim();
+        const fullName = `${formData.first_name.trim()} ${formData.last_name.trim()}`.trim() || username;
+
+        if (formData.role === ROLES.STUDENT) {
+          const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+          const pData = {
+            id: createdUser.id,
+            username,
+            student_id: username,
+            first_name: formData.first_name.trim(),
+            last_name: formData.last_name.trim(),
+            full_name: fullName,
+            email,
+            program: 'B.S. in Information Technology',
+            year_level: '1st year',
+          };
+          profiles[username] = { ...(profiles[username] || {}), ...pData };
+          if (createdUser.id) profiles[String(createdUser.id)] = { ...(profiles[String(createdUser.id)] || {}), ...pData };
+          localStorage.setItem('regquest_student_profiles', JSON.stringify(profiles));
+        } else {
+          const staffProfiles = JSON.parse(localStorage.getItem('regquest_staff_profiles') || '{}');
+          const sData = {
+            id: createdUser.id,
+            username,
+            employee_id: username,
+            full_name: fullName,
+            email,
+            role: formData.role,
+          };
+          staffProfiles[username] = { ...(staffProfiles[username] || {}), ...sData };
+          if (createdUser.id) staffProfiles[String(createdUser.id)] = { ...(staffProfiles[String(createdUser.id)] || {}), ...sData };
+          localStorage.setItem('regquest_staff_profiles', JSON.stringify(staffProfiles));
+        }
+
+        // Notify app components of profile update
+        window.dispatchEvent(new CustomEvent('regquest_profile_updated', {
+          detail: { username, email, full_name: fullName }
+        }));
+      } catch (profileErr) {
+        console.warn('Could not save user profile email:', profileErr);
+      }
+
       toast.success(`User "${createdUser.username}" successfully provisioned with password: ${finalPassword}`);
       onUserCreated(createdUser);
       onClose();
@@ -225,10 +271,10 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
               onChange={handleChange}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36]"
             >
-              <option value={ROLES.STAFF}>Staff (Operations &amp; Clearances)</option>
-              <option value={ROLES.REGISTRAR}>Registrar (Credential Generation)</option>
-              <option value={ROLES.ADMIN}>Administrator (Full System Access)</option>
-              <option value={ROLES.STUDENT}>Student (Self-Service Portal)</option>
+              <option value={ROLES.REGISTRAR}>Registrar — Review and approve/reject credential requests</option>
+              <option value={ROLES.STAFF}>Staff — Process approved requests, prepare documents, and update statuses</option>
+              <option value={ROLES.ADMIN}>Admin — Manage user accounts, assign roles, system settings, reports &amp; monitor activities</option>
+              <option value={ROLES.STUDENT}>Student — Request credentials and track status</option>
             </select>
           </div>
 

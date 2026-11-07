@@ -62,12 +62,23 @@ export default function StaffProfileModal({ isOpen, onClose }) {
     if (isOpen) {
       try {
         const staffProfiles = JSON.parse(localStorage.getItem('regquest_staff_profiles') || '{}');
+        const usersCache = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
         const userKey = user?.id || user?.username || employeeId;
         const profile = staffProfiles[userKey] || staffProfiles[user?.username] || {};
+        const cachedUser = usersCache.find(
+          (x) =>
+            String(x.id) === String(user?.id || user?.userId) ||
+            (x.username && user?.username && String(x.username).toLowerCase() === String(user.username).toLowerCase())
+        );
 
         setEditableName(profile.full_name || defaultDisplayName);
-        setEditableEmail(profile.email || user?.email || (isAdmin ? 'admin@ustp.edu.ph' : 'staff@ustp.edu.ph'));
-        setEditablePhone(profile.phone || user?.phone || '0917-555-0199');
+        setEditableEmail(
+          profile.email ||
+          user?.email ||
+          cachedUser?.email ||
+          (isAdmin ? 'admin@ustp.edu.ph' : 'staff@ustp.edu.ph')
+        );
+        setEditablePhone(profile.phone || user?.phone || cachedUser?.phone || '0917-555-0199');
         setEditableDepartment(
           profile.department ||
           (isAdmin ? 'Management Information Systems (MIS)' : 'Office of the University Registrar')

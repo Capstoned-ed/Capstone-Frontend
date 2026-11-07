@@ -1,42 +1,43 @@
 export const ROUTES = {
   LOGIN: '/login',
+  FORBIDDEN: '/forbidden',
+  NOT_FOUND: '/404',
+
   STUDENT: {
     DASHBOARD: '/student/dashboard',
     CLEARANCE: '/student/clearance',
+    NEW_REQUEST: '/student/new-request',
     REQUESTS: '/student/requests',
-    NEW_REQUEST: '/student/requests/new',
     PAYMENTS: '/student/payments',
     CREDENTIALS: '/student/credentials',
     PROFILE: '/student/profile',
-    FORM: '/student/form/:trackingId',
-    REQUEST_FORM: '/request-form/:trackingId',
   },
+
   STAFF: {
     DASHBOARD: '/staff/dashboard',
     CALENDAR: '/staff/calendar',
     REQUESTS: '/staff/requests',
+    BATCHES: '/staff/batches',
     VERIFICATION: '/staff/verification',
     CLEARANCES: '/staff/clearances',
-    PAYMENTS: '/staff/payments',
     RELEASE: '/staff/release',
   },
+
   REGISTRAR: {
     DASHBOARD: '/registrar/dashboard',
-    ANALYTICS: '/admin/analytics',
+    ANALYTICS: '/registrar/analytics',
     CALENDAR: '/registrar/calendar',
-    PROCESSING: '/registrar/processing',
+    REQUESTS: '/registrar/requests',
     CREDENTIALS: '/registrar/credentials',
-    REQUESTS: '/admin/requests',
+    PROCESSING: '/registrar/processing',
   },
+
   ADMIN: {
     DASHBOARD: '/admin/dashboard',
     ANALYTICS: '/admin/analytics',
     CALENDAR: '/admin/calendar',
     USERS: '/admin/users',
-    CREDENTIALS: '/admin/credentials',
-    REQUESTS: '/admin/requests',
   },
+
   NOTIFICATIONS: '/notifications',
-  FORBIDDEN: '/403',
-  NOT_FOUND: '/404',
 };

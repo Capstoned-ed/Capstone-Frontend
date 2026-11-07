@@ -183,6 +183,8 @@ export function isNotificationForUser(notification, user) {
     msg.startsWith('Workflow Audit:') ||
     msg.startsWith('Institutional Volume:') ||
     msg.startsWith('Security Audit:') ||
+    msg.startsWith('New assigned request:') ||
+    msg.startsWith('Assigned Request:') ||
     msg.startsWith('Request ');
 
   // -------------------------------------------------------------
@@ -269,11 +271,49 @@ export function isNotificationForUser(notification, user) {
     if (targetRoles.length > 0 && !targetRoles.some((r) => r === 'staff' || r === 'registrar')) return false;
 
     // Direct targeting check if notification was explicitly addressed to a particular staff/user
-    if (notification.target_username && currentUsername && notification.target_username.toLowerCase() !== currentUsername) {
-      return false;
-    }
-    if (notification.target_user_id && currentUserId && String(notification.target_user_id) !== currentUserId) {
-      return false;
+    const hasSpecificTarget = Boolean(
+      notification.target_user_id ||
+      notification.target_username ||
+      notification.target_name
+    );
+
+    if (hasSpecificTarget) {
+      const candidates = new Set();
+      const addCandidate = (val) => {
+        if (val !== undefined && val !== null) {
+          const s = String(val).trim().toLowerCase();
+          if (s) candidates.add(s);
+        }
+      };
+      addCandidate(user.username);
+      addCandidate(user.full_name);
+      addCandidate([user.first_name, user.last_name].filter(Boolean).join(' '));
+      addCandidate(user.id);
+      addCandidate(user.userId);
+
+      const targetId = notification.target_user_id ? String(notification.target_user_id).trim() : null;
+      const targetUser = notification.target_username ? String(notification.target_username).trim().toLowerCase() : null;
+      const targetName = notification.target_name ? String(notification.target_name).trim().toLowerCase() : null;
+
+      let matched = false;
+      if (targetId && (targetId === String(user.id) || targetId === String(user.userId))) {
+        matched = true;
+      }
+      if (targetUser && candidates.has(targetUser)) {
+        matched = true;
+      }
+      if (targetName) {
+        for (const c of candidates) {
+          if (c === targetName || (c.length >= 3 && (targetName.includes(c) || c.includes(targetName)))) {
+            matched = true;
+            break;
+          }
+        }
+      }
+
+      if (!matched) {
+        return false;
+      }
     }
 
     return true;
@@ -459,6 +499,7 @@ export function saveStoredNotification(notification) {
       created_at: notification.created_at || new Date().toISOString(),
       target_user_id: notification.target_user_id || null,
       target_username: notification.target_username || null,
+      target_name: notification.target_name || null,
       target_student_id: notification.target_student_id || null,
       target_role: inferredTargetRole,
       target_roles: inferredTargetRoles,

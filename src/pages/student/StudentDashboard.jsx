@@ -5,18 +5,8 @@ import ustpBuilding from '../../assets/USTP.png';
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
-  const [trackRefInput, setTrackRefInput] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const handleTrackSubmit = (e) => {
-    e.preventDefault();
-    const clean = trackRefInput.trim();
-    if (clean) {
-      navigate(`${ROUTES.STUDENT.REQUESTS}?trackId=${encodeURIComponent(clean)}`);
-    } else {
-      navigate(ROUTES.STUDENT.REQUESTS);
-    }
-  };
 
   const handleRequestClick = (docName) => {
     navigate(`${ROUTES.STUDENT.NEW_REQUEST}?doc=${encodeURIComponent(docName)}`);
@@ -224,14 +214,7 @@ export default function StudentDashboard() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  const el = document.getElementById('check-status-section');
-                  if (el) {
-                    el.scrollIntoView({ behavior: 'smooth' });
-                  } else {
-                    navigate(ROUTES.STUDENT.REQUESTS);
-                  }
-                }}
+                onClick={() => navigate(ROUTES.STUDENT.REQUESTS)}
                 className="px-6 py-2.5 bg-transparent hover:bg-white/10 active:scale-95 text-white font-semibold text-xs sm:text-sm rounded-full transition-all border border-amber-400/80 hover:border-amber-400 cursor-pointer"
               >
                 Track Status
@@ -326,101 +309,84 @@ export default function StudentDashboard() {
         </div>
       </section>
 
-      {/* 3. Check Your Request Status Section */}
-      <section
-        id="check-status-section"
-        className="w-full bg-gradient-to-r from-[#0B0B36] via-[#121272] to-[#1E3A8A] py-14 sm:py-16 px-4"
-      >
-        <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Check Your Request Status
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-200 mt-2 max-w-md mx-auto leading-relaxed">
-            Enter your reference number to see the current stage of your credential request.
-          </p>
 
-          {/* Reference Search Form Capsule */}
-          <form
-            onSubmit={handleTrackSubmit}
-            className="mt-7 max-w-xl mx-auto bg-white p-1.5 sm:p-2 rounded-2xl sm:rounded-full shadow-2xl flex flex-col sm:flex-row items-center gap-2 border border-white/20"
-          >
-            <input
-              type="text"
-              value={trackRefInput}
-              onChange={(e) => setTrackRefInput(e.target.value)}
-              placeholder="Enter Reference ID (e.g., RQ-000100)"
-              className="w-full sm:flex-1 px-5 py-2.5 text-xs sm:text-sm rounded-full text-slate-900 placeholder-slate-400 focus:outline-none bg-transparent"
-            />
-            <button
-              type="submit"
-              className="w-full sm:w-auto px-7 py-2.5 bg-[#0B0B36] hover:bg-[#1F1F9B] active:scale-95 text-white font-bold text-xs sm:text-sm rounded-full transition-all cursor-pointer shadow-md flex items-center justify-center flex-shrink-0"
-            >
-              Track Now
-            </button>
-          </form>
-        </div>
-      </section>
-
-      {/* 4. Streamlining the Credential Process Section */}
-      <section className="bg-white py-16 sm:py-20 px-4 sm:px-8">
+      {/* 3. Streamlining the Credential Process Section */}
+      <section className="bg-slate-50/70 py-16 sm:py-20 px-4 sm:px-8 border-t border-slate-200/70">
         <div className="max-w-6xl mx-auto">
-          {/* Centered Heading */}
-          <div className="text-center max-w-xl mx-auto">
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0B0B36] tracking-tight">
-              Streamlining the Credential Process
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-500 mt-2 leading-relaxed">
-              Our mission is to reduce physical queues and improve turnaround time for all registrar services.
-            </p>
-          </div>
+          {/* Main Showcase Card Container */}
+          <div className="relative rounded-3xl bg-white p-8 sm:p-12 lg:p-14 border border-slate-200/80 shadow-xl overflow-hidden">
+            {/* Ambient background decoration */}
+            <div className="absolute top-0 right-0 -mr-24 -mt-24 w-96 h-96 rounded-full bg-amber-400/10 blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 -ml-24 -mb-24 w-96 h-96 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
 
-          {/* 3 Value Proposition Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-7 mt-12">
-            {/* Card 1: Secure & Confidential */}
-            <div className="bg-[#F8FAFC] rounded-2xl p-7 sm:p-8 border border-slate-200/80 text-center flex flex-col items-center shadow-xs hover:shadow-md transition-all">
-              <div className="w-12 h-12 rounded-full bg-[#0B0B36] text-white flex items-center justify-center shadow-xs mb-5">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-              </div>
-              <h3 className="text-sm sm:text-base font-extrabold text-[#0B0B36] mb-2">
-                Secure &amp; Confidential
-              </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Your academic records are sensitive. We use enterprise-grade encryption to ensure your data remains private and secure.
+            {/* Header Content */}
+            <div className="relative z-10 text-center max-w-2xl mx-auto">
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#0B0B36] tracking-tight">
+                Streamlining the Credential Process
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 mt-3 leading-relaxed">
+                Our mission is to reduce physical queues, modernize authentication, and provide rapid turnaround for all registrar services.
               </p>
             </div>
 
-            {/* Card 2: Fast Turnaround */}
-            <div className="bg-[#F8FAFC] rounded-2xl p-7 sm:p-8 border border-slate-200/80 text-center flex flex-col items-center shadow-xs hover:shadow-md transition-all">
-              <div className="w-12 h-12 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center shadow-xs mb-5">
-                <svg className="w-6 h-6 text-slate-950" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                </svg>
+            {/* 3 Value Proposition Cards */}
+            <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-7 mt-12">
+              {/* Card 1: Secure & Confidential */}
+              <div className="group rounded-2xl p-7 bg-gradient-to-b from-slate-50/90 to-white border border-slate-200/90 hover:border-indigo-300 shadow-xs hover:shadow-lg transition-all duration-300 hover:-translate-y-1.5 flex flex-col text-left">
+                <div className="w-12 h-12 rounded-xl bg-[#0B0B36] text-white flex items-center justify-center shadow-md mb-5 group-hover:scale-105 transition-transform duration-200">
+                  <svg className="w-6 h-6 text-amber-300" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                </div>
+                <div className="inline-block px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 w-fit mb-2.5">
+                  Verified Data
+                </div>
+                <h3 className="text-base sm:text-lg font-bold text-[#0B0B36] mb-2">
+                  Secure &amp; Confidential
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                  Your academic records are encrypted and protected. Access is strictly audited to ensure your data stays authentic and private.
+                </p>
               </div>
-              <h3 className="text-sm sm:text-base font-extrabold text-[#0B0B36] mb-2">
-                Fast Turnaround
-              </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                By digitizing the application process, we've reduced processing times by up to 50%, getting your documents to you faster.
-              </p>
+
+              {/* Card 2: Fast Turnaround */}
+              <div className="group rounded-2xl p-7 bg-gradient-to-b from-slate-50/90 to-white border border-slate-200/90 hover:border-amber-300 shadow-xs hover:shadow-lg transition-all duration-300 hover:-translate-y-1.5 flex flex-col text-left">
+                <div className="w-12 h-12 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shadow-md mb-5 group-hover:scale-105 transition-transform duration-200">
+                  <svg className="w-6 h-6 text-slate-950" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                  </svg>
+                </div>
+                <div className="inline-block px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 w-fit mb-2.5">
+                  50% Faster Processing
+                </div>
+                <h3 className="text-base sm:text-lg font-bold text-[#0B0B36] mb-2">
+                  Fast Turnaround
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                  By digitizing the review and clearance flow, requests are queued directly to staff desks, delivering credentials without delays.
+                </p>
+              </div>
+
+              {/* Card 3: Queue-Free Experience */}
+              <div className="group rounded-2xl p-7 bg-gradient-to-b from-slate-50/90 to-white border border-slate-200/90 hover:border-indigo-300 shadow-xs hover:shadow-lg transition-all duration-300 hover:-translate-y-1.5 flex flex-col text-left">
+                <div className="w-12 h-12 rounded-xl bg-indigo-900 text-white flex items-center justify-center shadow-md mb-5 group-hover:scale-105 transition-transform duration-200">
+                  <svg className="w-6 h-6 text-sky-300" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <div className="inline-block px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-sky-50 text-sky-800 border border-sky-200 w-fit mb-2.5">
+                  100% Digital Flow
+                </div>
+                <h3 className="text-base sm:text-lg font-bold text-[#0B0B36] mb-2">
+                  Queue-Free Experience
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                  No more standing in long campus lines. Submit requests, verify clearances, upload receipts, and track updates anywhere.
+                </p>
+              </div>
             </div>
 
-            {/* Card 3: Queue-Free Experience */}
-            <div className="bg-[#F8FAFC] rounded-2xl p-7 sm:p-8 border border-slate-200/80 text-center flex flex-col items-center shadow-xs hover:shadow-md transition-all">
-              <div className="w-12 h-12 rounded-full bg-[#0B0B36] text-white flex items-center justify-center shadow-xs mb-5">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </div>
-              <h3 className="text-sm sm:text-base font-extrabold text-[#0B0B36] mb-2">
-                Queue-Free Experience
-              </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                No more standing in long lines. Apply from home, pay on line, and track your request status in real-time.
-              </p>
             </div>
-          </div>
         </div>
       </section>
     </div>
