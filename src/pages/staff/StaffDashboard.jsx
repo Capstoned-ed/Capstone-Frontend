@@ -2,11 +2,27 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
 import ustpBuilding from '../../assets/USTP.png';
-import requestsApi, { getStoredRequests, updateStoredRequest, isValidRequest, logProcessedAction, sortRequestsNewestFirst, resolveRequestDocType, getStaffAssignments, isRequestAssignedToUser } from '../../api/requests';
+import requestsApi, {
+  getStoredRequests,
+  updateStoredRequest,
+  isValidRequest,
+  logProcessedAction,
+  sortRequestsNewestFirst,
+  resolveRequestDocType,
+  getStaffAssignments,
+  saveStaffAssignments,
+  isRequestAssignedToUser,
+  getStaffAssignmentTimestamps,
+  recordStaffAssignmentTimestamp,
+  getArchivedRequestsMap,
+  setRequestArchived,
+  isRequestArchived,
+} from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
+import { StaffRequestsTable } from '../../components/staff';
 import useToast from '../../hooks/useToast';
 import '../../styles/staff/StaffDashboard.css';
 import '../../styles/staff/StaffRequestsPage.css';
@@ -32,7 +48,7 @@ function formatStatusDisplay(rawStatus) {
     case 'PAYMENT PENDING':
     case 'PENDING_PAYMENT':
     case 'PENDING PAYMENT':
-      return 'For Payment';
+      return 'Pending Payment';
     case 'PAYMENT_VERIFIED':
     case 'PAYMENT VERIFIED':
     case 'FOR_PROCESSING':
@@ -68,16 +84,16 @@ export default function StaffDashboard() {
   const { user } = useAuth();
 
   const [requestsList, setRequestsList] = useState([]);
+  const [usersList, setUsersList] = useState([]);
+  const [assignments, setAssignments] = useState(getStaffAssignments);
+  const [assignmentTimestamps, setAssignmentTimestamps] = useState(getStaffAssignmentTimestamps);
+  const [archivedMap, setArchivedMap] = useState(getArchivedRequestsMap);
   const [loading, setLoading] = useState(true);
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(false);
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
 
   const [modalRequest, setModalRequest] = useState(null);
-  const [modalStatus, setModalStatus] = useState('');
-  const [modalNotes, setModalNotes] = useState('');
-  const [modalUpdating, setModalUpdating] = useState(false);
-  const [showAllDashRequests, setShowAllDashRequests] = useState(false);
 
   const today = useMemo(() => new Date(), []);
   const todayFormatted = useMemo(() => {
@@ -88,6 +104,31 @@ export default function StaffDashboard() {
       year: 'numeric',
     });
   }, [today]);
+
+  const formatLocalDate = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dt = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dt}`;
+  };
+
+  const todayDateStr = useMemo(() => formatLocalDate(today), [today]);
+
+  const selectedDateFormatted = useMemo(() => {
+    if (!selectedCalendarDate) return '';
+    try {
+      const [y, m, d] = selectedCalendarDate.split('-').map(Number);
+      const dateObj = new Date(y, m - 1, d);
+      return dateObj.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    } catch {
+      return selectedCalendarDate;
+    }
+  }, [selectedCalendarDate]);
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -131,6 +172,7 @@ export default function StaffDashboard() {
 
       const userMap = new Map();
       if (Array.isArray(usersRes)) {
+        setUsersList(usersRes);
         usersRes.forEach((u) => {
           if (u.id) userMap.set(u.id, u);
           if (u.username) userMap.set(u.username, u);
@@ -220,6 +262,9 @@ export default function StaffDashboard() {
             purpose: r.purpose || r.remarks || '',
             remarks: r.remarks || '',
             user: r.user,
+            assigned_staff: r.assigned_staff || null,
+            assigned_at: r.assigned_at || null,
+            accepted_at: r.accepted_at || null,
             photo_preview: r.photo_preview || null,
             raw: r,
           };
@@ -243,13 +288,6 @@ export default function StaffDashboard() {
         })
         .sort(sortRequestsNewestFirst);
 
-        if (user?.role === 'staff') {
-          const currentAssignments = getStaffAssignments();
-          enriched = enriched.filter((r) =>
-            isRequestAssignedToUser(r, user, currentAssignments, usersRes)
-          );
-        }
-
         setRequestsList(enriched);
       } else {
         setRequestsList([]);
@@ -268,73 +306,129 @@ export default function StaffDashboard() {
     const handleSync = () => {
       loadDashboardData();
     };
+    const handleAssignmentsSync = () => {
+      setAssignments(getStaffAssignments());
+      setAssignmentTimestamps(getStaffAssignmentTimestamps());
+    };
+    const handleArchivedSync = () => {
+      setArchivedMap(getArchivedRequestsMap());
+    };
 
     window.addEventListener('regquest_requests_updated', handleSync);
     window.addEventListener('regquest_profile_updated', handleSync);
-    window.addEventListener('regquest_assignments_updated', handleSync);
+    window.addEventListener('regquest_assignments_updated', handleAssignmentsSync);
+    window.addEventListener('regquest_archived_updated', handleArchivedSync);
+    window.addEventListener('storage', handleAssignmentsSync);
+    window.addEventListener('storage', handleArchivedSync);
     return () => {
       window.removeEventListener('regquest_requests_updated', handleSync);
       window.removeEventListener('regquest_profile_updated', handleSync);
-      window.removeEventListener('regquest_assignments_updated', handleSync);
+      window.removeEventListener('regquest_assignments_updated', handleAssignmentsSync);
+      window.removeEventListener('regquest_archived_updated', handleArchivedSync);
+      window.removeEventListener('storage', handleAssignmentsSync);
+      window.removeEventListener('storage', handleArchivedSync);
     };
   }, [loadDashboardData]);
 
+  // Card 1: Requests assigned to this staff member (excluding archived history)
+  // Sorted by: MOST RECENTLY ACCEPTED / ASSIGNED AT THE VERY TOP (REGARDLESS OF REQUEST DATE)!
+  const assignedRequests = useMemo(() => {
+    const list = selectedCalendarDate
+      ? requestsList.filter((r) => {
+          if (r.request_date === selectedCalendarDate) return true;
+          if (r.release_date === selectedCalendarDate) return true;
+          if (r.request_date < selectedCalendarDate && r.release_date > selectedCalendarDate) return true;
+          return false;
+        })
+      : requestsList;
+
+    return list
+      .filter((r) => !isRequestArchived(r, archivedMap))
+      .filter((r) => isRequestAssignedToUser(r, user, assignments, usersList))
+      .sort((a, b) => {
+        const getAssignTime = (item) => {
+          const keys = [item.tracking_number, item.id, item.rawId].filter(Boolean).map(String);
+          for (const k of keys) {
+            if (assignmentTimestamps[k]) return Number(assignmentTimestamps[k]);
+          }
+          if (item.assigned_at) return Number(item.assigned_at) || new Date(item.assigned_at).getTime() || 0;
+          if (item.accepted_at) return Number(item.accepted_at) || new Date(item.accepted_at).getTime() || 0;
+          return 0;
+        };
+
+        const timeA = getAssignTime(a);
+        const timeB = getAssignTime(b);
+
+        if (timeA !== timeB) {
+          return timeB - timeA; // Newly claimed or assigned ALWAYS AT THE VERY TOP!
+        }
+
+        return sortRequestsNewestFirst(a, b);
+      });
+  }, [requestsList, selectedCalendarDate, user, assignments, usersList, assignmentTimestamps, archivedMap]);
+
+  const handleArchiveRequest = useCallback((item) => {
+    if (!item) return;
+    const reqId = item.id || item.rawId || item.tracking_number;
+    setRequestArchived(reqId, true, user, { fallbackItem: item });
+    setArchivedMap(getArchivedRequestsMap());
+
+    logProcessedAction({
+      actor: user?.username,
+      actorName: user?.full_name || user?.username,
+      actorId: user?.id,
+      actorRole: user?.role || 'staff',
+      targetName: item.student_name,
+      targetId: item.student_id || reqId,
+      trackingNumber: item.tracking_number || reqId,
+      documentType: item.document_type,
+      action: 'Document claimed by student: Moved to History',
+      status: 'Claimed',
+    });
+
+    toast.success(`Request ${item.id} moved to History.`);
+  }, [user, toast]);
+
+  const targetRequestsForMetrics = useMemo(() => {
+    return user?.role === 'staff' ? assignedRequests : requestsList;
+  }, [user, assignedRequests, requestsList]);
+
+  // All requests assigned to this user (or all requests for admin/master) - UNFILTERED by selected calendar date
+  const allUserRequests = useMemo(() => {
+    return user?.role === 'staff'
+      ? requestsList.filter((r) => isRequestAssignedToUser(r, user, assignments, usersList))
+      : requestsList;
+  }, [user, requestsList, assignments, usersList]);
+
   const metrics = useMemo(() => {
-    const total = requestsList.length;
-    const pending = requestsList.filter((r) => {
+    const total = targetRequestsForMetrics.length;
+    const pending = targetRequestsForMetrics.filter((r) => {
       const s = (r.status || '').toLowerCase();
       return s.includes('pending') || s.includes('received');
     }).length;
-    const processing = requestsList.filter((r) => {
+    const processing = targetRequestsForMetrics.filter((r) => {
       const s = (r.status || '').toLowerCase();
       return s.includes('processing') || s.includes('preparation');
     }).length;
-    const onHold = requestsList.filter((r) => {
+    const onHold = targetRequestsForMetrics.filter((r) => {
       const s = (r.status || '').toLowerCase();
       return s.includes('hold') || s.includes('verification');
     }).length;
-    const forRelease = requestsList.filter((r) => {
+    const forRelease = targetRequestsForMetrics.filter((r) => {
       const s = (r.status || '').toLowerCase();
       return s.includes('release') || s.includes('pickup') || s.includes('ready');
     }).length;
-    const completed = requestsList.filter((r) => {
+    const completed = targetRequestsForMetrics.filter((r) => {
       const s = (r.status || '').toLowerCase();
       return s.includes('claimed') || s === 'completed';
     }).length;
 
     return { total, pending, processing, onHold, forRelease, completed };
-  }, [requestsList]);
-
-  const targetedSection = useMemo(() => {
-    const activeRequests = requestsList.filter(
-      (r) => r.status === 'Pending' || r.status === 'Processing'
-    );
-    const totalCopies = activeRequests.reduce((acc, r) => acc + (parseInt(r.copies) || 1), 0);
-
-    const docCounts = {};
-    activeRequests.forEach((r) => {
-      const type = r.document_type || 'Document Request';
-      docCounts[type] = (docCounts[type] || 0) + (parseInt(r.copies) || 1);
-    });
-
-    const sortedDocTypes = Object.entries(docCounts).sort((a, b) => b[1] - a[1]);
-
-    const cards = sortedDocTypes.map(([docName, count]) => ({
-      name: docName,
-      count,
-      priority: count >= 3 ? 'High' : 'Medium',
-    }));
-
-    return {
-      totalDocuments: totalCopies,
-      cards,
-      topDocName: cards[0]?.name || 'None',
-    };
-  }, [requestsList]);
+  }, [targetRequestsForMetrics]);
 
   const batchSchedule = useMemo(() => {
     const batchesByDate = {};
-    requestsList.forEach((r) => {
+    allUserRequests.forEach((r) => {
       const dateKey = r.request_date || (r.created_at ? r.created_at.split('T')[0] : null);
       if (!dateKey) return;
       if (!batchesByDate[dateKey]) {
@@ -346,6 +440,7 @@ export default function StaffDashboard() {
     const newRequestsCountMap = {};
     const dailyProcessingMap = {};
     const releaseBatchesMap = {};
+    const dailyScheduledDocsMap = {};
 
     const addDays = (dateStr, numDays) => {
       const [year, month, day] = dateStr.split('-').map(Number);
@@ -378,10 +473,33 @@ export default function StaffDashboard() {
       const baseQuota = Math.floor(totalInBatch / numProcessingDays);
       const remainder = totalInBatch % numProcessingDays;
 
+      let assignedIndex = 0;
       for (let i = 0; i < numProcessingDays; i++) {
         const procDate = addDays(reqDate, i + 1);
         const dailyQuota = baseQuota + (i < remainder ? 1 : 0);
-        dailyProcessingMap[procDate] = (dailyProcessingMap[procDate] || 0) + dailyQuota;
+
+        const dayReqs = reqs.slice(assignedIndex, assignedIndex + dailyQuota);
+        assignedIndex += dailyQuota;
+
+        const dayTotalDocs = dayReqs.reduce((acc, r) => acc + (parseInt(r.copies) || 1), 0);
+        dailyProcessingMap[procDate] = (dailyProcessingMap[procDate] || 0) + dayTotalDocs;
+
+        if (!dailyScheduledDocsMap[procDate]) {
+          dailyScheduledDocsMap[procDate] = {
+            requests: [],
+            docCounts: {},
+            totalDocs: 0,
+          };
+        }
+
+        dayReqs.forEach((r) => {
+          dailyScheduledDocsMap[procDate].requests.push(r);
+          const type = r.document_type || 'Document Request';
+          const copies = parseInt(r.copies) || 1;
+          dailyScheduledDocsMap[procDate].docCounts[type] =
+            (dailyScheduledDocsMap[procDate].docCounts[type] || 0) + copies;
+          dailyScheduledDocsMap[procDate].totalDocs += copies;
+        });
       }
 
       const processedCount = reqs.filter((r) => {
@@ -404,8 +522,39 @@ export default function StaffDashboard() {
       newRequestsCountMap,
       dailyProcessingMap,
       releaseBatchesMap,
+      dailyScheduledDocsMap,
     };
-  }, [requestsList]);
+  }, [allUserRequests]);
+
+  const targetedSection = useMemo(() => {
+    const activeDateStr = selectedCalendarDate || todayDateStr;
+    const scheduled = batchSchedule.dailyScheduledDocsMap[activeDateStr];
+
+    if (!scheduled || scheduled.totalDocs === 0) {
+      return {
+        totalDocuments: 0,
+        cards: [],
+        topDocName: 'None',
+        activeDateStr,
+        isToday: activeDateStr === todayDateStr,
+      };
+    }
+
+    const sortedDocTypes = Object.entries(scheduled.docCounts).sort((a, b) => b[1] - a[1]);
+
+    const cards = sortedDocTypes.map(([docName, count]) => ({
+      name: docName,
+      count,
+    }));
+
+    return {
+      totalDocuments: scheduled.totalDocs,
+      cards,
+      topDocName: cards[0]?.name || 'None',
+      activeDateStr,
+      isToday: activeDateStr === todayDateStr,
+    };
+  }, [selectedCalendarDate, todayDateStr, batchSchedule]);
 
   const currentWeekDays = useMemo(() => {
     const now = new Date();
@@ -421,7 +570,7 @@ export default function StaffDashboard() {
       const d = new Date(sunday);
       d.setDate(sunday.getDate() + i);
 
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = formatLocalDate(d);
 
       const newReqs = batchSchedule.newRequestsCountMap[dateStr] || 0;
       const proc = batchSchedule.dailyProcessingMap[dateStr] || 0;
@@ -494,7 +643,7 @@ export default function StaffDashboard() {
         const day = new Date(startGridDate);
         day.setDate(startGridDate.getDate() + (w * 7 + dIdx));
 
-        const dateStr = day.toISOString().split('T')[0];
+        const dateStr = formatLocalDate(day);
         const isCurrentMonth = day.getMonth() === month;
 
         const newReqs = batchSchedule.newRequestsCountMap[dateStr] || 0;
@@ -530,155 +679,54 @@ export default function StaffDashboard() {
     return weeks;
   }, [isCalendarExpanded, currentWeekDays, batchSchedule]);
 
-  const displayedRequests = useMemo(() => {
-    if (!selectedCalendarDate) return requestsList.sort(sortRequestsNewestFirst);
-    const matched = requestsList.filter((r) => {
-      if (r.request_date === selectedCalendarDate) return true;
-      if (r.release_date === selectedCalendarDate) return true;
-      if (r.request_date < selectedCalendarDate && r.release_date > selectedCalendarDate) return true;
-      return false;
-    });
-    return matched.length > 0 ? matched.sort(sortRequestsNewestFirst) : [];
-  }, [requestsList, selectedCalendarDate]);
-
   const getStatusBadge = (status) => {
-    const s = (status || '').toLowerCase().trim();
-    if (s.includes('for processing') || s.includes('payment_verified')) {
-      return <span className="staff-dash-status-badge for-processing">For Processing</span>;
+    const s = String(status || '').trim();
+    switch (s) {
+      case 'Pending':
+      case 'PENDING':
+      case 'Pendong':
+        return <span className="status-pill pending">Pending</span>;
+      case 'For Payment':
+      case 'FOR PAYMENT':
+      case 'FOR_PAYMENT':
+      case 'Pending Payment':
+      case 'PAYMENT_PENDING':
+      case 'Payment Pending':
+        return <span className="status-pill for-payment">Pending Payment</span>;
+      case 'For Processing':
+      case 'FOR_PROCESSING':
+      case 'PAYMENT_VERIFIED':
+        return <span className="status-pill for-processing">For Processing</span>;
+      case 'Processing':
+      case 'PROCESSING':
+        return <span className="status-pill processing">Processing</span>;
+      case 'For release':
+      case 'For Release':
+      case 'Releasing':
+      case 'RELEASING':
+      case 'READY_FOR_RELEASE':
+        return <span className="status-pill for-release">For release</span>;
+      case 'Claimed':
+      case 'RELEASED':
+        return <span className="status-pill claimed">Claimed</span>;
+      case 'On Hold':
+      case 'on Hold':
+      case 'ON_HOLD':
+        return <span className="status-pill on-hold">On Hold</span>;
+      default:
+        return <span className="status-pill pending">{s}</span>;
     }
-    if (s.includes('payment') || s.includes('for payment')) {
-      return <span className="staff-dash-status-badge for-payment">For Payment</span>;
-    }
-    if (s.includes('pending')) {
-      return <span className="staff-dash-status-badge pending">Pending</span>;
-    }
-    if (s.includes('release') || s.includes('pickup') || s.includes('ready')) {
-      return <span className="staff-dash-status-badge for-release">For Release</span>;
-    }
-    if (s.includes('processing')) {
-      return <span className="staff-dash-status-badge processing">Processing</span>;
-    }
-    if (s.includes('claimed')) {
-      return <span className="staff-dash-status-badge claimed">Claimed</span>;
-    }
-    if (s.includes('hold')) {
-      return <span className="staff-dash-status-badge on-hold">On Hold</span>;
-    }
-    return <span className="staff-dash-status-badge default">{status}</span>;
   };
 
-  const handleOpenRequestModal = (req) => {
+  const handleOpenProcess = (req) => {
     setModalRequest(req);
-    const currentStatus = req.status || 'Pending';
-    const normalizedStatus =
-      currentStatus.toLowerCase().includes('release') || currentStatus.toLowerCase().includes('pickup')
-        ? 'For Release'
-        : currentStatus;
-    setModalStatus(normalizedStatus);
-    setModalNotes(req.notes || '');
   };
 
   const handleCloseRequestModal = () => {
     setModalRequest(null);
-    setModalStatus('');
-    setModalNotes('');
   };
 
-  const handleSaveStatus = async (statusOverride) => {
-    if (statusOverride && typeof statusOverride.preventDefault === 'function') {
-      statusOverride.preventDefault();
-    }
-    if (!modalRequest) return;
-    const resolvedStatus =
-      typeof statusOverride === 'string'
-        ? statusOverride
-        : modalRequest.status &&
-          String(modalRequest.status).toLowerCase() !== 'pending' &&
-          String(modalStatus).toLowerCase() === 'pending'
-        ? modalRequest.status
-        : modalStatus || modalRequest.status || 'Pending';
-    const finalStatus = resolvedStatus || 'Pending';
-    setModalUpdating(true);
-    const targetId = modalRequest.rawId || modalRequest.id;
 
-    const backendStatusMap = {
-      'Pending': 'PENDING',
-      'For Payment': 'PAYMENT_PENDING',
-      'Pending Payment': 'PAYMENT_PENDING',
-      'For Processing': 'PAYMENT_VERIFIED',
-      'Processing': 'PROCESSING',
-      'For Release': 'READY_FOR_RELEASE',
-      'For release': 'READY_FOR_RELEASE',
-      'Releasing': 'READY_FOR_RELEASE',
-      'Claimed': 'RELEASED',
-      'On Hold': 'REQUIREMENTS_VERIFICATION',
-    };
-
-    const fullPatch = {
-      status: finalStatus,
-      notes: modalNotes,
-      remarks: modalNotes || modalRequest.remarks || '',
-      clearance_status: modalRequest.clearance_status,
-      assessed_amount: modalRequest.assessed_amount,
-      amount: modalRequest.amount || modalRequest.assessed_amount,
-      date_of_release: modalRequest.date_of_release || modalRequest.release_date,
-      release_date: modalRequest.release_date || modalRequest.date_of_release,
-      verified_by_name: modalRequest.verified_by_name,
-      is_confirmed: modalRequest.is_confirmed,
-      confirmed_for_payment: modalRequest.confirmed_for_payment,
-      payment_status: modalRequest.payment_status,
-      or_number: modalRequest.or_number,
-    };
-
-    try {
-      if (typeof targetId === 'number') {
-        const backendStatus = backendStatusMap[finalStatus] || finalStatus.toUpperCase().replace(/\s+/g, '_');
-        await requestsApi.transition(targetId, {
-          status: backendStatus,
-          remarks: modalNotes || '',
-        }).catch(() => {});
-      }
-
-      updateStoredRequest(modalRequest.id || targetId, fullPatch, {
-        fallbackItem: modalRequest,
-      });
-
-      logProcessedAction({
-        actor: user?.username,
-        actorName: user?.full_name || user?.username,
-        actorId: user?.id,
-        actorRole: user?.role || 'staff',
-        targetName: modalRequest.student_name,
-        targetId: modalRequest.student_id || modalRequest.tracking_number,
-        trackingNumber: modalRequest.tracking_number || modalRequest.id,
-        documentType: modalRequest.document_type,
-        action: `Status updated to ${formatStatusDisplay(finalStatus)}`,
-        status: formatStatusDisplay(finalStatus),
-      });
-
-      setRequestsList((prev) =>
-        prev.map((item) =>
-          String(item.id) === String(modalRequest.id) ||
-          String(item.tracking_number) === String(modalRequest.tracking_number)
-            ? {
-                ...item,
-                ...fullPatch,
-                status: formatStatusDisplay(finalStatus),
-                notes: modalNotes,
-              }
-            : item
-        )
-      );
-
-      toast.success(`Request ${modalRequest.tracking_number} updated to ${formatStatusDisplay(finalStatus)}!`);
-      handleCloseRequestModal();
-    } catch (err) {
-      console.warn('Status update notice:', err);
-      toast.error('Failed to update request status.');
-    } finally {
-      setModalUpdating(false);
-    }
-  };
 
   return (
     <div className="staff-dash-page">
@@ -694,15 +742,19 @@ export default function StaffDashboard() {
         </div>
 
         <div className="staff-dash-hero-content">
-          <h1 className="staff-dash-hero-title">
-            Registrar Staff
-          </h1>
-          <p className="staff-dash-hero-subtitle">
-            Dashboard
-          </p>
-          <p className="staff-dash-hero-desc">
-            Manage and process student document requests
-          </p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="staff-dash-hero-title">
+                Registrar Staff
+              </h1>
+              <p className="staff-dash-hero-subtitle">
+                Dashboard
+              </p>
+              <p className="staff-dash-hero-desc">
+                Manage and process student document requests
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -715,11 +767,17 @@ export default function StaffDashboard() {
               </svg>
             </div>
             <div>
-              <p className="staff-dash-targeted-date">{todayFormatted}</p>
+              <p className="staff-dash-targeted-date">
+                {targetedSection.isToday ? todayFormatted : (selectedDateFormatted || selectedCalendarDate)}
+              </p>
               <h2 className="staff-dash-targeted-title">
                 {targetedSection.totalDocuments} {targetedSection.totalDocuments === 1 ? 'Document' : 'Documents'}
               </h2>
-              <p className="staff-dash-targeted-sub">Targeted for completion today</p>
+              <p className="staff-dash-targeted-sub">
+                {targetedSection.isToday
+                  ? 'Targeted for completion today'
+                  : 'Targeted for completion on this day'}
+              </p>
             </div>
           </div>
 
@@ -731,13 +789,6 @@ export default function StaffDashboard() {
                     <span className="staff-dash-doc-name" title={card.name}>
                       {card.name}
                     </span>
-                    <span
-                      className={`staff-dash-priority-badge ${
-                        card.priority === 'High' ? 'high' : 'medium'
-                      }`}
-                    >
-                      {card.priority}
-                    </span>
                   </div>
                   <p className="staff-dash-doc-count">{card.count}</p>
                   <p className="staff-dash-doc-unit">
@@ -748,7 +799,9 @@ export default function StaffDashboard() {
             </div>
           ) : (
             <div className="staff-dash-targeted-empty">
-              No active document requests targeted for today.
+              {targetedSection.isToday
+                ? 'No document requests scheduled for processing today based on the calendar.'
+                : 'No document requests scheduled for processing on this day based on the calendar.'}
             </div>
           )}
         </div>
@@ -756,13 +809,15 @@ export default function StaffDashboard() {
         <div className="staff-dash-metrics-grid">
           <div className="staff-dash-metric-card">
             <div className="staff-dash-metric-top">
-              <span className="staff-dash-metric-label">Total Requests</span>
+              <span className="staff-dash-metric-label">
+                {user?.role === 'staff' ? 'My Assigned Requests' : 'Total Requests'}
+              </span>
               <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
             <p className="staff-dash-metric-val">{metrics.total}</p>
-            <p className="staff-dash-metric-sub">All Time</p>
+            <p className="staff-dash-metric-sub">{user?.role === 'staff' ? 'Assigned to Me' : 'All Time'}</p>
           </div>
 
           <div className="staff-dash-metric-card pending">
@@ -1127,135 +1182,54 @@ export default function StaffDashboard() {
           </div>
         </div>
 
-        <div className="staff-dash-requests-card">
-          <div className="staff-dash-requests-header">
+        <div className="space-y-6">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="staff-dash-requests-title">Requests</h3>
-                {selectedCalendarDate && (
-                  <span className="staff-dash-requests-filter-pill">
-                    Filtered: {selectedCalendarDate}
-                  </span>
-                )}
-              </div>
-              <p className="staff-dash-requests-subtitle">
-                {selectedCalendarDate
-                  ? `Showing requests matching ${selectedCalendarDate} (${displayedRequests.length} found)`
-                  : 'Latest document requests from students'}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
               {selectedCalendarDate && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedCalendarDate(null)}
-                  className="staff-dash-btn-clear"
-                >
-                  Clear Filter
-                </button>
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 border border-blue-200 rounded-full text-xs text-blue-900 font-semibold">
+                  <span>Filtered by Date: {selectedCalendarDate}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCalendarDate(null)}
+                    className="hover:text-red-600 font-black cursor-pointer text-sm leading-none"
+                    title="Clear filter"
+                  >
+                    ×
+                  </button>
+                </div>
               )}
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.STAFF.REQUESTS)}
-                className="staff-dash-btn-view-all"
-              >
-                View All
-              </button>
             </div>
+            <button
+              type="button"
+              onClick={() => navigate(ROUTES.STAFF.REQUESTS)}
+              className="staff-dash-btn-view-all ml-auto"
+            >
+              Go to Process Requests
+            </button>
           </div>
 
-          <div className="staff-dash-table-wrap">
-            <table className="staff-dash-table">
-              <thead>
-                <tr className="staff-dash-table-head-row">
-                  <th className="staff-dash-th">Request ID</th>
-                  <th className="staff-dash-th">Student</th>
-                  <th className="staff-dash-th">Document Type</th>
-                  <th className="staff-dash-th">Status</th>
-                  <th className="staff-dash-th">Request Date</th>
-                  <th className="staff-dash-th">Release Date</th>
-                  <th className="staff-dash-th text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="staff-dash-tbody">
-                {displayedRequests.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="py-12 text-center text-slate-400 text-xs font-medium">
-                      {user?.role === 'staff' ? 'No requests assigned to you yet.' : 'No document requests found.'}
-                    </td>
-                  </tr>
-                ) : (
-                  (showAllDashRequests ? displayedRequests : displayedRequests.slice(0, 10)).map((req) => (
-                    <tr key={req.id || req.tracking_number} className="staff-dash-tr">
-                      <td className="staff-dash-td-id">
-                        {req.tracking_number}
-                      </td>
-
-                      <td className="staff-dash-td">
-                        <p className="staff-dash-student-name">{req.student_name}</p>
-                        <p className="staff-dash-student-id">{req.student_id}</p>
-                      </td>
-
-                      <td className="staff-dash-td">
-                        <p className="staff-dash-doc-type">{req.document_type}</p>
-                        <p className="staff-dash-doc-copies">
-                          {req.copies} {req.copies > 1 ? 'copies' : 'copy'}
-                        </p>
-                      </td>
-
-                      <td className="staff-dash-td whitespace-nowrap">
-                        {getStatusBadge(req.status)}
-                      </td>
-
-                      <td className="staff-dash-date">
-                        {req.request_date}
-                      </td>
-
-                      <td className="staff-dash-date">
-                        {req.release_date}
-                      </td>
-
-                      <td className="staff-dash-td text-center whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenRequestModal(req)}
-                          className="staff-dash-view-btn"
-                        >
-                          <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                          <span>View</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          {displayedRequests.length > 10 && (
-            <div className="table-see-more-wrap">
-              <button
-                type="button"
-                onClick={() => setShowAllDashRequests((prev) => !prev)}
-                className="table-see-more-btn"
-              >
-                <span>
-                  {showAllDashRequests ? 'See Less' : 'See More'}
-                </span>
-                <svg
-                  className={`w-4 h-4 transition-transform ${showAllDashRequests ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            </div>
-          )}
+          {/* My Assigned Requests */}
+          <StaffRequestsTable
+            title="My Assigned Requests"
+            subtitle={
+              selectedCalendarDate
+                ? `Showing requests assigned to you matching ${selectedCalendarDate} (${assignedRequests.length} found)`
+                : 'Requests assigned to you that are ready for processing'
+            }
+            badgeCount={assignedRequests.length}
+            loading={loading}
+            filteredRequests={assignedRequests}
+            totalRequestsCount={assignedRequests.length}
+            getStatusBadge={getStatusBadge}
+            onOpenProcess={handleOpenProcess}
+            actionType="view"
+            onArchive={handleArchiveRequest}
+            emptyMessage={
+              selectedCalendarDate
+                ? `No assigned requests found for ${selectedCalendarDate}.`
+                : 'No requests currently assigned to you for processing.'
+            }
+          />
         </div>
       </div>
 

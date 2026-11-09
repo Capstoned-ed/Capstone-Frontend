@@ -1,5 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import requestsApi, { updateStoredRequest, isValidRequest, logProcessedAction, sortRequestsNewestFirst, resolveRequestDocType, getStaffAssignments, isRequestAssignedToUser } from '../../api/requests';
+import requestsApi, {
+  updateStoredRequest,
+  isValidRequest,
+  logProcessedAction,
+  sortRequestsNewestFirst,
+  resolveRequestDocType,
+  getStaffAssignments,
+  isRequestAssignedToUser,
+  getStaffAssignmentTimestamps,
+  recordStaffAssignmentTimestamp,
+  getArchivedRequestsMap,
+  setRequestArchived,
+  isRequestArchived,
+  ASSIGNMENTS_KEY,
+  ASSIGNMENT_TIMESTAMPS_KEY,
+} from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
 import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
@@ -10,17 +25,18 @@ import '../../styles/staff/StaffRequestsPage.css';
 
 const REQUEST_STATUSES = [
   'Pending',
-  'For Payment',
+  'Pending Payment',
   'For Processing',
   'Processing',
   'Releasing',
   'Claimed',
+  'On Hold',
 ];
 
 const BACKEND_STATUS_MAP = {
   'Pending': 'PENDING',
-  'For Payment': 'PAYMENT_PENDING',
   'Pending Payment': 'PAYMENT_PENDING',
+  'For Payment': 'PAYMENT_PENDING',
   'Payment Pending': 'PAYMENT_PENDING',
   'For Processing': 'PAYMENT_VERIFIED',
   'Processing': 'PROCESSING',
@@ -41,6 +57,7 @@ function calculateReleaseDate(createdAt, processingDays = 5) {
 function formatStatusDisplay(rawStatus) {
   if (!rawStatus) return 'Pending';
   const s = rawStatus.trim();
+  if (s === 'For Payment' || s === 'FOR PAYMENT' || s === 'FOR_PAYMENT') return 'Pending Payment';
   if (REQUEST_STATUSES.includes(s)) return s;
 
   const upper = s.toUpperCase();
@@ -57,7 +74,7 @@ function formatStatusDisplay(rawStatus) {
     case 'PENDING_PAYMENT':
     case 'PENDING PAYMENT':
     case 'CLEARED FOR PAYMENT':
-      return 'For Payment';
+      return 'Pending Payment';
     case 'PAYMENT_VERIFIED':
     case 'PAYMENT VERIFIED':
     case 'FOR_PROCESSING':
@@ -105,7 +122,7 @@ function getStatusBadge(status) {
     case 'Pending Payment':
     case 'PAYMENT_PENDING':
     case 'Payment Pending':
-      return <span className="status-badge payment-pending">For Payment</span>;
+      return <span className="status-badge payment-pending">Pending Payment</span>;
     case 'For Processing':
     case 'FOR_PROCESSING':
     case 'PAYMENT_VERIFIED':
@@ -135,6 +152,9 @@ export default function StaffRequestsPage() {
   const [credentialTypes, setCredentialTypes] = useState([]);
   const [clearances, setClearances] = useState([]);
   const [assignments, setAssignments] = useState(getStaffAssignments);
+  const [assignmentTimestamps, setAssignmentTimestamps] = useState(getStaffAssignmentTimestamps);
+  const [archivedMap, setArchivedMap] = useState(getArchivedRequestsMap);
+  const [activeTab, setActiveTab] = useState('active'); // 'active' | 'history'
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -203,16 +223,25 @@ export default function StaffRequestsPage() {
     };
     const handleAssignmentsSync = () => {
       setAssignments(getStaffAssignments());
+      setAssignmentTimestamps(getStaffAssignmentTimestamps());
     };
+    const handleArchivedSync = () => {
+      setArchivedMap(getArchivedRequestsMap());
+    };
+
     window.addEventListener('regquest_requests_updated', handleSync);
     window.addEventListener('regquest_assignments_updated', handleAssignmentsSync);
+    window.addEventListener('regquest_archived_updated', handleArchivedSync);
     window.addEventListener('storage', handleAssignmentsSync);
+    window.addEventListener('storage', handleArchivedSync);
 
     return () => {
       ignore = true;
       window.removeEventListener('regquest_requests_updated', handleSync);
       window.removeEventListener('regquest_assignments_updated', handleAssignmentsSync);
+      window.removeEventListener('regquest_archived_updated', handleArchivedSync);
       window.removeEventListener('storage', handleAssignmentsSync);
+      window.removeEventListener('storage', handleArchivedSync);
     };
   }, []);
 
@@ -262,9 +291,12 @@ export default function StaffRequestsPage() {
         matchedStored = storedList.find(
           (s) =>
             String(s.id) === String(r.id) ||
+            String(s.id) === String(r.rawId) ||
             String(s.id) === String(r.tracking_number) ||
             String(s.tracking_number) === String(r.tracking_number) ||
-            String(s.rawId) === String(r.id)
+            String(s.tracking_number) === String(r.id) ||
+            String(s.rawId) === String(r.id) ||
+            String(s.rawId) === String(r.rawId)
         );
         if (matchedStored?.clearance_preview) {
           cachedClearancePreview = matchedStored.clearance_preview;
@@ -370,10 +402,63 @@ export default function StaffRequestsPage() {
         r.release_date ||
         calculateReleaseDate(r.created_at, cred?.processing_days);
 
+      let claimedMap = {};
+      try {
+        claimedMap = JSON.parse(localStorage.getItem('regquest_claimed_requests') || '{}');
+      } catch {}
+
+      const myIdKeys = [
+        user?.username,
+        user?.full_name,
+        user?.id,
+        user?.userId,
+        [user?.first_name, user?.last_name].filter(Boolean).join(' '),
+      ]
+        .filter(Boolean)
+        .map((v) => String(v).trim().toLowerCase());
+
+      const rKeys = [
+        r.id !== undefined && r.id !== null ? String(r.id) : null,
+        r.rawId !== undefined && r.rawId !== null ? String(r.rawId) : null,
+        r.tracking_number !== undefined && r.tracking_number !== null ? String(r.tracking_number) : null,
+      ].filter(Boolean);
+
+      const isClaimedByMe = rKeys.some((k) => {
+        const claimVal = claimedMap[k];
+        if (claimVal) {
+          const cStr = String(claimVal).trim().toLowerCase();
+          if (cStr === 'true' || cStr === '1' || cStr === 'claimed' || myIdKeys.includes(cStr)) {
+            return true;
+          }
+        }
+        const assignVal = assignments[k];
+        if (assignVal) {
+          const aStr = String(assignVal).trim().toLowerCase();
+          if (
+            myIdKeys.includes(aStr) ||
+            (aStr && myIdKeys.some((m) => m && m.length >= 4 && (aStr.includes(m) || m.includes(aStr))))
+          ) {
+            return true;
+          }
+        }
+        return false;
+      });
+
+      // When Registrar assigns staff, registrar verified all -> 'For Processing'
+      // When Staff claims/assigns to self, staff must verify all -> 'Pending'
+      const assignedByRegistrarStatus =
+        assignments[`status_${r.id}`] ||
+        assignments[`status_${String(r.id)}`] ||
+        assignments[`status_${r.rawId}`] ||
+        assignments[`status_${String(r.rawId)}`] ||
+        assignments[`status_${r.tracking_number}`] ||
+        assignments[`status_${String(r.tracking_number)}`];
+
       const effectiveRawStatus =
-        matchedStored?.status && String(matchedStored.status).toUpperCase() !== 'PENDING'
+        assignedByRegistrarStatus ||
+        (matchedStored?.status && String(matchedStored.status).toUpperCase() !== 'PENDING'
           ? matchedStored.status
-          : r.status;
+          : r.status || 'Pending');
 
       return {
         rawId: r.rawId || r.id,
@@ -416,9 +501,22 @@ export default function StaffRequestsPage() {
           assignments[String(r.tracking_number)] ||
           assignments[r.rawId] ||
           assignments[String(r.rawId)] ||
+          (isClaimedByMe ? (user?.full_name || user?.username || '') : '') ||
           matchedStored?.assigned_staff ||
           r.assigned_staff ||
           '',
+        assigned_at:
+          assignmentTimestamps[String(r.id)] ||
+          assignmentTimestamps[String(r.tracking_number)] ||
+          assignmentTimestamps[String(r.rawId)] ||
+          (typeof window !== 'undefined' && getStaffAssignmentTimestamps()[String(r.id)]) ||
+          (typeof window !== 'undefined' && getStaffAssignmentTimestamps()[String(r.tracking_number)]) ||
+          (typeof window !== 'undefined' && getStaffAssignmentTimestamps()[String(r.rawId)]) ||
+          (r.assigned_at ? new Date(r.assigned_at).getTime() : 0) ||
+          (matchedStored?.assigned_at ? new Date(matchedStored.assigned_at).getTime() : 0) ||
+          (r.accepted_at ? new Date(r.accepted_at).getTime() : 0) ||
+          (matchedStored?.accepted_at ? new Date(matchedStored.accepted_at).getTime() : 0) ||
+          0,
       };
     })
     .filter((r) => {
@@ -442,14 +540,10 @@ export default function StaffRequestsPage() {
       return true;
     });
 
-    if (user?.role === 'staff') {
-      built = built.filter((r) => isRequestAssignedToUser(r, user, assignments, users));
-    }
-
     return built.sort(sortRequestsNewestFirst);
-  }, [rawRequests, userMap, credTypeMap, clearanceMap, assignments, user, users]);
+  }, [rawRequests, userMap, credTypeMap, clearanceMap, assignments, assignmentTimestamps]);
 
-  const filteredRequests = useMemo(() => {
+  const allFilteredRequests = useMemo(() => {
     return requests.filter((r) => {
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
@@ -476,6 +570,103 @@ export default function StaffRequestsPage() {
     }).sort(sortRequestsNewestFirst);
   }, [requests, searchQuery, docTypeFilter, statusFilter]);
 
+  // Active requests (not yet moved to History)
+  const activeFilteredRequests = useMemo(() => {
+    return allFilteredRequests.filter((r) => !isRequestArchived(r, archivedMap));
+  }, [allFilteredRequests, archivedMap]);
+
+  // Request History (documents claimed by students and archived)
+  const historyRequests = useMemo(() => {
+    return allFilteredRequests
+      .filter((r) => isRequestArchived(r, archivedMap))
+      .sort((a, b) => {
+        const timeA = archivedMap[a.id]?.archived_at || archivedMap[a.rawId]?.archived_at || a.created_at || 0;
+        const timeB = archivedMap[b.id]?.archived_at || archivedMap[b.rawId]?.archived_at || b.created_at || 0;
+        return new Date(timeB).getTime() - new Date(timeA).getTime();
+      });
+  }, [allFilteredRequests, archivedMap]);
+
+  // Card 1: Requests assigned to this staff member (from Active queue)
+  // Sorted by: MOST RECENTLY ACCEPTED / ASSIGNED AT THE VERY TOP (REGARDLESS OF REQUEST DATE)!
+  const assignedRequests = useMemo(() => {
+    return activeFilteredRequests
+      .filter((r) => isRequestAssignedToUser(r, user, assignments, users))
+      .sort((a, b) => {
+        const getAssignTime = (item) => {
+          const keys = [item.tracking_number, item.id, item.rawId].filter(Boolean).map(String);
+          for (const k of keys) {
+            if (assignmentTimestamps[k]) return Number(assignmentTimestamps[k]);
+          }
+          if (item.assigned_at) return Number(item.assigned_at) || new Date(item.assigned_at).getTime() || 0;
+          if (item.accepted_at) return Number(item.accepted_at) || new Date(item.accepted_at).getTime() || 0;
+          return 0;
+        };
+
+        const timeA = getAssignTime(a);
+        const timeB = getAssignTime(b);
+
+        if (timeA !== timeB) {
+          return timeB - timeA; // Newly claimed or assigned ALWAYS AT THE VERY TOP!
+        }
+
+        return sortRequestsNewestFirst(a, b);
+      });
+  }, [activeFilteredRequests, user, assignments, users, assignmentTimestamps]);
+
+  // Card 2: All unassigned requests (from Active queue)
+  const unassignedRequests = useMemo(() => {
+    return activeFilteredRequests.filter((r) => {
+      const isAssigned = isRequestAssignedToUser(r, user, assignments, users);
+      const hasStaff = Boolean(r.assigned_staff && r.assigned_staff.trim() !== '' && r.assigned_staff.toLowerCase() !== 'unassigned');
+      return !isAssigned && !hasStaff;
+    });
+  }, [activeFilteredRequests, user, assignments, users]);
+
+  // Handlers for Archiving (Move to History) and Restoring
+  const handleArchiveRequest = (item) => {
+    if (!item) return;
+    const reqId = item.id || item.rawId || item.tracking_number;
+    setRequestArchived(reqId, true, user, { fallbackItem: item });
+    setArchivedMap(getArchivedRequestsMap());
+
+    logProcessedAction({
+      actor: user?.username,
+      actorName: user?.full_name || user?.username,
+      actorId: user?.id,
+      actorRole: user?.role || 'staff',
+      targetName: item.student_name,
+      targetId: item.student_id || reqId,
+      trackingNumber: item.tracking_number || reqId,
+      documentType: item.document_type,
+      action: 'Document claimed by student: Moved to History',
+      status: 'Claimed',
+    });
+
+    toast.success(`Request ${item.id || reqId} marked as Done and moved to Request History.`);
+  };
+
+  const handleRestoreRequest = (item) => {
+    if (!item) return;
+    const reqId = item.id || item.rawId || item.tracking_number;
+    setRequestArchived(reqId, false, user, { fallbackItem: item });
+    setArchivedMap(getArchivedRequestsMap());
+
+    logProcessedAction({
+      actor: user?.username,
+      actorName: user?.full_name || user?.username,
+      actorId: user?.id,
+      actorRole: user?.role || 'staff',
+      targetName: item.student_name,
+      targetId: item.student_id || reqId,
+      trackingNumber: item.tracking_number || reqId,
+      documentType: item.document_type,
+      action: 'Restored request from History to Active Queue',
+      status: item.status || 'Pending',
+    });
+
+    toast.success(`Request ${item.id} restored to Active Queue.`);
+  };
+
   const getStatusBadge = (status) => {
     const s = String(status || '').trim();
     switch (s) {
@@ -489,7 +680,7 @@ export default function StaffRequestsPage() {
       case 'Pending Payment':
       case 'PAYMENT_PENDING':
       case 'Payment Pending':
-        return <span className="status-pill for-payment">For Payment</span>;
+        return <span className="status-pill for-payment">Pending Payment</span>;
       case 'For Processing':
       case 'FOR_PROCESSING':
       case 'PAYMENT_VERIFIED':
@@ -521,16 +712,148 @@ export default function StaffRequestsPage() {
     setNotes('');
   };
 
+  const handleClaimAndProcess = (item, options = {}) => {
+    if (!item) return;
+
+    const reqId = item.id;
+    const rawId = item.rawId || item.id;
+    const trackingNo = item.tracking_number || item.id;
+    const displayId = trackingNo || reqId || rawId || 'Request';
+
+    // 1. Fire toast immediately if not already fired by caller
+    if (!options?.skipToast) {
+      toast.success(`Now processing Request ${displayId}! Successfully assigned to you and ready for processing.`);
+    }
+
+    try {
+      const staffName =
+        user?.full_name ||
+        [user?.first_name, user?.last_name].filter(Boolean).join(' ') ||
+        user?.username ||
+        'Staff';
+
+      const now = Date.now();
+      const nowIso = new Date(now).toISOString();
+
+      // 2. Record in claimed map for robust assignment tracking
+      const claimedMap = JSON.parse(localStorage.getItem('regquest_claimed_requests') || '{}');
+      if (rawId) claimedMap[String(rawId)] = user?.username || user?.full_name || 'claimed';
+      if (reqId) claimedMap[String(reqId)] = user?.username || user?.full_name || 'claimed';
+      if (trackingNo) claimedMap[String(trackingNo)] = user?.username || user?.full_name || 'claimed';
+      localStorage.setItem('regquest_claimed_requests', JSON.stringify(claimedMap));
+
+      // 3. Record assignment & acceptance timestamp
+      const tsMap = getStaffAssignmentTimestamps();
+      if (reqId) tsMap[String(reqId)] = now;
+      if (rawId) tsMap[String(rawId)] = now;
+      if (trackingNo) tsMap[String(trackingNo)] = now;
+      localStorage.setItem(ASSIGNMENT_TIMESTAMPS_KEY, JSON.stringify(tsMap));
+      setAssignmentTimestamps((prev) => ({
+        ...prev,
+        [String(reqId)]: now,
+        [String(rawId)]: now,
+        [String(trackingNo)]: now,
+      }));
+
+      // 4. Update assignments map across all identifier keys
+      const updated = { ...assignments };
+      if (rawId) {
+        updated[rawId] = staffName;
+        updated[String(rawId)] = staffName;
+      }
+      if (reqId) {
+        updated[reqId] = staffName;
+        updated[String(reqId)] = staffName;
+      }
+      if (trackingNo) {
+        updated[trackingNo] = staffName;
+        updated[String(trackingNo)] = staffName;
+      }
+      setAssignments(updated);
+      localStorage.setItem(ASSIGNMENTS_KEY, JSON.stringify(updated));
+
+      // 5. Update status and stored request
+      const currentStatus = item.status || 'Pending';
+      const updatedItem = {
+        ...item,
+        assigned_staff: staffName,
+        assigned_at: nowIso,
+        accepted_at: nowIso,
+        status: currentStatus,
+        rawStatus: currentStatus === 'Pending' ? 'PENDING' : (item.rawStatus || 'PENDING'),
+      };
+
+      updateStoredRequest(
+        trackingNo || reqId || rawId,
+        {
+          assigned_staff: staffName,
+          assigned_at: nowIso,
+          accepted_at: nowIso,
+          status: currentStatus,
+        },
+        {
+          fallbackItem: updatedItem,
+        }
+      );
+
+      // 6. Update raw requests state immediately
+      setRawRequests((prev) =>
+        prev.map((r) => {
+          const matches =
+            String(r.id) === String(rawId) ||
+            String(r.id) === String(reqId) ||
+            String(r.rawId) === String(rawId) ||
+            String(r.tracking_number) === String(trackingNo) ||
+            String(r.tracking_number) === String(reqId);
+          return matches
+            ? {
+                ...r,
+                assigned_staff: staffName,
+                assigned_at: now,
+                accepted_at: now,
+                status: currentStatus,
+              }
+            : r;
+        })
+      );
+
+      // 7. Log audit action
+      logProcessedAction({
+        actor: user?.username || 'staff',
+        actorName: staffName,
+        actorId: user?.id,
+        actorRole: user?.role || 'staff',
+        targetName: item.student_name,
+        targetId: item.student_id || trackingNo,
+        trackingNumber: trackingNo,
+        documentType: item.document_type,
+        action: 'Claimed request for staff verification & processing',
+        status: currentStatus,
+      });
+
+      // 8. Safely notify other listeners
+      window.dispatchEvent(new Event('regquest_assignments_updated'));
+      window.dispatchEvent(new Event('regquest_requests_updated'));
+    } catch (err) {
+      console.warn('Error during claim processing:', err);
+    }
+  };
+
   const handleRequestUpdated = (updatedReq) => {
     setRawRequests((prev) =>
       prev.map((r) =>
         String(r.id) === String(updatedReq.rawId) ||
         String(r.id) === String(updatedReq.id) ||
+        String(r.rawId) === String(updatedReq.rawId) ||
         String(r.tracking_number) === String(updatedReq.id) ||
         String(r.tracking_number) === String(updatedReq.tracking_number)
           ? {
               ...r,
-              status: updatedReq.status,
+              ...updatedReq,
+              status: updatedReq.status || r.status,
+              assigned_staff: updatedReq.assigned_staff || r.assigned_staff,
+              assigned_at: updatedReq.assigned_at || r.assigned_at,
+              accepted_at: updatedReq.accepted_at || r.accepted_at,
               remarks: updatedReq.remarks ?? r.remarks,
               payment_status: updatedReq.payment_status ?? r.payment_status,
               or_number: updatedReq.or_number ?? r.or_number,
@@ -563,6 +886,7 @@ export default function StaffRequestsPage() {
 
     setUpdating(true);
     const targetId = selectedRequest.rawId || selectedRequest.id;
+    const trackingNo = selectedRequest.tracking_number || selectedRequest.id;
     const effectiveStatus =
       selectedRequest.status &&
       String(selectedRequest.status).toLowerCase() !== 'pending' &&
@@ -570,8 +894,18 @@ export default function StaffRequestsPage() {
         ? selectedRequest.status
         : newStatus;
 
+    const staffName =
+      selectedRequest.assigned_staff ||
+      user?.full_name ||
+      [user?.first_name, user?.last_name].filter(Boolean).join(' ') ||
+      user?.username ||
+      'Staff';
+
     const fullPatch = {
       status: effectiveStatus,
+      assigned_staff: staffName,
+      assigned_at: selectedRequest.assigned_at,
+      accepted_at: selectedRequest.accepted_at,
       remarks: notes || selectedRequest.remarks || '',
       clearance_status: selectedRequest.clearance_status,
       assessed_amount: selectedRequest.assessed_amount,
@@ -598,8 +932,23 @@ export default function StaffRequestsPage() {
         }
       }
 
-      updateStoredRequest(selectedRequest.id || targetId, fullPatch, {
-        fallbackItem: selectedRequest,
+      // Sync assignment map as well
+      if (staffName) {
+        const updatedAssignments = { ...assignments };
+        if (targetId) {
+          updatedAssignments[targetId] = staffName;
+          updatedAssignments[String(targetId)] = staffName;
+        }
+        if (trackingNo) {
+          updatedAssignments[trackingNo] = staffName;
+          updatedAssignments[String(trackingNo)] = staffName;
+        }
+        setAssignments(updatedAssignments);
+        saveStaffAssignments(updatedAssignments);
+      }
+
+      updateStoredRequest(trackingNo || selectedRequest.id || targetId, fullPatch, {
+        fallbackItem: { ...selectedRequest, ...fullPatch },
       });
 
       logProcessedAction({
@@ -609,18 +958,19 @@ export default function StaffRequestsPage() {
         actorRole: user?.role || 'staff',
         targetName: selectedRequest.student_name,
         targetId: selectedRequest.student_id || selectedRequest.tracking_number,
-        trackingNumber: selectedRequest.tracking_number || selectedRequest.id,
+        trackingNumber: trackingNo,
         documentType: selectedRequest.document_type,
         action: `Status updated to ${effectiveStatus}`,
         status: effectiveStatus,
       });
 
-      toast.success(`Request ${selectedRequest.tracking_number || selectedRequest.id} updated to ${effectiveStatus}.`);
+      toast.success(`Request ${trackingNo} updated to ${effectiveStatus}.`);
 
       setRawRequests((prev) =>
         prev.map((r) =>
           String(r.id) === String(targetId) ||
-          String(r.tracking_number) === String(selectedRequest.id) ||
+          String(r.rawId) === String(targetId) ||
+          String(r.tracking_number) === String(trackingNo) ||
           String(r.id) === String(selectedRequest.id)
             ? { ...r, ...fullPatch }
             : r
@@ -637,7 +987,16 @@ export default function StaffRequestsPage() {
   };
 
   return (
-    <div className="staff-req-container">
+    <div className="staff-req-container space-y-6">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Process Requests</h1>
+          <p className="text-xs sm:text-sm text-slate-500">
+            Review, verify, and process credential requests in your queue
+          </p>
+        </div>
+      </div>
+
       <StaffSearchFilter
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
@@ -649,14 +1008,92 @@ export default function StaffRequestsPage() {
         requestStatuses={REQUEST_STATUSES}
       />
 
-      <StaffRequestsTable
-        loading={loading}
-        error={error}
-        filteredRequests={filteredRequests}
-        totalRequestsCount={requests.length}
-        getStatusBadge={getStatusBadge}
-        onOpenProcess={handleOpenProcess}
-      />
+      {/* Queue View Tabs: Active Processing vs Request History */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab('active')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            activeTab === 'active'
+              ? 'bg-[#0B0B36] text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <span>Active Requests</span>
+          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+            activeTab === 'active' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+          }`}>
+            {assignedRequests.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('history')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            activeTab === 'history'
+              ? 'bg-[#0B0B36] text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>Request History</span>
+        </button>
+      </div>
+
+      {activeTab === 'active' ? (
+        <>
+          {/* Card 1: My Assigned Requests */}
+          <StaffRequestsTable
+            title="My Assigned Requests"
+            subtitle="Requests assigned to you that are ready for processing"
+            badgeCount={assignedRequests.length}
+            loading={loading}
+            error={error}
+            filteredRequests={assignedRequests}
+            totalRequestsCount={assignedRequests.length}
+            getStatusBadge={getStatusBadge}
+            onOpenProcess={handleOpenProcess}
+            actionType="view"
+            onArchive={handleArchiveRequest}
+            emptyMessage="No requests currently assigned to you for processing."
+          />
+
+          {/* Card 2: Unassigned Requests Queue */}
+          <StaffRequestsTable
+            title="Unassigned Requests Queue"
+            subtitle="Incoming requests waiting to be claimed and processed"
+            badgeCount={unassignedRequests.length}
+            loading={loading}
+            error={error}
+            filteredRequests={unassignedRequests}
+            totalRequestsCount={unassignedRequests.length}
+            getStatusBadge={getStatusBadge}
+            onOpenProcess={handleOpenProcess}
+            actionType="claim"
+            onAction={handleClaimAndProcess}
+            emptyMessage="No unassigned requests found in queue."
+          />
+        </>
+      ) : (
+        /* Card 3: Completed & Claimed Requests History */
+        <StaffRequestsTable
+          title="Completed & Claimed Requests History"
+          subtitle="Document requests that have been claimed by students and archived from active queue"
+          badgeCount={historyRequests.length}
+          loading={loading}
+          error={error}
+          filteredRequests={historyRequests}
+          totalRequestsCount={historyRequests.length}
+          getStatusBadge={getStatusBadge}
+          onOpenProcess={handleOpenProcess}
+          actionType="history"
+          onRestore={handleRestoreRequest}
+          emptyMessage="No claimed document requests in history yet."
+        />
+      )}
 
       {selectedRequest && (
         <ProcessRequestModal

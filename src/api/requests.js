@@ -8,6 +8,7 @@ export const STORAGE_KEY = 'regquest_submitted_requests';
 export const STUDENT_REQUESTS_KEY = 'student_my_requests';
 export const PROCESSED_ACTIONS_KEY = 'regquest_processed_actions';
 export const ASSIGNMENTS_KEY = 'regquest_staff_assignments';
+export const ASSIGNMENT_TIMESTAMPS_KEY = 'regquest_staff_assignment_timestamps';
 
 export function getStaffAssignments() {
   if (typeof window === 'undefined') return {};
@@ -30,37 +31,33 @@ export function saveStaffAssignments(map) {
   }
 }
 
+export function getStaffAssignmentTimestamps() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(ASSIGNMENT_TIMESTAMPS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function recordStaffAssignmentTimestamp(requestId, timestamp = Date.now()) {
+  if (typeof window === 'undefined' || !requestId) return;
+  try {
+    const map = getStaffAssignmentTimestamps();
+    const ts = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime();
+    map[String(requestId)] = ts;
+    localStorage.setItem(ASSIGNMENT_TIMESTAMPS_KEY, JSON.stringify(map));
+    window.dispatchEvent(new Event('regquest_assignments_updated'));
+  } catch (err) {
+    console.warn('Failed to record staff assignment timestamp:', err);
+  }
+}
+
 export function isRequestAssignedToUser(request, currentUser, assignmentsMap = null, usersList = []) {
-  if (!currentUser) return false;
+  if (!request || !currentUser) return false;
 
   const assignments = assignmentsMap || getStaffAssignments();
-
-  const candidates = new Set();
-  const addCandidate = (val) => {
-    if (val !== undefined && val !== null) {
-      const s = String(val).trim().toLowerCase();
-      if (s) candidates.add(s);
-    }
-  };
-
-  addCandidate(currentUser.username);
-  addCandidate(currentUser.full_name);
-  addCandidate([currentUser.first_name, currentUser.last_name].filter(Boolean).join(' '));
-  addCandidate(currentUser.id);
-  addCandidate(currentUser.userId);
-
-  if (Array.isArray(usersList) && usersList.length > 0) {
-    const matched = usersList.find(
-      (u) =>
-        (u.id && String(u.id) === String(currentUser.id || currentUser.userId)) ||
-        (u.username && currentUser.username && String(u.username).toLowerCase() === String(currentUser.username).toLowerCase())
-    );
-    if (matched) {
-      addCandidate(matched.username);
-      addCandidate([matched.first_name, matched.last_name].filter(Boolean).join(' '));
-      addCandidate(matched.id);
-    }
-  }
 
   const reqKeys = [
     request.id,
@@ -70,21 +67,101 @@ export function isRequestAssignedToUser(request, currentUser, assignmentsMap = n
     request.raw?.id,
     request.raw?.tracking_number,
     request.raw?.rawId,
-  ].filter((v) => v !== undefined && v !== null);
+  ].filter((v) => v !== undefined && v !== null).map(String);
 
+  // 1. Build list of candidate identifiers for current user
+  const candidates = new Set();
+  const addCandidate = (val) => {
+    if (val !== undefined && val !== null) {
+      const s = String(val).trim().toLowerCase();
+      if (
+        s &&
+        s !== 'staff' &&
+        s !== 'admin' &&
+        s !== 'registrar' &&
+        s !== 'user' &&
+        s !== 'undefined' &&
+        s !== 'null'
+      ) {
+        candidates.add(s);
+      }
+    }
+  };
+
+  if (currentUser.username) {
+    const u = String(currentUser.username).trim().toLowerCase();
+    if (u) candidates.add(u);
+  }
+  if (currentUser.full_name) {
+    const f = String(currentUser.full_name).trim().toLowerCase();
+    if (f) candidates.add(f);
+  }
+  const fullNameFromFirstLast = [currentUser.first_name, currentUser.last_name]
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+    .toLowerCase();
+  if (fullNameFromFirstLast) {
+    candidates.add(fullNameFromFirstLast);
+  }
+  if (currentUser.id !== undefined && currentUser.id !== null) {
+    candidates.add(String(currentUser.id).trim().toLowerCase());
+  }
+  if (currentUser.userId !== undefined && currentUser.userId !== null) {
+    candidates.add(String(currentUser.userId).trim().toLowerCase());
+  }
+
+  if (Array.isArray(usersList) && usersList.length > 0) {
+    const matched = usersList.find(
+      (u) =>
+        (u.id && String(u.id) === String(currentUser.id || currentUser.userId)) ||
+        (u.username &&
+          currentUser.username &&
+          String(u.username).toLowerCase() === String(currentUser.username).toLowerCase())
+    );
+    if (matched) {
+      if (matched.username) candidates.add(String(matched.username).trim().toLowerCase());
+      const mName = [matched.first_name, matched.last_name]
+        .filter(Boolean)
+        .join(' ')
+        .trim()
+        .toLowerCase();
+      if (mName) candidates.add(mName);
+      if (matched.id) candidates.add(String(matched.id).trim().toLowerCase());
+    }
+  }
+
+  // 2. Check if explicitly claimed by this user in session or local storage
+  try {
+    const claimedRaw = typeof window !== 'undefined' ? localStorage.getItem('regquest_claimed_requests') : null;
+    if (claimedRaw) {
+      const claimedMap = JSON.parse(claimedRaw);
+      for (const k of reqKeys) {
+        if (claimedMap[k]) {
+          const val = String(claimedMap[k]).trim().toLowerCase();
+          if (candidates.has(val) || val === 'claimed' || val === 'true' || val === '1') {
+            return true;
+          }
+        }
+      }
+    }
+  } catch {}
+
+  // 3. Check assignments mapping (by key)
   let assignedVal = null;
   for (const k of reqKeys) {
     const kStr = String(k).trim();
-    if (assignments[kStr] !== undefined && assignments[kStr] !== '') {
+    if (assignments[kStr] !== undefined && assignments[kStr] !== null && assignments[kStr] !== '') {
       assignedVal = assignments[kStr];
       break;
     }
-    if (assignments[k] !== undefined && assignments[k] !== '') {
+    if (assignments[k] !== undefined && assignments[k] !== null && assignments[k] !== '') {
       assignedVal = assignments[k];
       break;
     }
   }
 
+  // 4. Fallback to properties on the request itself
   if (assignedVal === null || assignedVal === undefined || assignedVal === '') {
     assignedVal =
       request.assigned_staff ||
@@ -104,11 +181,19 @@ export function isRequestAssignedToUser(request, currentUser, assignmentsMap = n
     assignedStr = String(assignedVal).trim().toLowerCase();
   }
 
-  if (!assignedStr) return false;
+  if (!assignedStr || assignedStr === 'unassigned' || assignedStr === 'none' || assignedStr === 'null') {
+    return false;
+  }
 
   for (const candidate of candidates) {
     if (assignedStr === candidate) return true;
-    if (candidate.length >= 3 && (assignedStr.includes(candidate) || candidate.includes(assignedStr))) {
+    if (
+      candidate.length >= 4 &&
+      candidate !== 'staff' &&
+      candidate !== 'admin' &&
+      candidate !== 'user' &&
+      (assignedStr.includes(candidate) || candidate.includes(assignedStr))
+    ) {
       return true;
     }
   }
@@ -354,39 +439,64 @@ export function sortRequestsNewestFirst(a, b) {
 export function resolveRequestDocType(r, cred = null) {
   if (!r) return 'Document Request';
 
-  // 1. Check if remarks contain an explicit document tag, e.g. "[Certification - GPA]"
+  const isInvalidDocName = (name) => {
+    if (!name) return true;
+    const norm = String(name).trim().toLowerCase();
+    return (
+      norm === '' ||
+      norm === 'document' ||
+      norm === 'document request' ||
+      norm === 'walk-in ftf' ||
+      norm === 'walk-in' ||
+      norm === 'walkin' ||
+      norm === 'ftf'
+    );
+  };
+
+  // 1. If r.document_type is explicitly set to a valid document name, prioritize it directly!
+  if (!isInvalidDocName(r.document_type)) {
+    return r.document_type;
+  }
+
+  // 2. Credential type details object
+  if (!isInvalidDocName(r.credential_type_details?.name)) {
+    return r.credential_type_details.name;
+  }
+
+  // 3. Matched CredentialType model from database
+  if (!isInvalidDocName(cred?.name)) {
+    return cred.name;
+  }
+
+  // 4. Check if remarks contain an explicit document tag, e.g. "[Certification - GPA]" (ignoring non-document tags like [Walk-in FTF])
   const remarks = String(r.remarks || r.purpose || '').trim();
   const bracketMatch = remarks.match(/\[(.*?)\]/);
   if (bracketMatch && bracketMatch[1] && bracketMatch[1].trim()) {
-    return bracketMatch[1].trim();
+    const candidate = bracketMatch[1].trim();
+    if (
+      !isInvalidDocName(candidate) &&
+      !candidate.toLowerCase().includes('staff') &&
+      !candidate.toLowerCase().includes('walk-in') &&
+      !candidate.toLowerCase().includes('ftf')
+    ) {
+      return candidate;
+    }
   }
 
-  // 2. Check for specific keywords in remarks that indicate exact certification sub-document
+  // 5. Check for specific keywords in remarks that indicate exact certification sub-document
   const remLower = remarks.toLowerCase();
   if (remLower.includes('gpa')) return 'Certification - GPA';
   if (remLower.includes('earned unit') || remLower.includes('earned units')) return 'Certification - Earned Units';
   if (remLower.includes('endorsement')) return 'Certification - Endorsement';
   if (remLower.includes('subjects w/ grades') || remLower.includes('subject w/ grade')) return 'Certification - Subjects w/ grades';
   if (remLower.includes('authentication') || remLower.includes('auth')) return 'Authentication';
-
-  // 3. If r.document_type is explicitly set and not a placeholder or default 'CAR' when remarks suggest otherwise
-  if (r.document_type && r.document_type !== 'Document' && r.document_type !== 'Document Request') {
-    return r.document_type;
-  }
-
-  // 4. Credential type details object
-  if (r.credential_type_details?.name) {
-    return r.credential_type_details.name;
-  }
-
-  // 5. Matched CredentialType model
-  if (cred?.name) {
-    return cred.name;
-  }
+  if (remLower.includes('transcript') || remLower.includes('tor')) return 'Transcript of Records (TOR)';
+  if (remLower.includes('dismissal')) return 'Honorable Dismissal';
+  if (remLower.includes('evaluation')) return 'Evaluation';
 
   // 6. Standard USTP fallbacks for DB ids 1 to 5
   const credTypeFallbacks = {
-    1: 'Transcript of records (TOR)',
+    1: 'Transcript of Records (TOR)',
     2: 'Honorable Dismissal',
     3: 'Evaluation',
     4: 'CAR',
@@ -426,7 +536,19 @@ export function purgeCorruptRequests() {
             return true;
           });
 
-          if (cleaned.length !== list.length) {
+          // Sanitize any existing records where document_type was erroneously saved or overridden as 'Walk-in FTF'
+          cleaned.forEach((item) => {
+            const dt = String(item.document_type || '').trim().toLowerCase();
+            if (dt === 'walk-in ftf' || dt === 'walk-in' || dt === 'walkin' || dt === 'ftf') {
+              const fallbackDoc = item.credential_type_details?.name || resolveRequestDocType(item);
+              if (fallbackDoc && !/walk-in|ftf/i.test(fallbackDoc)) {
+                item.document_type = fallbackDoc;
+                changed = true;
+              }
+            }
+          });
+
+          if (cleaned.length !== list.length || changed) {
             localStorage.setItem(key, JSON.stringify(cleaned));
             changed = true;
           }
@@ -459,6 +581,10 @@ export function getStoredRequests() {
     const map = new Map();
     [...primary, ...student, ...legacy].forEach((item) => {
       if (!isValidRequest(item)) return;
+      const dt = String(item.document_type || '').trim().toLowerCase();
+      if (dt === 'walk-in ftf' || dt === 'walk-in' || dt === 'walkin' || dt === 'ftf') {
+        item.document_type = item.credential_type_details?.name || resolveRequestDocType(item);
+      }
       const key = item.tracking_number || item.trackingId || item.id;
       if (key && !map.has(key)) {
         map.set(key, item);
@@ -773,6 +899,9 @@ export const requestsApi = {
           date_of_release: loc.date_of_release || loc.release_date || backendItem.date_of_release,
           release_date: loc.release_date || loc.date_of_release || backendItem.release_date,
           verified_by_name: loc.verified_by_name || backendItem.verified_by_name || null,
+          assigned_staff: loc.assigned_staff || backendItem.assigned_staff || null,
+          assigned_at: loc.assigned_at || backendItem.assigned_at || null,
+          accepted_at: loc.accepted_at || backendItem.accepted_at || null,
           clearance_preview: loc.clearance_preview || backendItem.clearance_preview,
           clearance_id: loc.clearance_id || backendItem.clearance_id || null,
           clearance_is_pdf: loc.clearance_is_pdf ?? backendItem.clearance_is_pdf ?? false,
@@ -983,4 +1112,75 @@ export function isConfirmedForPayment(req) {
   }
 
   return false;
+}
+
+/**
+ * Request History & Archival Management
+ * When a document is claimed by the student, staff can remove it from active queue
+ * and archive it into the Request History.
+ */
+export const ARCHIVED_REQUESTS_KEY = 'regquest_archived_requests';
+
+export function getArchivedRequestsMap() {
+  try {
+    return JSON.parse(localStorage.getItem(ARCHIVED_REQUESTS_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+export function isRequestArchived(req, archivedMap = null) {
+  if (!req) return false;
+  if (req.is_archived || req.archived_to_history) return true;
+  const map = archivedMap || getArchivedRequestsMap();
+  const keys = [req.id, req.rawId, req.tracking_number, req.trackingId]
+    .filter((k) => k !== undefined && k !== null && String(k).trim() !== '')
+    .map((k) => String(k).trim());
+  return keys.some((k) => Boolean(map[k]));
+}
+
+export function setRequestArchived(idOrTracking, isArchived = true, user = null, options = {}) {
+  try {
+    const map = getArchivedRequestsMap();
+    const fallback = options?.fallbackItem || {};
+    const candidateIds = [
+      idOrTracking,
+      fallback.id,
+      fallback.rawId,
+      fallback.tracking_number,
+      fallback.trackingId,
+    ]
+      .filter((v) => v !== undefined && v !== null && String(v).trim() !== '')
+      .map((v) => String(v).trim());
+
+    if (isArchived) {
+      const info = {
+        archived_at: new Date().toISOString(),
+        archived_by: user?.full_name || user?.username || 'Staff',
+      };
+      candidateIds.forEach((k) => {
+        map[k] = info;
+      });
+    } else {
+      candidateIds.forEach((k) => {
+        delete map[k];
+      });
+    }
+
+    localStorage.setItem(ARCHIVED_REQUESTS_KEY, JSON.stringify(map));
+
+    // Also update stored request so it persists in the object itself
+    updateStoredRequest(idOrTracking, {
+      is_archived: isArchived,
+      archived_at: isArchived ? new Date().toISOString() : null,
+      archived_by: isArchived ? (user?.full_name || user?.username || 'Staff') : null,
+    }, options);
+
+    window.dispatchEvent(new Event('regquest_archived_updated'));
+    window.dispatchEvent(new Event('regquest_requests_updated'));
+    return true;
+  } catch (err) {
+    console.error('Failed to setRequestArchived:', err);
+    return false;
+  }
 }

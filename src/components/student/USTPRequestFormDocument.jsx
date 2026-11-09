@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useMemo } from 'react';
 import ustpLogo from '../../assets/USTP Logo against Light Background 1.png';
 import '../../styles/student/DownloadRequestFormPage.css';
 
@@ -14,59 +14,107 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
   { requestData = {}, user = null },
   ref
 ) {
-  // Safe helper to resolve human student name
+  // Safe helper to resolve human student whole full name
   const resolveStudentRealName = () => {
-    const isIdNumber = (val) => !val || /^\d+$/.test(String(val).trim()) || String(val).trim().length < 2;
+    const isIdNumber = (val) => {
+      if (!val) return true;
+      const str = String(val).trim();
+      return /^\d+$/.test(str) || /^[0-9-]+$/.test(str) || str.length < 2;
+    };
 
-    // 1. Direct requestData name
-    if (requestData?.student_name && !isIdNumber(requestData.student_name)) {
-      return requestData.student_name;
-    }
-    if (requestData?.student && !isIdNumber(requestData.student)) {
-      return requestData.student;
-    }
-    // 2. Authenticated user object
-    if (user?.full_name && !isIdNumber(user.full_name)) {
-      return user.full_name;
-    }
-    if (user?.first_name) {
-      const comb = `${user.first_name} ${user.last_name || ''}`.trim();
-      if (comb && !isIdNumber(comb)) return comb;
-    }
-    // 3. Stored profile in localStorage
+    const cleanCandidates = [];
+
+    // Helper to safely extract full name from an object or string
+    const extractFullName = (item) => {
+      if (!item) return null;
+      if (typeof item === 'string') {
+        const trimmed = item.trim();
+        return isIdNumber(trimmed) ? null : trimmed;
+      }
+      if (typeof item === 'object') {
+        if (item.full_name && !isIdNumber(item.full_name)) return String(item.full_name).trim();
+        if (item.name && !isIdNumber(item.name)) return String(item.name).trim();
+        const fn = item.first_name || '';
+        const mn = item.middle_name ? `${item.middle_name} ` : '';
+        const ln = item.last_name || '';
+        const comb = `${fn} ${mn}${ln}`.trim();
+        if (comb && !isIdNumber(comb)) return comb;
+      }
+      return null;
+    };
+
+    // 1. Check direct fields on requestData
+    [requestData?.student_name, requestData?.full_name, requestData?.name].forEach((v) => {
+      const extracted = extractFullName(v);
+      if (extracted) cleanCandidates.push(extracted);
+    });
+
+    // 2. Check nested objects on requestData: student, user, student_details, user_details
+    [
+      requestData?.student,
+      requestData?.user,
+      requestData?.student_details,
+      requestData?.user_details,
+    ].forEach((sub) => {
+      const extracted = extractFullName(sub);
+      if (extracted) cleanCandidates.push(extracted);
+    });
+
+    // 3. Check authenticated user object
+    const userExtracted = extractFullName(user);
+    if (userExtracted) cleanCandidates.push(userExtracted);
+    if (user?.full_name && !isIdNumber(user.full_name)) cleanCandidates.push(String(user.full_name).trim());
+
+    // 4. Check cached profiles in localStorage
     try {
       const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
-      const candidates = [
+      const lookupKeys = [
         user?.username,
         user?.student_id,
         user?.id,
         requestData?.student_id,
         requestData?.student_name,
         requestData?.user,
+        requestData?.tracking_number,
+        requestData?.trackingId,
       ].filter(Boolean);
 
-      for (const k of candidates) {
+      for (const k of lookupKeys) {
         const p = profiles[k];
-        if (p) {
-          if (p.full_name && !isIdNumber(p.full_name)) return p.full_name;
-          if (p.name && !isIdNumber(p.name)) return p.name;
-          if (p.first_name) {
-            const comb = `${p.first_name} ${p.last_name || ''}`.trim();
-            if (comb && !isIdNumber(comb)) return comb;
-          }
-        }
+        const pExtracted = extractFullName(p);
+        if (pExtracted) cleanCandidates.push(pExtracted);
       }
     } catch {}
-    // 4. Stored user object
+
+    // 5. Check stored user in localStorage
     try {
       const u = JSON.parse(localStorage.getItem('regquest_user') || localStorage.getItem('user') || '{}');
-      if (u.full_name && !isIdNumber(u.full_name)) return u.full_name;
-      if (u.first_name) {
-        const comb = `${u.first_name} ${u.last_name || ''}`.trim();
-        if (comb && !isIdNumber(comb)) return comb;
-      }
+      const uExtracted = extractFullName(u);
+      if (uExtracted) cleanCandidates.push(uExtracted);
     } catch {}
-    // 5. Default student account fallback (2023301564 is Daisy Traya in mock USTP environment)
+
+    // 6. Filter out placeholder keywords
+    const validNames = cleanCandidates.filter((n) => {
+      const lower = n.toLowerCase();
+      return (
+        lower !== 'student' &&
+        lower !== 'n/a' &&
+        lower !== 'none' &&
+        lower !== 'undefined' &&
+        lower !== 'null' &&
+        !isIdNumber(n)
+      );
+    });
+
+    // Always prioritize the full complete name containing first + last name (has spaces)
+    const multiWordName = validNames
+      .filter((n) => n.includes(' '))
+      .sort((a, b) => b.length - a.length)[0];
+
+    if (multiWordName) return multiWordName;
+    if (validNames.length > 0) return validNames[0];
+
+    // Fallback: Default student mock account
     if (
       user?.username === '2023301564' ||
       String(requestData?.student_id) === '2023301564' ||
@@ -74,16 +122,81 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
     ) {
       return 'Daisy Traya';
     }
-    if (user?.username && !isIdNumber(user.username)) {
-      return user.username;
-    }
-    return requestData?.student_name || 'Daisy Traya';
+
+    return requestData?.student_name || user?.username || 'Daisy Traya';
   };
 
   // Resolve form attributes
   const studentName = resolveStudentRealName();
+
+  // Dynamic font sizing so the whole complete name always fits without truncation
+  const nameFontSize = useMemo(() => {
+    const len = studentName ? studentName.length : 0;
+    if (len > 34) return '10px';
+    if (len > 26) return '11px';
+    if (len > 20) return '11.5px';
+    return '12.5px';
+  }, [studentName]);
+
+  // Safe helper to resolve human student course / degree program
+  const resolveStudentCourse = () => {
+    const isInvalid = (val) =>
+      !val || typeof val !== 'string' || !val.trim() || val.trim() === 'N/A' || val.trim() === '—';
+
+    // 1. Direct on requestData
+    if (!isInvalid(requestData?.course)) return requestData.course.trim();
+    if (!isInvalid(requestData?.program)) return requestData.program.trim();
+
+    // 2. Nested objects
+    if (!isInvalid(requestData?.student?.course)) return requestData.student.course.trim();
+    if (!isInvalid(requestData?.student?.program)) return requestData.student.program.trim();
+    if (!isInvalid(requestData?.student_details?.course)) return requestData.student_details.course.trim();
+
+    // 3. Authenticated user object
+    if (!isInvalid(user?.course)) return user.course.trim();
+    if (!isInvalid(user?.program)) return user.program.trim();
+
+    // 4. Cached student profile in localStorage
+    try {
+      const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+      const keys = [
+        user?.username,
+        user?.student_id,
+        user?.id,
+        requestData?.student_id,
+        requestData?.student_name,
+        requestData?.user,
+        requestData?.tracking_number,
+      ].filter(Boolean);
+
+      for (const k of keys) {
+        if (!isInvalid(profiles[k]?.course)) return profiles[k].course.trim();
+        if (!isInvalid(profiles[k]?.program)) return profiles[k].program.trim();
+      }
+    } catch {}
+
+    // 5. Stored user object in localStorage
+    try {
+      const u = JSON.parse(localStorage.getItem('regquest_user') || localStorage.getItem('user') || '{}');
+      if (!isInvalid(u?.course)) return u.course.trim();
+      if (!isInvalid(u?.program)) return u.program.trim();
+    } catch {}
+
+    return 'BS in Information Technology';
+  };
+
+  const course = resolveStudentCourse();
+
+  // Dynamic font sizing so long course names (e.g. Bachelor of Science in Information Technology) fit fully
+  const courseFontSize = useMemo(() => {
+    const len = course ? course.length : 0;
+    if (len > 38) return '9px';
+    if (len > 28) return '10.5px';
+    if (len > 22) return '11.5px';
+    return '12.5px';
+  }, [course]);
+
   const studentId = requestData?.student_id || user?.student_id || user?.username || 'N/A';
-  const course = requestData?.course || requestData?.program || user?.course || 'BS in Information Technology';
   const documentType = requestData?.document_type || 'Academic Credential';
   const rawAmount = requestData?.assessed_amount || requestData?.amount || '₱100.00';
   const amount =
@@ -178,26 +291,41 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
       <div className="ustp-form-outer-box">
         {/* 3. Applicant General Details Rows */}
         <div className="ustp-row-details">
-          <div className="ustp-detail-item" style={{ flex: '1.4' }}>
+          <div className="ustp-detail-item" style={{ flex: '1.8', minWidth: 0 }}>
             <span className="ustp-detail-lbl">Signature over Printed Name:</span>
-            <span className="ustp-detail-underline">{studentName}</span>
+            <span
+              className="ustp-detail-underline ustp-student-name-underline"
+              style={{ fontSize: nameFontSize }}
+              title={studentName}
+            >
+              {studentName}
+            </span>
           </div>
-          <div className="ustp-detail-item" style={{ flex: '1.2' }}>
+          <div className="ustp-detail-item" style={{ flex: '1.4', minWidth: 0 }}>
             <span className="ustp-detail-lbl">Course:</span>
-            <span className="ustp-detail-underline">{course}</span>
+            <span
+              className="ustp-detail-underline ustp-student-course-underline"
+              style={{ fontSize: courseFontSize }}
+              title={course}
+            >
+              {course}
+            </span>
           </div>
-          <div className="ustp-detail-item" style={{ flex: '1.1' }}>
+        </div>
+
+        <div className="ustp-row-details">
+          <div className="ustp-detail-item" style={{ flex: '1.8', maxWidth: '380px', minWidth: 0 }}>
             <span className="ustp-detail-lbl">Date of Request:</span>
             <span className="ustp-detail-underline">{requestDate}</span>
           </div>
         </div>
 
         <div className="ustp-row-details">
-          <div className="ustp-detail-item" style={{ flex: '1.3' }}>
+          <div className="ustp-detail-item" style={{ flex: '1.2', minWidth: 0 }}>
             <span className="ustp-detail-lbl">Birth date:</span>
             <span className="ustp-detail-underline">{birthDate}</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '2.2' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1.8' }}>
             <span className="ustp-checkbox-label">
               <span className="ustp-box-check">{userCategory === 'student' ? '✓' : ''}</span>
               <span>Student (Undergrad/Graduate)</span>
@@ -522,25 +650,25 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
           <div className="ustp-receipt-bottom-grid">
             <div className="ustp-receipt-cell">
               <span className="ustp-receipt-label">Amount:</span>
-              <span className="ustp-receipt-value" style={{ fontWeight: '900' }}>
+              <span className="ustp-receipt-value text-center" style={{ fontWeight: '900' }}>
                 {amount}
               </span>
             </div>
             <div className="ustp-receipt-cell">
               <span className="ustp-receipt-label">O.R. No.:</span>
-              <span className="ustp-receipt-value" style={{ fontFamily: 'monospace', fontWeight: '700' }}>
+              <span className="ustp-receipt-value text-center" style={{ fontFamily: 'monospace', fontWeight: '700' }}>
                 {orNumber || '\u00A0'}
               </span>
             </div>
             <div className="ustp-receipt-cell">
               <span className="ustp-receipt-label">Payment Date:</span>
-              <span className="ustp-receipt-value">
+              <span className="ustp-receipt-value text-center">
                 {paymentDate || '\u00A0'}
               </span>
             </div>
             <div className="ustp-receipt-cell">
               <span className="ustp-receipt-label">Date of Release:</span>
-              <span className="ustp-receipt-value" style={{ fontWeight: '700' }}>
+              <span className="ustp-receipt-value text-center" style={{ fontWeight: '700' }}>
                 {dateOfRelease || '\u00A0'}
               </span>
             </div>
