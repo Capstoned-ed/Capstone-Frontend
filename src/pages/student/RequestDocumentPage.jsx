@@ -1700,15 +1700,6 @@ export default function RequestDocumentPage() {
                 Back to Home
               </button>
             </div>
-
-            {/* View Claim Stub Link */}
-            <button
-              type="button"
-              onClick={() => toast.success(`Claim stub for ${generatedTrackingId} saved to download queue.`)}
-              className="complete-stub-link"
-            >
-              View Claim Stub
-            </button>
           </div>
         )}
       </div>

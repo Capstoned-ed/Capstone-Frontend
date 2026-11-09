@@ -57,7 +57,7 @@ function formatStatusDisplay(rawStatus) {
     case 'PENDING_PAYMENT':
     case 'PENDING PAYMENT':
     case 'CLEARED FOR PAYMENT':
-      return 'For Payment';
+      return 'Pending Payment';
     case 'PAYMENT_VERIFIED':
     case 'PAYMENT VERIFIED':
     case 'FOR_PROCESSING':
@@ -107,7 +107,7 @@ function getStatusBadge(status) {
     case 'Pending Payment':
     case 'PAYMENT_PENDING':
     case 'Payment Pending':
-      return <span className="status-pill for-payment">For Payment</span>;
+      return <span className="status-pill for-payment">Pending Payment</span>;
     case 'For Processing':
     case 'FOR_PROCESSING':
     case 'PAYMENT_VERIFIED':

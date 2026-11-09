@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useToast from '../../hooks/useToast';
 import { useAuth } from '../../hooks/useAuth';
-import requestsApi, { updateStoredRequest, logProcessedAction } from '../../api/requests';
+import requestsApi, { updateStoredRequest, logProcessedAction, setRequestArchived } from '../../api/requests';
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import { saveStoredNotification } from '../../api/notifications';
 import { getStoredPaymentProof, verifyStoredPaymentProof } from '../../api/payments';
 import PrintRequestFormModal from '../student/PrintRequestFormModal';
+import ClaimStubModal from '../common/ClaimStubModal';
 
 export default function ProcessRequestModal({
   isOpen,
@@ -51,6 +52,7 @@ export default function ProcessRequestModal({
   });
   const [verifiedByName, setVerifiedByName] = useState(defaultStaffName);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [showClaimStubModal, setShowClaimStubModal] = useState(false);
   const [isOrderConfirmed, setIsOrderConfirmed] = useState(() => {
     const s = String(requestItem?.status || '').toUpperCase();
     return Boolean(
@@ -113,11 +115,27 @@ export default function ProcessRequestModal({
 
   const canConfirmPayment = Boolean(hasReceiptUploaded && hasOrNumber);
 
-  const normalizeStatus = (val) => (val === 'Pending Payment' ? 'For Payment' : val);
+  const normalizeStatus = (val) => {
+    if (val === 'For Payment' || val === 'FOR PAYMENT' || val === 'FOR_PAYMENT') return 'Pending Payment';
+    return val;
+  };
 
   useEffect(() => {
     if (newStatus) setLocalStatus(normalizeStatus(newStatus));
   }, [newStatus]);
+
+  const claimStubDetails = useMemo(() => {
+    if (!requestItem) return null;
+    const reqDateFormatted = requestItem.request_date || (requestItem.created_at ? new Date(requestItem.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
+    const relDateFormatted = dateOfRelease || requestItem.date_of_release || requestItem.release_date || '—';
+    return {
+      studentName: requestItem.student_name,
+      course: requestItem.course || requestItem.program || '—',
+      dateOfRequest: reqDateFormatted,
+      credentialRequested: `${requestItem.document_type || 'Document'} (${requestItem.copies || 1} ${requestItem.copies > 1 ? 'copies' : 'copy'})`,
+      dateOfRelease: relDateFormatted,
+    };
+  }, [requestItem, dateOfRelease]);
 
   const handleManualStatusChange = (val) => {
     const cleanVal = normalizeStatus(val);
@@ -128,7 +146,7 @@ export default function ProcessRequestModal({
   const statusOptions = useMemo(() => {
     const base = [
       'Pending',
-      'For Payment',
+      'Pending Payment',
       'For Processing',
       'Processing',
       'Releasing',
@@ -317,9 +335,9 @@ export default function ProcessRequestModal({
     const cleanAmount = assessedAmount.trim() || '₱100.00';
 
     const patch = {
-      status: 'For Payment',
+      status: 'Pending Payment',
       rawStatus: 'PAYMENT_PENDING',
-      batch_status: 'For Payment',
+      batch_status: 'Pending Payment',
       clearance_status: 'VERIFIED',
       assessed_amount: cleanAmount,
       amount: cleanAmount,
@@ -332,9 +350,9 @@ export default function ProcessRequestModal({
       confirmed_for_payment: true,
     };
 
-    requestItem.status = 'For Payment';
+    requestItem.status = 'Pending Payment';
     requestItem.rawStatus = 'PAYMENT_PENDING';
-    requestItem.batch_status = 'For Payment';
+    requestItem.batch_status = 'Pending Payment';
     requestItem.clearance_status = 'VERIFIED';
     requestItem.assessed_amount = cleanAmount;
     requestItem.amount = cleanAmount;
@@ -346,7 +364,7 @@ export default function ProcessRequestModal({
 
     updateStoredRequest(targetId, patch, { fallbackItem: requestItem, silentNotify: true });
 
-    handleManualStatusChange('For Payment');
+    handleManualStatusChange('Pending Payment');
     setIsOrderConfirmed(true);
 
     if (requestItem.rawId && typeof requestItem.rawId === 'number') {
@@ -383,7 +401,7 @@ export default function ProcessRequestModal({
       trackingNumber: trackingCode,
       documentType: docName,
       action: `Assessed payment (${cleanAmount}) & confirmed request`,
-      status: 'For Payment',
+      status: 'Pending Payment',
     });
 
     if (onUpdated) {
@@ -393,7 +411,7 @@ export default function ProcessRequestModal({
       });
     }
 
-    toast.success(`Request confirmed! Status updated to "For Payment". Student notified to pay ${cleanAmount}.`);
+    toast.success(`Request confirmed! Status updated to "Pending Payment". Student notified to pay ${cleanAmount}.`);
   };
 
   const handleRejectRequest = async () => {
@@ -466,26 +484,26 @@ export default function ProcessRequestModal({
 
     if (actionToSet === 'PENDING') {
       setPaymentStatus('PENDING');
-      requestItem.status = 'For Payment';
+      requestItem.status = 'Pending Payment';
       requestItem.rawStatus = 'PAYMENT_PENDING';
-      requestItem.batch_status = 'For Payment';
+      requestItem.batch_status = 'Pending Payment';
       requestItem.payment_status = 'PENDING';
       updateStoredRequest(
         targetId,
         {
           payment_status: 'PENDING',
-          status: 'For Payment',
+          status: 'Pending Payment',
           rawStatus: 'PAYMENT_PENDING',
         },
         { fallbackItem: requestItem, silentNotify: true }
       );
-      handleManualStatusChange('For Payment');
+      handleManualStatusChange('Pending Payment');
       if (onUpdated) {
         onUpdated({
           ...requestItem,
-          status: 'For Payment',
+          status: 'Pending Payment',
           rawStatus: 'PAYMENT_PENDING',
-          batch_status: 'For Payment',
+          batch_status: 'Pending Payment',
           payment_status: 'PENDING',
         });
       }
@@ -511,7 +529,7 @@ export default function ProcessRequestModal({
     );
 
     setPaymentStatus(isVerified ? 'VERIFIED' : 'REJECTED');
-    const updatedStatus = isVerified ? 'For Processing' : 'For Payment';
+    const updatedStatus = isVerified ? 'For Processing' : 'Pending Payment';
     handleManualStatusChange(updatedStatus);
 
     const paymentPatch = {
@@ -709,6 +727,94 @@ export default function ProcessRequestModal({
       console.error('Failed to transition request:', err);
       const detail = err.response?.data?.detail || err.response?.data?.message || err.message || 'Status transition failed.';
       toast.error(detail);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMoveToHistory = () => {
+    const targetId = requestItem.id || requestItem.rawId || requestItem.tracking_number;
+    setRequestArchived(targetId, true, user, { fallbackItem: requestItem });
+    logProcessedAction({
+      actor: user?.username,
+      actorName: user?.full_name || user?.username,
+      actorId: user?.id,
+      actorRole: user?.role || 'staff',
+      targetName: requestItem.student_name,
+      targetId: requestItem.student_id || targetId,
+      trackingNumber: requestItem.tracking_number || targetId,
+      documentType: requestItem.document_type,
+      action: 'Document claimed by student: Moved request to History',
+      status: 'Claimed',
+    });
+    if (onUpdated) {
+      onUpdated({ ...requestItem, is_archived: true, status: 'Claimed' });
+    }
+    toast.success(`Request ${requestItem.tracking_number || targetId} marked as Done and moved to Request History.`);
+    onClose();
+  };
+
+  const handleClaimAndMoveToHistory = async () => {
+    const targetId = requestItem.id || requestItem.rawId;
+    const trackingCode = requestItem.tracking_number || requestItem.trackingId || requestItem.id;
+
+    try {
+      setLoading(true);
+      if (typeof targetId === 'number') {
+        await requestsApi.transition(targetId, {
+          status: 'RELEASED',
+          remarks: notes || 'Document claimed by student at registrar window.',
+        }).catch(() => {});
+      }
+
+      const claimPatch = {
+        status: 'Claimed',
+        rawStatus: 'RELEASED',
+        batch_status: 'Claimed',
+        remarks: notes || requestItem.remarks || 'Document claimed by student.',
+        is_archived: true,
+        archived_at: new Date().toISOString(),
+        archived_by: user?.full_name || user?.username || 'Staff',
+      };
+
+      updateStoredRequest(targetId, claimPatch, { fallbackItem: requestItem });
+      setRequestArchived(targetId, true, user, { fallbackItem: requestItem });
+
+      logProcessedAction({
+        actor: user?.username,
+        actorName: user?.full_name || user?.username,
+        actorId: user?.id,
+        actorRole: user?.role || 'staff',
+        targetName: requestItem.student_name,
+        targetId: requestItem.student_id || trackingCode,
+        trackingNumber: trackingCode,
+        documentType: requestItem.document_type,
+        action: 'Marked Claimed & moved to History',
+        status: 'Claimed',
+      });
+
+      saveStoredNotification({
+        event_type: 'DOCUMENT_CLAIMED',
+        title: 'Document Claimed Successfully',
+        message: `Your requested credential (${requestItem.document_type}) has been officially claimed and released. Thank you!`,
+        related_object_type: 'CredentialRequest',
+        related_object_id: trackingCode,
+        target_role: 'student',
+        target_roles: ['student'],
+        target_user_id: requestItem.user || null,
+        target_username: requestItem.student_id || requestItem.student_name || null,
+        target_student_id: requestItem.student_id || null,
+      });
+
+      if (onUpdated) {
+        onUpdated({ ...requestItem, ...claimPatch });
+      }
+
+      toast.success(`Request ${trackingCode} marked as Claimed & Done (moved to Request History)!`);
+      onClose();
+    } catch (err) {
+      console.error('Failed to claim and archive:', err);
+      toast.error('Failed to process request release.');
     } finally {
       setLoading(false);
     }
@@ -1105,7 +1211,7 @@ export default function ProcessRequestModal({
                         <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
-                        <span>Request Confirmed (For Payment)</span>
+                        <span>Request Confirmed (Pending Payment)</span>
                       </span>
                     )}
                   </div>
@@ -1391,15 +1497,65 @@ export default function ProcessRequestModal({
             </div>
 
             {/* Sticky Footer */}
-            <div className="staff-process-footer">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={loading}
-                className="staff-btn-back"
-              >
-                <span>Close</span>
-              </button>
+            <div className="staff-process-footer flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={loading}
+                  className="staff-btn-back"
+                >
+                  <span>Close</span>
+                </button>
+
+                {/* If already Claimed, offer Done */}
+                {(localStatus === 'Claimed' || requestItem?.status === 'Claimed') && (
+                  <button
+                    type="button"
+                    onClick={handleMoveToHistory}
+                    disabled={loading}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
+                    title="Document claimed: Mark as Done and move to Request History"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>Done</span>
+                  </button>
+                )}
+
+                {/* If Releasing / For release, offer quick Mark Claimed & Done */}
+                {(localStatus === 'Releasing' || localStatus === 'For release' || requestItem?.status === 'Releasing' || requestItem?.status === 'For release') && (
+                  <button
+                    type="button"
+                    onClick={handleClaimAndMoveToHistory}
+                    disabled={loading}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
+                    title="Mark document as claimed by student and complete as Done"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>Claimed & Done</span>
+                  </button>
+                )}
+
+                {/* Print Claim Stub button (available once payment is confirmed / for processing / releasing / claimed) */}
+                {(paymentStatus === 'VERIFIED' || isOrderConfirmed || localStatus === 'For Processing' || localStatus === 'Releasing' || localStatus === 'Claimed') && (
+                  <button
+                    type="button"
+                    onClick={() => setShowClaimStubModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shadow-sm transition-all cursor-pointer"
+                    title="Print or download official Claim Stub slip for the student"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zM7 9V5a2 2 0 012-2h6a2 2 0 012 2v4" />
+                    </svg>
+                    <span>Print Claim Stub</span>
+                  </button>
+                )}
+              </div>
+
               <button
                 type="submit"
                 disabled={loading}
@@ -1424,6 +1580,16 @@ export default function ProcessRequestModal({
           verified_by_name: verifiedByName,
         }}
       />
+
+      {/* Official Claim Stub Modal (issued once payment is settled) */}
+      {showClaimStubModal && (
+        <ClaimStubModal
+          isOpen={showClaimStubModal}
+          onClose={() => setShowClaimStubModal(false)}
+          claimStubDetails={claimStubDetails}
+          trackingNumber={requestItem?.tracking_number || requestItem?.id}
+        />
+      )}
     </>
   );
 }

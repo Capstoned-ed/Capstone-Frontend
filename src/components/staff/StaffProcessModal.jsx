@@ -70,7 +70,7 @@ export default function StaffProcessModal({
     selectedRequest?.release_date ||
     'N/A';
 
-  const normalizeStatus = (val) => (val === 'Pending Payment' ? 'For Payment' : val);
+  const normalizeStatus = (val) => (val === 'For Payment' || val === 'FOR PAYMENT' ? 'Pending Payment' : val);
   const [localStatus, setLocalStatus] = useState(() =>
     normalizeStatus(newStatus || selectedRequest?.status || 'For Processing')
   );
