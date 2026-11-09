@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { ROLES } from '../../constants/roles';
 import { ROUTES } from '../../constants/routes';
 import logoExpanded from '../../assets/RegQuest-Logo-2-cropped.png';
+import logoShrunk from '../../assets/RegQuest-Logo-3-cropped.png';
 import { useNotifications } from '../../context/NotificationContext';
 import StudentProfileModal from '../student/StudentProfileModal';
 import StaffProfileModal from '../staff/StaffProfileModal';
@@ -237,7 +238,14 @@ export default function Sidebar({ isCollapsed, onToggle }) {
       >
         <div>
           {isCollapsed ? (
-            <div className="pt-8 pb-6 flex items-center justify-center">
+            <div className="pt-7 pb-5 flex flex-col items-center gap-3">
+              <NavLink to={navLinks[0]?.to || '/'} className="flex items-center justify-center transition-transform hover:scale-105">
+                <img
+                  src={logoShrunk}
+                  alt="RegQuest Logo"
+                  className="h-10 w-10 object-contain drop-shadow"
+                />
+              </NavLink>
               <button
                 type="button"
                 onClick={onToggle}
@@ -251,14 +259,14 @@ export default function Sidebar({ isCollapsed, onToggle }) {
               </button>
             </div>
           ) : (
-            <div className="pt-8 pb-6 flex items-center justify-between px-6">
-              <div className="flex items-center">
+            <div className="pt-7 pb-5 flex items-center justify-between px-6">
+              <NavLink to={navLinks[0]?.to || '/'} className="flex items-center transition-opacity hover:opacity-90">
                 <img
                   src={logoExpanded}
                   alt="RegQuest Logo"
-                  className="h-9 w-auto object-contain max-w-[155px]"
+                  className="h-10 w-auto object-contain max-w-[160px]"
                 />
-              </div>
+              </NavLink>
               <button
                 type="button"
                 onClick={onToggle}
