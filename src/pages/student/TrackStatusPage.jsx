@@ -4,6 +4,7 @@ import requestsApi, { resolveRequestDocType } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
+import ClaimStubModal from '../../components/common/ClaimStubModal';
 import '../../styles/student/TrackStatusPage.css';
 
 const DEFAULT_TIMELINE_STEPS = [
@@ -87,9 +88,38 @@ export default function TrackStatusPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showClaimStubModal, setShowClaimStubModal] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const claimStubRef = useRef(null);
 
-  // Search input state
-  const [searchInput, setSearchInput] = useState(urlTrackId);
+  // Download Claim Stub as PDF
+  const handleDownloadPdf = async () => {
+    const element = claimStubRef.current;
+    if (!element || downloading) return;
+    setDownloading(true);
+    try {
+      const html2pdfModule = await import('html2pdf.js');
+      const html2pdf = html2pdfModule.default || html2pdfModule;
+      const safeTracking = matchedRequest?.tracking_number || matchedRequest?.id || 'doc';
+      const opt = {
+        margin: [10, 10, 10, 10],
+        filename: `USTP_Claim_Stub_${safeTracking}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+      };
+      await html2pdf().set(opt).from(element).save();
+      toast.success('Claim Stub PDF downloaded successfully!');
+    } catch (err) {
+      console.warn('PDF export fallback:', err);
+      window.print();
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // Selected request tracking ID
+  const [selectedTrackId, setSelectedTrackId] = useState(urlTrackId);
 
   // Load requests and credential types
   const fetchData = async (isManualRefresh = false) => {
@@ -125,10 +155,10 @@ export default function TrackStatusPage() {
     };
   }, []);
 
-  // Sync search input when urlTrackId changes externally
+  // Sync selected tracking ID when urlTrackId changes externally
   useEffect(() => {
     if (urlTrackId) {
-      setSearchInput(urlTrackId);
+      setSelectedTrackId(urlTrackId);
     }
   }, [urlTrackId]);
 
@@ -170,17 +200,18 @@ export default function TrackStatusPage() {
   }, [rawRequests, user]);
 
   // Determine active tracking ID:
-  // 1. Search input / url query if present
-  // 2. Or default to the student's request
+  // 1. url query if present
+  // 2. Or student selected request
+  // 3. Or default to the student's first request
   const activeTrackingId = useMemo(() => {
-    if (searchInput.trim()) return searchInput.trim();
     if (urlTrackId.trim()) return urlTrackId.trim();
+    if (selectedTrackId.trim()) return selectedTrackId.trim();
     if (studentRequests.length > 0) {
       const first = studentRequests[0];
       return first.tracking_number || first.trackingId || String(first.id);
     }
     return '';
-  }, [searchInput, urlTrackId, studentRequests]);
+  }, [urlTrackId, selectedTrackId, studentRequests]);
 
   // Match the active request object
   const matchedRequest = useMemo(() => {
@@ -292,28 +323,93 @@ export default function TrackStatusPage() {
     return calculateReleaseDate(matchedRequest.created_at, matchedCred?.processing_days || 5);
   }, [matchedRequest, matchedCred, mlEstimatedCompletion]);
 
-  // Handle Search Input Change
-  const handleInputChange = (e) => {
-    const val = e.target.value;
-    setSearchInput(val);
-    if (val.trim()) {
-      setSearchParams({ trackId: val.trim() });
-    } else {
-      setSearchParams({});
-    }
-  };
+  // Official Claim Stub Details formatted specifically for the physical claim stub slip
+  const claimStubDetails = useMemo(() => {
+    if (!matchedRequest) return null;
 
-  // Handle Pill Click
+    // 1. Resolve Student Name
+    let studentName = matchedRequest.student_name;
+    const isIdNumber = (val) => !val || /^\d+$/.test(String(val).trim()) || String(val).trim().length < 2;
+
+    if (isIdNumber(studentName)) {
+      studentName = user?.full_name || (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : null);
+    }
+    if (isIdNumber(studentName)) {
+      try {
+        const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+        const p = profiles[user?.username] || profiles[user?.student_id] || profiles[user?.id] || profiles[matchedRequest?.student_id];
+        if (p?.full_name && !isIdNumber(p.full_name)) studentName = p.full_name;
+        else if (p?.name && !isIdNumber(p.name)) studentName = p.name;
+      } catch {}
+    }
+    if (isIdNumber(studentName)) {
+      if (user?.username === '2023301564' || String(matchedRequest.student_id) === '2023301564') {
+        studentName = 'Daisy Traya';
+      } else {
+        studentName = user?.username || 'Student';
+      }
+    }
+
+    // 2. Resolve Course / Program
+    let course = matchedRequest.course || matchedRequest.program || user?.course || user?.program;
+    if (!course) {
+      try {
+        const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+        const p = profiles[user?.username] || profiles[user?.student_id] || profiles[user?.id];
+        if (p?.course || p?.program) course = p.course || p.program;
+      } catch {}
+    }
+    if (!course) {
+      course = 'BS in Information Technology';
+    }
+
+    // 3. Date of Request
+    let dateOfRequest = matchedRequest.request_date;
+    if (!dateOfRequest || dateOfRequest === 'N/A') {
+      if (matchedRequest.created_at) {
+        const d = new Date(matchedRequest.created_at);
+        if (!isNaN(d.getTime())) {
+          dateOfRequest = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+      }
+    } else {
+      const d = new Date(dateOfRequest);
+      if (!isNaN(d.getTime())) {
+        dateOfRequest = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+    }
+    if (!dateOfRequest) {
+      dateOfRequest = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    // 4. Credential Requested
+    const credentialRequested = resolveRequestDocType(matchedRequest, matchedCred);
+
+    // 5. Date of Release
+    let dateOfRelease = matchedRequest.release_date || matchedRequest.date_of_release;
+    if (dateOfRelease && dateOfRelease !== 'N/A') {
+      const d = new Date(dateOfRelease);
+      if (!isNaN(d.getTime())) {
+        dateOfRelease = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+    } else {
+      dateOfRelease = estimatedCompletion || 'Pending schedule';
+    }
+
+    return {
+      studentName,
+      course,
+      dateOfRequest,
+      credentialRequested,
+      dateOfRelease,
+    };
+  }, [matchedRequest, user, matchedCred, estimatedCompletion]);
+
+  // Handle request selection from student requests list
   const handleSelectRequest = (req) => {
     const code = req.tracking_number || req.trackingId || String(req.id);
-    setSearchInput(code);
+    setSelectedTrackId(code);
     setSearchParams({ trackId: code });
-  };
-
-  // Clear Search
-  const handleClearSearch = () => {
-    setSearchInput('');
-    setSearchParams({});
   };
 
   // Copy Tracking ID to clipboard
@@ -332,7 +428,7 @@ export default function TrackStatusPage() {
         <div className="track-page-header">
           <h1 className="track-main-title">Track the status of your Request</h1>
           <p className="track-sub-title">
-            Enter your tracking ID or select from your submitted requests below to see the current status of your documents.
+            Select from your submitted requests below to see the current status of your documents.
           </p>
         </div>
 
@@ -415,31 +511,6 @@ export default function TrackStatusPage() {
           </div>
         )}
 
-        {/* Golden Border Search Bar with Clear Icon */}
-        <div className="track-search-container">
-          <svg className="w-5 h-5 track-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            type="text"
-            value={searchInput}
-            onChange={handleInputChange}
-            placeholder="Search tracking ID (e.g. REQ-2026-000001)"
-            className="track-search-input pl-11 pr-11"
-            aria-label="Tracking ID"
-          />
-          {searchInput && (
-            <button
-              type="button"
-              onClick={handleClearSearch}
-              className="track-search-clear-btn"
-              title="Clear search"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-
         {/* Conditional On Hold Alert Banner */}
         {matchedRequest && isOnHold && (
           <div className="track-on-hold-banner" role="alert">
@@ -470,7 +541,8 @@ export default function TrackStatusPage() {
 
         {/* Case 1: Matched Request Display - Tracking Status Only */}
         {matchedRequest ? (
-          <div className="track-timeline-card">
+          <>
+            <div className="track-timeline-card">
             {/* Header Row: Tracking ID on left, Estimate Completion on right */}
             <div className="track-card-header">
               <div>
@@ -671,7 +743,19 @@ export default function TrackStatusPage() {
               })}
             </div>
           </div>
-        ) : searchInput.trim() ? (
+
+          {/* Action button below track status card */}
+          <div className="track-claim-stub-action-wrap">
+            <button
+              type="button"
+              onClick={() => setShowClaimStubModal(true)}
+              className="track-claim-stub-btn"
+            >
+              Claim Stub
+            </button>
+          </div>
+        </>
+        ) : urlTrackId.trim() ? (
           /* Case 2: Tracking ID searched but not found */
           <div className="track-empty-card">
             <div className="track-empty-icon">
@@ -681,17 +765,8 @@ export default function TrackStatusPage() {
             </div>
             <h3 className="track-empty-title">Tracking ID Not Found</h3>
             <p className="track-empty-desc">
-              We couldn't locate any document request matching <strong>"{searchInput}"</strong>. Please verify your tracking number or pick from your active requests above.
+              We couldn't locate any document request matching <strong>"{urlTrackId}"</strong>. Please select from your active requests above.
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={handleClearSearch}
-                className="track-btn-secondary"
-              >
-                Clear Search
-              </button>
-            </div>
           </div>
         ) : (
           /* Case 3: Student has no requests yet */
@@ -715,6 +790,16 @@ export default function TrackStatusPage() {
           </div>
         )}
       </div>
+
+      {/* Official Claim Stub Modal matching the uploaded photo format */}
+      {showClaimStubModal && matchedRequest && claimStubDetails && (
+        <ClaimStubModal
+          isOpen={showClaimStubModal}
+          onClose={() => setShowClaimStubModal(false)}
+          claimStubDetails={claimStubDetails}
+          trackingNumber={matchedRequest.tracking_number || matchedRequest.id}
+        />
+      )}
     </div>
   );
 }

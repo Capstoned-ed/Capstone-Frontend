@@ -264,9 +264,28 @@
   min-height: 20px;
   display: inline-block;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
   box-sizing: border-box;
+}
+
+.ustp-student-name-underline {
+  flex: 1 !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.01em;
+}
+
+.ustp-student-course-underline {
+  flex: 1 !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em;
 }
 
 .ustp-field-underline {
@@ -496,25 +515,28 @@
 
 .ustp-receipt-bottom-grid {
   display: grid;
-  grid-template-columns: 1fr 1.15fr 1.15fr 1.15fr;
+  grid-template-columns: 0.9fr 1.05fr 1.15fr 1.35fr;
   gap: 12px;
   align-items: flex-end;
-  border-top: 1.25px solid #000000;
-  padding-top: 7px;
+  border-top: none !important; /* Removed upper line so it flows cleanly without extra line */
+  padding-top: 6px;
+  margin-top: 4px;
   font-size: 12px;
 }
 
 .ustp-receipt-cell {
   display: flex;
   align-items: flex-end;
-  gap: 3px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .ustp-receipt-label {
   font-weight: 700;
-  white-space: nowrap;
+  white-space: nowrap !important;
   line-height: 1.25;
   padding-bottom: 2px;
+  flex-shrink: 0;
 }
 
 .ustp-receipt-value {
@@ -522,7 +544,9 @@
   border-bottom: 1.25px solid #000000;
   padding: 0 4px 2px 4px; /* 2px bottom padding guarantees underline stays cleanly below text */
   line-height: 1.25;
-  min-height: 18px;
+  min-height: 20px;
+  height: 20px;
+  white-space: nowrap !important;
   display: inline-block;
   box-sizing: border-box;
 }

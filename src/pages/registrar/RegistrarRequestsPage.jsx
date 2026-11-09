@@ -1,13 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, ASSIGNMENTS_KEY } from '../../api/requests';
+import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, recordStaffAssignmentTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived } from '../../api/requests';
 import { saveStoredNotification } from '../../api/notifications';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
 import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
+import { StaffRequestsTable } from '../../components/staff';
 import useToast from '../../hooks/useToast';
 import '../../styles/admin/AdminRequestsPage.css';
 import '../../styles/staff/StaffRequestsPage.css';
+
+const isClaimedStatus = (status) => {
+  const s = String(status || '').trim().toLowerCase();
+  return s === 'claimed' || s.includes('claim');
+};
 
 function loadStoredAssignments() {
   return getStaffAssignments();
@@ -27,7 +33,7 @@ function calculateReleaseDate(createdAt, processingDays = 5) {
 
 const REQUEST_STATUSES = [
   'Pending',
-  'For Payment',
+  'Pending Payment',
   'For Processing',
   'Processing',
   'Releasing',
@@ -38,6 +44,7 @@ const REQUEST_STATUSES = [
 function formatStatusDisplay(rawStatus) {
   if (!rawStatus) return 'Pending';
   const s = rawStatus.trim();
+  if (s === 'For Payment' || s === 'FOR PAYMENT' || s === 'FOR_PAYMENT') return 'Pending Payment';
   if (REQUEST_STATUSES.includes(s)) return s;
 
   const upper = s.toUpperCase();
@@ -54,7 +61,7 @@ function formatStatusDisplay(rawStatus) {
     case 'PENDING_PAYMENT':
     case 'PENDING PAYMENT':
     case 'CLEARED FOR PAYMENT':
-      return 'For Payment';
+      return 'Pending Payment';
     case 'PAYMENT_VERIFIED':
     case 'PAYMENT VERIFIED':
     case 'FOR_PROCESSING':
@@ -114,6 +121,60 @@ export default function RegistrarRequestsPage() {
   const [clearances, setClearances] = useState([]);
   const [showAllBatch, setShowAllBatch] = useState(false);
   const [showAllRequests, setShowAllRequests] = useState(false);
+  const [activeTab, setActiveTab] = useState('active'); // 'active' | 'history'
+  const [archivedMap, setArchivedMap] = useState(() => getArchivedRequestsMap());
+
+  useEffect(() => {
+    const handleArchivedUpdate = () => {
+      setArchivedMap(getArchivedRequestsMap());
+    };
+    window.addEventListener('regquest_archived_updated', handleArchivedUpdate);
+    window.addEventListener('storage', handleArchivedUpdate);
+    return () => {
+      window.removeEventListener('regquest_archived_updated', handleArchivedUpdate);
+      window.removeEventListener('storage', handleArchivedUpdate);
+    };
+  }, []);
+
+  const handleArchiveRequest = (item) => {
+    if (!item) return;
+    const reqId = item.id || item.rawId || item.tracking_number;
+    setRequestArchived(reqId, true, currentUser, { fallbackItem: item });
+    setArchivedMap(getArchivedRequestsMap());
+    logProcessedAction({
+      actor: currentUser?.username,
+      actorName: currentUser?.full_name || currentUser?.username,
+      actorId: currentUser?.id,
+      actorRole: currentUser?.role || 'registrar',
+      targetName: item.student_name,
+      targetId: item.student_id || reqId,
+      trackingNumber: item.tracking_number || reqId,
+      documentType: item.document_type,
+      action: 'Document claimed by student: Moved to History',
+      status: 'Claimed',
+    });
+    toast.success(`Request ${item.id || reqId} marked as Done and moved to Request History.`);
+  };
+
+  const handleRestoreRequest = (item) => {
+    if (!item) return;
+    const reqId = item.id || item.rawId || item.tracking_number;
+    setRequestArchived(reqId, false, currentUser, { fallbackItem: item });
+    setArchivedMap(getArchivedRequestsMap());
+    logProcessedAction({
+      actor: currentUser?.username,
+      actorName: currentUser?.full_name || currentUser?.username,
+      actorId: currentUser?.id,
+      actorRole: currentUser?.role || 'registrar',
+      targetName: item.student_name,
+      targetId: item.student_id || reqId,
+      trackingNumber: item.tracking_number || reqId,
+      documentType: item.document_type,
+      action: 'Restored request from History to Active Queue',
+      status: item.status || 'Claimed',
+    });
+    toast.success(`Request ${item.id || reqId} restored to Active Queue.`);
+  };
 
   useEffect(() => {
     let ignore = false;
@@ -357,7 +418,16 @@ export default function RegistrarRequestsPage() {
           }
         }
 
-        const assignedStaff = assignments[r.id] || assignments[r.tracking_number] || assignments[r.rawId] || '';
+        const assignedStaff =
+          assignments[r.id] ||
+          assignments[String(r.id)] ||
+          assignments[r.tracking_number] ||
+          assignments[String(r.tracking_number)] ||
+          assignments[r.rawId] ||
+          assignments[String(r.rawId)] ||
+          r.assigned_staff ||
+          matchedStored?.assigned_staff ||
+          '';
 
         return {
           rawId: r.rawId || r.id,
@@ -372,6 +442,8 @@ export default function RegistrarRequestsPage() {
           rawStatus: effectiveRawStatus,
           batch_status: formatStatusDisplay(effectiveRawStatus),
           assigned_staff: assignedStaff,
+          archived_by: archivedMap[r.id]?.archived_by || archivedMap[r.rawId]?.archived_by || r.archived_by || null,
+          archived_at: archivedMap[r.id]?.archived_at || archivedMap[r.rawId]?.archived_at || r.archived_at || null,
           created_at: r.created_at,
           request_date: requestDate,
           release_date: releaseDate,
@@ -438,29 +510,80 @@ export default function RegistrarRequestsPage() {
   }, [requests]);
 
   const batchRequests = useMemo(() => {
+    const activeReqs = requests.filter((r) => !isRequestArchived(r, archivedMap));
     if (selectedBatch === 'ALL') {
-      return requests;
+      return activeReqs;
     }
-    return requests.filter((r) => r.batchId === selectedBatch).sort(sortRequestsNewestFirst);
-  }, [requests, selectedBatch]);
+    return activeReqs.filter((r) => r.batchId === selectedBatch).sort(sortRequestsNewestFirst);
+  }, [requests, selectedBatch, archivedMap]);
 
   const handleAssignStaff = (requestId, rawId, staffName) => {
     setAssignments((prev) => {
       const updated = { ...prev };
       if (staffName) {
         updated[rawId] = staffName;
-        if (requestId !== rawId) updated[requestId] = staffName;
+        updated[String(rawId)] = staffName;
+        if (requestId !== rawId) {
+          updated[requestId] = staffName;
+          updated[String(requestId)] = staffName;
+        }
+        // Registrar verifies all, so assigned request moves to 'For Processing'
+        updated[`status_${rawId}`] = 'For Processing';
+        updated[`status_${String(rawId)}` ] = 'For Processing';
+        updated[`status_${requestId}`] = 'For Processing';
+        updated[`status_${String(requestId)}`] = 'For Processing';
       } else {
         delete updated[rawId];
+        delete updated[String(rawId)];
         delete updated[requestId];
+        delete updated[String(requestId)];
+        delete updated[`status_${rawId}`];
+        delete updated[`status_${String(rawId)}`];
+        delete updated[`status_${requestId}`];
+        delete updated[`status_${String(requestId)}`];
       }
       saveStoredAssignments(updated);
       return updated;
     });
 
+    const now = Date.now();
+    const nowIso = new Date(now).toISOString();
+
     try {
-      updateStoredRequest(requestId || rawId, { assigned_staff: staffName || '' });
+      updateStoredRequest(requestId || rawId, {
+        assigned_staff: staffName || '',
+        assigned_at: staffName ? nowIso : null,
+        status: staffName ? 'For Processing' : undefined,
+      });
+      if (staffName) {
+        recordStaffAssignmentTimestamp(requestId, now);
+        if (rawId && rawId !== requestId) recordStaffAssignmentTimestamp(rawId, now);
+      }
     } catch {}
+
+    // Update in-memory state
+    if (staffName) {
+      setRawRequests((prev) =>
+        prev.map((r) =>
+          String(r.id) === String(rawId) ||
+          String(r.id) === String(requestId) ||
+          String(r.rawId) === String(rawId) ||
+          String(r.tracking_number) === String(requestId)
+            ? { ...r, assigned_staff: staffName, assigned_at: now, status: 'For Processing' }
+            : r
+        )
+      );
+
+      // Backend API transition if applicable
+      if (rawId && !isNaN(Number(rawId))) {
+        requestsApi
+          .transition(Number(rawId), {
+            status: 'PAYMENT_VERIFIED',
+            remarks: `Assigned to ${staffName} for processing by registrar`,
+          })
+          .catch(() => {});
+      }
+    }
 
     if (staffName) {
       toast.success(`Assigned ${staffName} to ${requestId}`);
@@ -588,6 +711,52 @@ export default function RegistrarRequestsPage() {
       .sort(sortRequestsNewestFirst);
   }, [requests, searchQuery, docTypeFilter, statusFilter]);
 
+  const activeFilteredRequests = useMemo(() => {
+    return filteredRequests.filter((r) => !isRequestArchived(r, archivedMap));
+  }, [filteredRequests, archivedMap]);
+
+  const historyRequests = useMemo(() => {
+    return requests
+      .filter((r) => isRequestArchived(r, archivedMap))
+      .filter((r) => {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesSearch =
+          !q ||
+          r.id.toLowerCase().includes(q) ||
+          r.student_name.toLowerCase().includes(q) ||
+          r.student_id.toLowerCase().includes(q);
+
+        if (!matchesSearch) return false;
+
+        if (docTypeFilter) {
+          const filterLow = docTypeFilter.toLowerCase();
+          const docLow = (r.document_type || '').toLowerCase();
+          if (!docLow.includes(filterLow) && !filterLow.includes(docLow)) {
+            return false;
+          }
+        }
+
+        if (statusFilter && r.status.toLowerCase() !== statusFilter.toLowerCase()) {
+          return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        const timeA = archivedMap[a.id]?.archived_at || archivedMap[a.rawId]?.archived_at || a.created_at || 0;
+        const timeB = archivedMap[b.id]?.archived_at || archivedMap[b.rawId]?.archived_at || b.created_at || 0;
+        return new Date(timeB) - new Date(timeA);
+      });
+  }, [requests, archivedMap, searchQuery, docTypeFilter, statusFilter]);
+
+  const activeTotalCount = useMemo(() => {
+    return requests.filter((r) => !isRequestArchived(r, archivedMap)).length;
+  }, [requests, archivedMap]);
+
+  const historyTotalCount = useMemo(() => {
+    return requests.filter((r) => isRequestArchived(r, archivedMap)).length;
+  }, [requests, archivedMap]);
+
   const getStatusBadge = (status) => {
     const s = String(status || '').trim();
     switch (s) {
@@ -601,7 +770,7 @@ export default function RegistrarRequestsPage() {
       case 'Pending Payment':
       case 'PAYMENT_PENDING':
       case 'Payment Pending':
-        return <span className="status-pill for-payment">For Payment</span>;
+        return <span className="status-pill for-payment">Pending Payment</span>;
       case 'For Processing':
       case 'FOR_PROCESSING':
       case 'PAYMENT_VERIFIED':
@@ -632,7 +801,49 @@ export default function RegistrarRequestsPage() {
 
   return (
     <div className="admin-req-container">
-      <div className="batch-header-card">
+      {/* Queue View Tabs: Active Requests vs Request History */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-3 mb-6">
+        <button
+          type="button"
+          onClick={() => setActiveTab('active')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            activeTab === 'active'
+              ? 'bg-[#0B0B36] text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <span>Active Requests</span>
+          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+            activeTab === 'active' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+          }`}>
+            {activeTotalCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('history')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            activeTab === 'history'
+              ? 'bg-[#0B0B36] text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>Request History</span>
+          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+            activeTab === 'history' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+          }`}>
+            {historyTotalCount}
+          </span>
+        </button>
+      </div>
+
+      {activeTab === 'active' ? (
+        <>
+          <div className="batch-header-card">
         <div className="batch-title-row">
           <div className="batch-icon-badge">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -739,18 +950,19 @@ export default function RegistrarRequestsPage() {
                 <th>Status</th>
                 <th>Assigned Staff</th>
                 <th>Assignment Status</th>
+                <th className="text-right whitespace-nowrap min-w-[170px]">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-sm text-slate-400">
+                  <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
                     Loading requests from server...
                   </td>
                 </tr>
               ) : batchRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-sm text-slate-400">
+                  <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
                     {requests.length === 0
                       ? 'No student requests have been submitted yet.'
                       : 'No requests found in this batch.'}
@@ -796,6 +1008,43 @@ export default function RegistrarRequestsPage() {
                           <span>Unassigned</span>
                         </span>
                       )}
+                    </td>
+                    <td className="text-right whitespace-nowrap">
+                      <div className="inline-flex items-center justify-end gap-2 flex-nowrap whitespace-nowrap">
+                        {isClaimedStatus(item.batch_status || item.status) && !isRequestArchived(item, archivedMap) && (
+                          <button
+                            type="button"
+                            onClick={() => handleArchiveRequest(item)}
+                            className="staff-btn-archive"
+                            title="Document claimed: Mark as Done and move to History"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span>Done</span>
+                          </button>
+                        )}
+                        {isRequestArchived(item, archivedMap) && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                            <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span>Done</span>
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenProcess(item)}
+                          className="staff-btn-view"
+                          title="View request details"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="3" strokeWidth={2} />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          <span>View</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -901,7 +1150,7 @@ export default function RegistrarRequestsPage() {
                 <th>Status</th>
                 <th>Request Date</th>
                 <th>Release Date</th>
-                <th className="text-right">Actions</th>
+                <th className="text-right whitespace-nowrap min-w-[170px]">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -917,16 +1166,16 @@ export default function RegistrarRequestsPage() {
                     {error}
                   </td>
                 </tr>
-              ) : filteredRequests.length === 0 ? (
+              ) : activeFilteredRequests.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
-                    {requests.length === 0
-                      ? 'No student requests have been submitted yet.'
-                      : 'No requests found matching your filter criteria.'}
+                    {activeTotalCount === 0
+                      ? 'No active student requests in queue.'
+                      : 'No active requests found matching your filter criteria.'}
                   </td>
                 </tr>
               ) : (
-                (showAllRequests ? filteredRequests : filteredRequests.slice(0, 10)).map((item) => (
+                (showAllRequests ? activeFilteredRequests : activeFilteredRequests.slice(0, 10)).map((item) => (
                   <tr key={item.rawId || item.id}>
                     <td className="req-id-text">{item.id}</td>
                     <td>
@@ -940,12 +1189,34 @@ export default function RegistrarRequestsPage() {
                     <td>{getStatusBadge(item.status)}</td>
                     <td className="font-semibold text-slate-800">{item.request_date}</td>
                     <td className="font-semibold text-slate-800">{item.release_date}</td>
-                    <td className="text-right">
-                      <div className="inline-flex items-center justify-end">
+                    <td className="text-right whitespace-nowrap">
+                      <div className="inline-flex items-center justify-end gap-2 flex-nowrap whitespace-nowrap">
+                        {isClaimedStatus(item.status) && !isRequestArchived(item, archivedMap) && (
+                          <button
+                            type="button"
+                            onClick={() => handleArchiveRequest(item)}
+                            className="staff-btn-archive"
+                            title="Document claimed: Mark as Done and move to History"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span>Done</span>
+                          </button>
+                        )}
+                        {isRequestArchived(item, archivedMap) && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                            <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span>Done</span>
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleOpenProcess(item)}
-                          className="btn-view-req"
+                          className="staff-btn-view"
+                          title="View request details"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <circle cx="12" cy="12" r="3" strokeWidth={2} />
@@ -961,7 +1232,7 @@ export default function RegistrarRequestsPage() {
             </tbody>
           </table>
         </div>
-        {!loading && !error && filteredRequests.length > 10 && (
+        {!loading && !error && activeFilteredRequests.length > 10 && (
           <div className="table-see-more-wrap">
             <button
               type="button"
@@ -984,6 +1255,80 @@ export default function RegistrarRequestsPage() {
           </div>
         )}
       </div>
+        </>
+      ) : (
+        <>
+          <div className="req-search-card">
+            <h4 className="req-search-title">Search History</h4>
+            <div className="req-search-controls">
+              <div className="req-input-wrap">
+                <svg className="req-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search history by ID, Student Name, or Student ID"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="req-search-field"
+                />
+              </div>
+
+              <div className="req-input-wrap">
+                <svg className="req-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <select
+                  value={docTypeFilter}
+                  onChange={(e) => setDocTypeFilter(e.target.value)}
+                  className="req-dropdown-field"
+                >
+                  <option value="">Document Type</option>
+                  {credentialTypes.map((ct) => (
+                    <option key={ct.id} value={ct.name}>
+                      {ct.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="req-input-wrap">
+                <svg className="req-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="req-dropdown-field"
+                >
+                  <option value="">All Statuses</option>
+                  {REQUEST_STATUSES.map((st) => (
+                    <option key={st} value={st}>
+                      {st}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <StaffRequestsTable
+            title="Completed & Claimed Requests History"
+            subtitle="Document requests that have been claimed by students and archived from active queue"
+            badgeCount={historyRequests.length}
+            loading={loading}
+            error={error}
+            filteredRequests={historyRequests}
+            totalRequestsCount={historyRequests.length}
+            getStatusBadge={getStatusBadge}
+            onOpenProcess={handleOpenProcess}
+            actionType="history"
+            onRestore={handleRestoreRequest}
+            showAssignedStaff={true}
+            emptyMessage="No claimed document requests in history yet."
+          />
+        </>
+      )}
 
       <ProcessRequestModal
         key={selectedRequest ? (selectedRequest.rawId || selectedRequest.id) : (processModalOpen ? 'open' : 'closed')}

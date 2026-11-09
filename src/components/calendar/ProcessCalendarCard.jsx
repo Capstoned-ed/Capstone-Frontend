@@ -81,13 +81,17 @@ export default function ProcessCalendarCard({
     });
 
     const newRequestsCountMap = {}; // dateStr -> number of new requests submitted
+    const newRequestsMap = {};      // dateStr -> array of new requests submitted
     const dailyProcessingMap = {};  // dateStr -> number of requests scheduled to process
+    const dailyProcessingRequestsMap = {}; // dateStr -> array of requests specifically scheduled for this day
     const releaseBatchesMap = {};   // dateStr -> array of batch release objects
     const allBatchesList = [];      // Array of all active batch summaries for bottom section
 
     Object.entries(batchesByDate).forEach(([reqDate, reqs]) => {
       const totalInBatch = reqs.length;
       newRequestsCountMap[reqDate] = (newRequestsCountMap[reqDate] || 0) + totalInBatch;
+      if (!newRequestsMap[reqDate]) newRequestsMap[reqDate] = [];
+      newRequestsMap[reqDate].push(...reqs);
 
       // Determine batch expected release date
       const firstWithRelDate = reqs.find((r) => r.release_date && r.release_date > reqDate);
@@ -101,10 +105,18 @@ export default function ProcessCalendarCard({
       const baseQuota = Math.floor(totalInBatch / numProcessingDays);
       const remainder = totalInBatch % numProcessingDays;
 
+      let startIndex = 0;
       for (let i = 0; i < numProcessingDays; i++) {
         const procDate = addDaysToDateStr(reqDate, i + 1);
         const dailyQuota = baseQuota + (i < remainder ? 1 : 0);
+        const slice = reqs.slice(startIndex, startIndex + dailyQuota);
+        startIndex += dailyQuota;
+
         dailyProcessingMap[procDate] = (dailyProcessingMap[procDate] || 0) + dailyQuota;
+        if (!dailyProcessingRequestsMap[procDate]) {
+          dailyProcessingRequestsMap[procDate] = [];
+        }
+        dailyProcessingRequestsMap[procDate].push(...slice);
       }
 
       // Count processed requests in this batch (status 'For Release', 'Claimed', or 'Released')
@@ -139,7 +151,9 @@ export default function ProcessCalendarCard({
 
     return {
       newRequestsCountMap,
+      newRequestsMap,
       dailyProcessingMap,
+      dailyProcessingRequestsMap,
       releaseBatchesMap,
       allBatchesList,
     };
@@ -199,6 +213,11 @@ export default function ProcessCalendarCard({
 
         const hasActiveWork = newReqs > 0 || proc > 0 || isReleaseDate;
 
+        // Build exact lists of requests for each category on this date
+        const toProcessList = batchSchedule.dailyProcessingRequestsMap[dateStr] || [];
+        const releasingList = (releasingBatches || []).flatMap((b) => b.requests || []);
+        const newRequestsList = batchSchedule.newRequestsMap[dateStr] || [];
+
         week.push({
           dayNumber: day.getDate(),
           dateStr,
@@ -211,6 +230,9 @@ export default function ProcessCalendarCard({
           proc,
           releases,
           comp,
+          toProcessList,
+          releasingList,
+          newRequestsList,
         });
       }
 
@@ -246,6 +268,37 @@ export default function ProcessCalendarCard({
 
   const handleToday = () => {
     setActiveDate(new Date());
+  };
+
+  const handleSelectDay = (d, preferredTab) => {
+    const toProc = d.toProcessList || [];
+    const rel = d.releasingList || [];
+    const newR = d.newRequestsList || [];
+
+    let activeTab = preferredTab;
+    if (!activeTab) {
+      if (toProc.length > 0) activeTab = 'toProcess';
+      else if (rel.length > 0) activeTab = 'releasing';
+      else if (newR.length > 0) activeTab = 'newRequests';
+      else activeTab = 'toProcess';
+    }
+
+    onDateClick(
+      d.dateStr,
+      {
+        toProcess: toProc,
+        releasing: rel,
+        newRequests: newR,
+      },
+      {
+        proc: d.proc,
+        newReqs: d.newReqs,
+        releases: d.releases,
+        isReleaseDate: d.isReleaseDate,
+        relTargetStr: d.relTargetStr,
+        preferredTab: activeTab,
+      }
+    );
   };
 
   return (
@@ -336,7 +389,7 @@ export default function ProcessCalendarCard({
                   return (
                     <div
                       key={d.dateStr}
-                      onClick={() => onDateClick(d.dateStr)}
+                      onClick={() => handleSelectDay(d)}
                       className={`calendar-day-cell ${
                         isSelected
                           ? 'is-selected'
@@ -383,6 +436,10 @@ export default function ProcessCalendarCard({
                             <div
                               className="day-pill pill-release"
                               title={`Release documents from: ${d.relTargetStr}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectDay(d, 'releasing');
+                              }}
                             >
                               Release documents from: {d.relTargetStr}
                             </div>
@@ -390,7 +447,13 @@ export default function ProcessCalendarCard({
 
                           {/* 2. Process Document Quota (Divided across processing days) */}
                           {d.proc > 0 && (
-                            <div className="day-pill pill-process">
+                            <div
+                              className="day-pill pill-process"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectDay(d, 'toProcess');
+                              }}
+                            >
                               <span>Process document:</span>
                               <strong className="pill-value">{d.proc}</strong>
                             </div>
@@ -398,7 +461,13 @@ export default function ProcessCalendarCard({
 
                           {/* 3. New Requests Received (On request submission dates) */}
                           {d.newReqs > 0 && (
-                            <div className="day-pill pill-requests">
+                            <div
+                              className="day-pill pill-requests"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectDay(d, 'newRequests');
+                              }}
+                            >
                               <span>New requests:</span>
                               <strong className="pill-value">{d.newReqs}</strong>
                             </div>
@@ -437,7 +506,21 @@ export default function ProcessCalendarCard({
               {batchSchedule.allBatchesList.map((batch) => (
                 <div
                   key={batch.batchId}
-                  onClick={() => onDateClick(batch.requestDate)}
+                  onClick={() =>
+                    onDateClick(
+                      batch.requestDate,
+                      {
+                        toProcess: batch.requests || [],
+                        releasing: [],
+                        newRequests: batch.requests || [],
+                      },
+                      {
+                        isBatch: true,
+                        batch,
+                        preferredTab: 'toProcess',
+                      }
+                    )
+                  }
                   className="batch-item-card"
                 >
                   <div>
