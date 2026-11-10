@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
+import authApi from '../../api/auth';
 import '../../styles/auth/ForgotPasswordModal.css';
 
 const OTP_STORAGE_KEY = 'regquest_password_reset_otps';
@@ -187,53 +188,36 @@ export default function ForgotPasswordModal({
       return;
     }
 
-    const account = resolveAccountFromStorage(cleanId);
-
     setIsLoading(true);
     try {
-      const otpCode = String(Math.floor(100000 + Math.random() * 900000));
-      const expiresAt = Date.now() + 15 * 60 * 1000;
+      let masked = '';
+      let noticeMsg = '';
 
       try {
-        const storedOtps = JSON.parse(localStorage.getItem(OTP_STORAGE_KEY) || '{}');
-        const record = {
-          otp: otpCode,
-          username: account.username,
-          email: account.email,
-          expiresAt,
-        };
-        storedOtps[cleanId.toLowerCase()] = record;
-        storedOtps[String(account.username).toLowerCase()] = record;
-        storedOtps[String(account.email).toLowerCase()] = record;
-        localStorage.setItem(OTP_STORAGE_KEY, JSON.stringify(storedOtps));
-      } catch {}
-
-      const result = await sendFrontendSmtpEmail({
-        toEmail: account.email,
-        toName: account.name,
-        username: account.username,
-        otpCode,
-      });
-
-      if (!result.sent && result.error) {
-        setErrorMessage(result.error);
-        return;
+        const res = await authApi.requestPasswordReset(cleanId);
+        masked = res?.masked_email || '';
+        noticeMsg = res?.detail || '';
+      } catch (apiErr) {
+        console.warn('Backend requestPasswordReset notice:', apiErr);
       }
 
-      if (!result.sent) {
-        console.info(`[RegQuest SMTP] Verification code for ${account.email}: ${otpCode}`);
-      }
+      const account = resolveAccountFromStorage(cleanId);
+      const finalMasked = masked || maskEmailAddress(account.email || cleanId);
 
       setResolvedUsername(account.username);
       setResolvedEmail(account.email);
-      setMaskedEmail(maskEmailAddress(account.email));
-      setGeneratedOtp(otpCode);
+      setMaskedEmail(finalMasked);
       setOtpDigits(['', '', '', '', '', '']);
       setStep('verify');
       setResendCooldown(60);
       setInfoMessage(
-        result.notice ||
-          `A 6-digit verification code has been sent to ${maskEmailAddress(account.email)}.`
+        noticeMsg ||
+          `A 6-digit verification code has been sent to ${finalMasked}.`
+      );
+    } catch (err) {
+      setErrorMessage(
+        err.response?.data?.detail ||
+          'Failed to request verification code. Please try again.'
       );
     } finally {
       setIsLoading(false);
@@ -241,7 +225,21 @@ export default function ForgotPasswordModal({
   };
 
   const handleOtpDigitChange = (index, value) => {
-    const digit = value.replace(/\D/g, '').slice(-1);
+    const raw = value.replace(/\D/g, '');
+    if (raw.length > 1) {
+      // Handles autofill or paste where multiple digits are injected into a single field
+      const nextDigits = [...otpDigits];
+      for (let i = 0; i < 6 - index && i < raw.length; i += 1) {
+        nextDigits[index + i] = raw[i];
+      }
+      setOtpDigits(nextDigits);
+      setErrorMessage('');
+      const focusIndex = Math.min(index + raw.length, 5);
+      otpInputRefs.current[focusIndex]?.focus();
+      return;
+    }
+
+    const digit = raw.slice(-1);
     const nextDigits = [...otpDigits];
     nextDigits[index] = digit;
     setOtpDigits(nextDigits);
@@ -271,8 +269,8 @@ export default function ForgotPasswordModal({
     otpInputRefs.current[focusIndex]?.focus();
   };
 
-  const handleVerifyCode = (e) => {
-    e.preventDefault();
+  const handleVerifyCode = async (e) => {
+    if (e) e.preventDefault();
     setErrorMessage('');
 
     const fullOtp = otpDigits.join('');
@@ -281,36 +279,23 @@ export default function ForgotPasswordModal({
       return;
     }
 
+    setIsLoading(true);
     try {
-      const storedOtps = JSON.parse(localStorage.getItem(OTP_STORAGE_KEY) || '{}');
-      const record =
-        storedOtps[identifier.trim().toLowerCase()] ||
-        storedOtps[String(resolvedUsername).toLowerCase()] ||
-        storedOtps[String(resolvedEmail).toLowerCase()];
-
-      if (record && record.expiresAt < Date.now()) {
-        setErrorMessage('Verification code has expired. Please request a new code.');
-        return;
-      }
-
-      const expectedOtp = record?.otp || generatedOtp;
-      if (fullOtp !== expectedOtp) {
-        setErrorMessage('Invalid verification code. Please check your email and try again.');
-        return;
-      }
-
+      await authApi.verifyPasswordResetOtp(identifier.trim(), fullOtp);
       setStep('reset');
-    } catch {
-      if (fullOtp === generatedOtp) {
-        setStep('reset');
-      } else {
-        setErrorMessage('Invalid verification code. Please try again.');
-      }
+    } catch (apiErr) {
+      const errMsg =
+        apiErr.response?.data?.detail ||
+        (typeof apiErr.response?.data === 'string' ? apiErr.response.data : null) ||
+        'Invalid or expired verification code. Please check your email and try again.';
+      setErrorMessage(errMsg);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleResetPassword = (e) => {
-    e.preventDefault();
+  const handleResetPassword = async (e) => {
+    if (e) e.preventDefault();
     setErrorMessage('');
 
     if (newPassword.length < 6) {
@@ -323,49 +308,45 @@ export default function ForgotPasswordModal({
       return;
     }
 
+    const fullOtp = otpDigits.join('');
     setIsLoading(true);
     try {
+      await authApi.confirmPasswordReset(
+        identifier.trim(),
+        fullOtp,
+        newPassword.trim()
+      );
+
+      // Also update local cache so offline or cached profiles use the updated password
+      const cleanId = identifier.trim();
       const customPasswords = JSON.parse(
         localStorage.getItem('regquest_custom_passwords') || '{}'
       );
-      const cleanId = identifier.trim();
-      const usernameKey = resolvedUsername || cleanId;
-      const emailKey = resolvedEmail || (cleanId.includes('@') ? cleanId : '');
-
-      const existingRecord =
-        customPasswords[usernameKey] ||
-        customPasswords[emailKey.toLowerCase()] ||
-        customPasswords[cleanId] ||
-        customPasswords[cleanId.toLowerCase()] ||
-        {};
-
       const record = {
-        originalPassword: existingRecord.originalPassword || usernameKey,
         newPassword: newPassword.trim(),
         updatedAt: new Date().toISOString(),
       };
-
-      if (usernameKey) {
-        customPasswords[usernameKey] = record;
-        customPasswords[String(usernameKey).toLowerCase()] = record;
+      customPasswords[cleanId] = record;
+      customPasswords[cleanId.toLowerCase()] = record;
+      if (resolvedUsername) {
+        customPasswords[resolvedUsername] = record;
+        customPasswords[String(resolvedUsername).toLowerCase()] = record;
       }
-      if (emailKey) {
-        customPasswords[emailKey.toLowerCase()] = record;
+      localStorage.setItem(
+        'regquest_custom_passwords',
+        JSON.stringify(customPasswords)
+      );
+
+      if (typeof onPasswordResetSuccess === 'function') {
+        onPasswordResetSuccess();
       }
-      if (cleanId) {
-        customPasswords[cleanId] = record;
-        customPasswords[cleanId.toLowerCase()] = record;
-      }
-
-      localStorage.setItem('regquest_custom_passwords', JSON.stringify(customPasswords));
-
-      const storedOtps = JSON.parse(localStorage.getItem(OTP_STORAGE_KEY) || '{}');
-      delete storedOtps[cleanId.toLowerCase()];
-      localStorage.setItem(OTP_STORAGE_KEY, JSON.stringify(storedOtps));
-
       setStep('success');
-    } catch {
-      setErrorMessage('Failed to save your new password. Please try again.');
+    } catch (apiErr) {
+      const errMsg =
+        apiErr.response?.data?.detail ||
+        (typeof apiErr.response?.data === 'string' ? apiErr.response.data : null) ||
+        'Failed to reset password. Please check your verification code and try again.';
+      setErrorMessage(errMsg);
     } finally {
       setIsLoading(false);
     }
@@ -572,10 +553,11 @@ export default function ForgotPasswordModal({
                       }}
                       type="text"
                       inputMode="numeric"
-                      maxLength={1}
+                      maxLength={6}
                       value={digit}
                       onChange={(e) => handleOtpDigitChange(idx, e.target.value)}
                       onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                      onPaste={handleOtpPaste}
                       disabled={isLoading}
                       className="forgot-pw-otp-box"
                       autoFocus={idx === 0}
