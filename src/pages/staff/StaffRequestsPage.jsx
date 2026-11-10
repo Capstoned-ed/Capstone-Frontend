@@ -1148,12 +1148,71 @@ export default function StaffRequestsPage() {
 
   return (
     <div className="staff-req-container space-y-6">
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Process Requests</h1>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+            {activeTab === 'history' ? 'Request History' : 'Process Requests'}
+          </h1>
           <p className="text-xs sm:text-sm text-slate-500">
-            Review, verify, and process credential requests in your queue
+            {activeTab === 'history'
+              ? 'Review past completed and claimed credential requests'
+              : 'Review, verify, and process credential requests in your queue'}
           </p>
+        </div>
+
+        {/* Upper Right: Active Requests vs Request History */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('active');
+              setIsSelectionMode(false);
+              setSelectedIds(new Set());
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+              activeTab === 'active'
+                ? 'bg-[#0B0B36] text-white shadow-sm'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <span>Active Requests</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                activeTab === 'active' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+              }`}
+            >
+              {assignedRequests.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('history');
+              setIsSelectionMode(false);
+              setSelectedIds(new Set());
+              setStatusFilter('');
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+              activeTab === 'history'
+                ? 'bg-[#0B0B36] text-white shadow-sm'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Request History</span>
+            {historyRequests.length > 0 && (
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                  activeTab === 'history' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                {historyRequests.length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
@@ -1167,41 +1226,6 @@ export default function StaffRequestsPage() {
         credentialTypes={credentialTypes}
         requestStatuses={REQUEST_STATUSES}
       />
-
-      {/* Queue View Tabs: Active Processing vs Request History */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab('active')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-            activeTab === 'active'
-              ? 'bg-[#0B0B36] text-white shadow-sm'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          <span>Active Requests</span>
-          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-            activeTab === 'active' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
-          }`}>
-            {assignedRequests.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('history')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-            activeTab === 'history'
-              ? 'bg-[#0B0B36] text-white shadow-sm'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>Request History</span>
-        </button>
-      </div>
 
       {activeTab === 'active' ? (
         <>
