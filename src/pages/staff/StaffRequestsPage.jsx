@@ -23,6 +23,7 @@ import usersApi from '../../api/users';
 import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
 import useToast from '../../hooks/useToast';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
+import BatchUpdateModal from '../../components/common/BatchUpdateModal';
 import { StaffRequestsTable, StaffSearchFilter } from '../../components/staff';
 import '../../styles/staff/StaffRequestsPage.css';
 
@@ -171,6 +172,47 @@ export default function StaffRequestsPage() {
   const [newStatus, setNewStatus] = useState('Pending');
   const [notes, setNotes] = useState('');
   const [updating, setUpdating] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
+
+  const handleToggleSelect = (rawOrId) => {
+    const key = String(rawOrId);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = (items) => {
+    if (!items || items.length === 0) return;
+    const allSelected = items.every((i) =>
+      selectedIds.has(String(i.id)) ||
+      selectedIds.has(String(i.rawId)) ||
+      (i.tracking_number && selectedIds.has(String(i.tracking_number)))
+    );
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      items.forEach((i) => {
+        const key = String(i.rawId || i.id);
+        const idKey = String(i.id);
+        const trackKey = i.tracking_number ? String(i.tracking_number) : null;
+        if (allSelected) {
+          next.delete(key);
+          next.delete(idKey);
+          if (trackKey) next.delete(trackKey);
+        } else {
+          next.add(key);
+        }
+      });
+      return next;
+    });
+  };
 
   useEffect(() => {
     let ignore = false;
@@ -667,6 +709,110 @@ export default function StaffRequestsPage() {
     toast.success(`Request ${item.id} restored to Active Queue.`);
   };
 
+  const selectedRequestsList = useMemo(() => {
+    if (selectedIds.size === 0) return [];
+    return requests.filter((r) =>
+      selectedIds.has(String(r.id)) ||
+      selectedIds.has(String(r.rawId)) ||
+      (r.tracking_number && selectedIds.has(String(r.tracking_number)))
+    );
+  }, [requests, selectedIds]);
+
+  const handleBatchUpdate = async ({ newStatus: statusToSet, releasingDate, note }) => {
+    if (selectedRequestsList.length === 0) return;
+
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+
+    for (const item of selectedRequestsList) {
+      const targetId = item.rawId || item.id;
+      const trackingNo = item.tracking_number || item.id;
+
+      const patch = {
+        updated_at: nowIso,
+      };
+
+      if (statusToSet) {
+        patch.status = statusToSet;
+      }
+
+      if (releasingDate) {
+        patch.date_of_release = releasingDate;
+        patch.release_date = releasingDate;
+      }
+
+      if (note && note.trim()) {
+        const existingRemarks = item.remarks || '';
+        patch.remarks = existingRemarks
+          ? `${existingRemarks} | Note: ${note.trim()}`
+          : note.trim();
+        patch.notes = patch.remarks;
+      }
+
+      // Update in localStorage
+      updateStoredRequest(trackingNo || item.id || targetId, patch, {
+        fallbackItem: { ...item, ...patch },
+      });
+
+      // Record activity
+      recordRequestActivityTimestamp(trackingNo || item.id || targetId, nowTime);
+
+      // Log processed action
+      logProcessedAction({
+        actor: user?.username || 'staff',
+        actorName: user?.full_name || user?.username || 'Staff',
+        actorId: user?.id,
+        actorRole: user?.role || 'staff',
+        targetName: item.student_name,
+        targetId: item.student_id || trackingNo,
+        trackingNumber: trackingNo,
+        documentType: item.document_type,
+        action: `Batch updated: ${statusToSet ? `Status -> ${statusToSet}; ` : ''}${releasingDate ? `Release Date -> ${releasingDate}; ` : ''}${note ? `Note -> ${note}` : ''}`.trim(),
+        status: statusToSet || item.status,
+      });
+
+      // Backend API transition if applicable and numeric
+      if (statusToSet && targetId && !isNaN(Number(targetId))) {
+        requestsApi.transition(Number(targetId), {
+          status: statusToSet,
+          remarks: note || `Batch updated by staff`,
+        }).catch(() => {});
+      }
+    }
+
+    // Update in-memory state
+    setRawRequests((prev) =>
+      prev.map((r) => {
+        const isMatch =
+          selectedIds.has(String(r.id)) ||
+          selectedIds.has(String(r.rawId)) ||
+          (r.tracking_number && selectedIds.has(String(r.tracking_number)));
+        if (!isMatch) return r;
+
+        const updated = {
+          ...r,
+          updated_at: nowIso,
+        };
+        if (statusToSet) updated.status = statusToSet;
+        if (releasingDate) {
+          updated.release_date = releasingDate;
+          updated.date_of_release = releasingDate;
+        }
+        if (note && note.trim()) {
+          updated.remarks = r.remarks ? `${r.remarks} | Note: ${note.trim()}` : note.trim();
+          updated.notes = updated.remarks;
+        }
+        return updated;
+      })
+    );
+
+    setActivityTimestamps(getRequestActivityTimestamps());
+    window.dispatchEvent(new Event('regquest_requests_updated'));
+    toast.success(`Successfully updated ${selectedRequestsList.length} requests!`);
+    setSelectedIds(new Set());
+    setBatchModalOpen(false);
+  };
+
   const getStatusBadge = (status) => {
     const s = String(status || '').trim();
     switch (s) {
@@ -1071,6 +1217,10 @@ export default function StaffRequestsPage() {
             actionType="view"
             onArchive={handleArchiveRequest}
             emptyMessage="No requests currently assigned to you for processing."
+            enableSelection={true}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onToggleSelectAll={() => handleToggleSelectAll(assignedRequests.slice(0, 10))}
           />
 
           {/* Card 2: Unassigned Requests Queue */}
@@ -1087,6 +1237,10 @@ export default function StaffRequestsPage() {
             actionType="claim"
             onAction={handleClaimAndProcess}
             emptyMessage="No unassigned requests found in queue."
+            enableSelection={true}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onToggleSelectAll={() => handleToggleSelectAll(unassignedRequests.slice(0, 10))}
           />
         </>
       ) : (
@@ -1103,6 +1257,10 @@ export default function StaffRequestsPage() {
           actionType="history"
           onRestore={handleRestoreRequest}
           emptyMessage="No claimed document requests in history yet."
+          enableSelection={true}
+          selectedIds={selectedIds}
+          onToggleSelect={handleToggleSelect}
+          onToggleSelectAll={() => handleToggleSelectAll(historyRequests.slice(0, 10))}
         />
       )}
 
@@ -1114,6 +1272,49 @@ export default function StaffRequestsPage() {
           onUpdated={handleRequestUpdated}
         />
       )}
+
+      {/* Floating Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[#0B0B36] text-white px-5 py-3 rounded-2xl shadow-2xl border border-indigo-700/60 flex items-center gap-4 flex-wrap animate-in fade-in slide-in-from-bottom-4">
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-white/20 text-white font-black text-xs flex items-center justify-center">
+              {selectedRequestsList.length}
+            </span>
+            <span className="text-xs sm:text-sm font-bold tracking-tight">
+              {selectedRequestsList.length === 1 ? '1 request selected' : `${selectedRequestsList.length} requests selected`}
+            </span>
+          </div>
+
+          <div className="h-4 w-px bg-white/20 hidden sm:block" />
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setBatchModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold transition-all shadow-sm cursor-pointer"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              <span>Update Status & Releasing Date</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-1.5 text-xs text-white/70 hover:text-white transition-colors cursor-pointer"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
+
+      <BatchUpdateModal
+        isOpen={batchModalOpen}
+        onClose={() => setBatchModalOpen(false)}
+        selectedRequests={selectedRequestsList}
+        onConfirm={handleBatchUpdate}
+      />
     </div>
   );
 }

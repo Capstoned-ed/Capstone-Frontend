@@ -18,11 +18,22 @@ export default function StaffRequestsTable({
   onRestore,
   showAssignedStaff = false,
   searchControls = null,
+  enableSelection = false,
+  selectedIds = null,
+  onToggleSelect = null,
+  onToggleSelectAll = null,
 }) {
   const toast = useToast();
   const [showAll, setShowAll] = useState(false);
   const visibleRequests = showAll ? filteredRequests : filteredRequests.slice(0, 10);
-  const colSpanCount = showAssignedStaff ? 8 : 7;
+  const colSpanCount = (showAssignedStaff ? 8 : 7) + (enableSelection ? 1 : 0);
+
+  const isAllSelected =
+    enableSelection &&
+    visibleRequests.length > 0 &&
+    visibleRequests.every((r) =>
+      selectedIds && (selectedIds.has(String(r.id)) || selectedIds.has(String(r.rawId)))
+    );
 
   const isClaimedStatus = (status) => {
     const s = String(status || '').trim().toLowerCase();
@@ -55,6 +66,17 @@ export default function StaffRequestsTable({
         <table className="staff-data-table">
           <thead>
             <tr>
+              {enableSelection && (
+                <th className="w-10 px-3 text-center">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    onChange={onToggleSelectAll}
+                    className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                    title="Select all"
+                  />
+                </th>
+              )}
               <th>Request ID</th>
               <th>Student</th>
               <th>Document Type</th>
@@ -88,9 +110,21 @@ export default function StaffRequestsTable({
                 </td>
               </tr>
             ) : (
-              visibleRequests.map((item) => (
-                <tr key={item.rawId || item.id}>
-                  <td className="staff-req-id">{item.id}</td>
+              visibleRequests.map((item) => {
+                const isSelected = selectedIds && (selectedIds.has(String(item.id)) || selectedIds.has(String(item.rawId)));
+                return (
+                  <tr key={item.rawId || item.id} className={isSelected ? 'bg-indigo-50/50' : ''}>
+                    {enableSelection && (
+                      <td className="w-10 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(isSelected)}
+                          onChange={() => onToggleSelect && onToggleSelect(item.id || item.rawId)}
+                          className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                        />
+                      </td>
+                    )}
+                    <td className="staff-req-id">{item.id}</td>
                   <td>
                     <div className="staff-student-name">{item.student_name}</div>
                     <div className="staff-student-sub">{item.student_id}</div>
@@ -190,7 +224,8 @@ export default function StaffRequestsTable({
                     )}
                   </td>
                 </tr>
-              ))
+              );
+            })
             )}
           </tbody>
         </table>
