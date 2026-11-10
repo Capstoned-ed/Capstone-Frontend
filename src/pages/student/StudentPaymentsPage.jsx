@@ -284,7 +284,7 @@ export default function StudentPaymentsPage() {
     setPaymentArchived(req, true);
     setArchivedPaymentsMap(getArchivedPaymentsMap());
     toast.success(`Payment for ${trackingCode} marked as Done and moved to Payment History!`);
-    setViewMode('history');
+    // Stay in active payments view
   };
 
   const handleRestorePayment = (req) => {

@@ -236,8 +236,7 @@ export default function TrackStatusPage() {
     setRequestArchived(reqId, true, user, { fallbackItem: req });
     setArchivedMap(getArchivedRequestsMap());
     toast.success(`Request ${req.tracking_number || req.trackingId || reqId} marked as Done and moved to History!`);
-    setActiveQueueTab('history');
-    setSelectedTrackId(req.tracking_number || req.trackingId || String(reqId));
+    // Remain in active requests tab
   };
 
   // Restore request from history back to active
