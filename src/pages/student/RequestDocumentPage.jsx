@@ -73,12 +73,12 @@ export default function RequestDocumentPage() {
   const [isCleared, setIsCleared] = useState('yes');
   const [clearanceError, setClearanceError] = useState(false);
 
-  // Selected Documents in Part 2 (empty on initial open)
-  const [selectedDocName, setSelectedDocName] = useState('');
+  // Selected Documents in Part 2 (multiple documents allowed)
+  const [selectedDocs, setSelectedDocs] = useState([]);
   const [selectedCredTypeId, setSelectedCredTypeId] = useState(null);
 
-  // Purpose in Part 3
-  const [purposeOption, setPurposeOption] = useState('For Personal File');
+  // Purpose in Part 3 (multiple purposes allowed)
+  const [selectedPurposes, setSelectedPurposes] = useState(['For Personal File']);
   const [otherPurpose, setOtherPurpose] = useState('');
 
   // Photo Upload State (Part 3)
@@ -222,44 +222,14 @@ export default function RequestDocumentPage() {
     return typesList[0]?.id || 1;
   };
 
-  useEffect(() => {
-    let ignore = false;
-    async function loadCredTypes() {
-      try {
-        const types = await credentialTypesApi.list();
-        if (!ignore && Array.isArray(types) && types.length > 0) {
-          setCredentialTypes(types);
-          if (selectedDocName) {
-            const resolvedId = resolveCredentialTypeId(selectedDocName, types);
-            setSelectedCredTypeId(resolvedId);
-          }
-        }
-      } catch {
-        // Fallback gracefully
-      }
-    }
-    loadCredTypes();
-    return () => {
-      ignore = true;
-    };
-  }, [selectedDocName]);
-
-  // Compute dynamic document info, description, and pricing for Review Data
-  const currentDocDetails = useMemo(() => {
-    if (!selectedDocName) {
-      return {
-        title: 'No document selected',
-        description: 'Please select a document in Part 2 below.',
-        unitPrice: 0,
-        totalPrice: 0,
-      };
-    }
-
-    let cleanTitle = selectedDocName;
+  // Get document info, price, and database type ID
+  const getDocumentItemInfo = (docName, typesList = []) => {
+    if (!docName) return { title: '', description: '', unitPrice: 80, typeId: 1 };
+    let cleanTitle = docName;
     let desc = 'Official academic credential';
     let unitPrice = 80;
+    const lower = docName.toLowerCase();
 
-    const lower = selectedDocName.toLowerCase();
     if (lower.includes('transcript') || lower.includes('tor')) {
       cleanTitle = 'Transcript of Records (TOR)';
       desc = 'Official academic record of courses taken and grades earned.';
@@ -307,33 +277,256 @@ export default function RequestDocumentPage() {
     }
 
     // Check if an exact DB credential type exists matching the chosen name
-    const exactDb = credentialTypes.find((t) => t.name.toLowerCase() === selectedDocName.toLowerCase());
+    const exactDb = typesList.find((t) => t.name.toLowerCase() === docName.toLowerCase());
     if (exactDb) {
       cleanTitle = exactDb.name;
       if (exactDb.description) desc = exactDb.description;
       if (exactDb.price) unitPrice = parseFloat(exactDb.price) || unitPrice;
-    } else {
-      // If user selected a custom DB credential (not one of the certification sub-options)
-      const typeMatch = credentialTypes.find((t) => selectedCredTypeId && t.id === selectedCredTypeId);
-      if (typeMatch && !selectedDocName.includes('Certification - ') && !lower.includes('gpa') && !lower.includes('unit') && !lower.includes('endorsement') && !lower.includes('subject')) {
-        cleanTitle = typeMatch.name;
-        if (typeMatch.description) desc = typeMatch.description;
-        if (typeMatch.price) unitPrice = parseFloat(typeMatch.price) || unitPrice;
-      }
     }
+
+    const typeId = resolveCredentialTypeId(cleanTitle, typesList);
 
     return {
       title: cleanTitle,
       description: desc,
       unitPrice,
-      totalPrice: unitPrice * copies,
+      typeId,
     };
-  }, [selectedDocName, selectedCredTypeId, credentialTypes, copies]);
+  };
 
+  useEffect(() => {
+    let ignore = false;
+    async function loadCredTypes() {
+      try {
+        const types = await credentialTypesApi.list();
+        if (!ignore && Array.isArray(types) && types.length > 0) {
+          setCredentialTypes(types);
+          if (selectedDocs.length > 0) {
+            const resolvedId = resolveCredentialTypeId(selectedDocs[0], types);
+            setSelectedCredTypeId(resolvedId);
+          }
+        }
+      } catch {
+        // Fallback gracefully
+      }
+    }
+    loadCredTypes();
+    return () => {
+      ignore = true;
+    };
+  }, [selectedDocs]);
+
+  // Compute dynamic document info, description, and pricing for Review Data
+  const currentDocDetails = useMemo(() => {
+    if (selectedDocs.length === 0) {
+      return {
+        title: 'No document selected',
+        description: 'Please select document/s in Part 2 below.',
+        unitPrice: 0,
+        totalPrice: 0,
+        items: [],
+      };
+    }
+
+    const items = selectedDocs.map((name) => getDocumentItemInfo(name, credentialTypes));
+    const totalUnit = items.reduce((sum, item) => sum + item.unitPrice, 0);
+    const title = items.map((item) => item.title).join(', ');
+    const description =
+      items.length === 1
+        ? items[0].description
+        : items.map((item) => `${item.title} (₱${item.unitPrice})`).join(' + ');
+
+    return {
+      title,
+      description,
+      unitPrice: totalUnit,
+      totalPrice: totalUnit * copies,
+      items,
+    };
+  }, [selectedDocs, credentialTypes, copies]);
+
+  // Backward compatibility alias for single doc name
+  const selectedDocName = selectedDocs[0] || '';
+
+  // Check if any Certification (general or any sub-option) is selected
+  const isCertActive = useMemo(() => {
+    return selectedDocs.some((d) => {
+      const l = d.toLowerCase();
+      return (
+        l.includes('cert') ||
+        l === 'car' ||
+        l.includes('- car') ||
+        l.includes('enrolled') ||
+        l === 'coe' ||
+        l.includes('gpa') ||
+        l.includes('unit') ||
+        l.includes('endorsement') ||
+        l.includes('subject') ||
+        l.includes('grade')
+      );
+    });
+  }, [selectedDocs]);
+
+  // Check if specific certification sub-option is selected
+  const isCertSubSelected = (certLabel) => {
+    const target = certLabel.toLowerCase();
+    return selectedDocs.some((d) => {
+      const l = d.toLowerCase();
+      if (d === `Certification - ${certLabel}` || d === certLabel) return true;
+      if (target === 'car' && (l === 'car' || l.includes('- car'))) return true;
+      if (target === 'officially enrolled' && (l.includes('enrolled') || l === 'coe')) return true;
+      if (target === 'gpa' && l.includes('gpa')) return true;
+      if (target === 'earned units' && (l.includes('earned') || l.includes('unit'))) return true;
+      if (target === 'endorsement' && l.includes('endorsement')) return true;
+      if (target === 'subjects w/ grades' && (l.includes('subject') || l.includes('grade'))) return true;
+      return false;
+    });
+  };
+
+  // Toggle specific certification sub-option (CAR, GPA, etc.)
+  const handleToggleCertSub = (certLabel) => {
+    const docKey = `Certification - ${certLabel}`;
+    setSelectedDocs((prev) => {
+      const target = certLabel.toLowerCase();
+      const exists = prev.some((d) => {
+        const l = d.toLowerCase();
+        if (d === docKey || d === certLabel) return true;
+        if (target === 'car' && (l === 'car' || l.includes('- car'))) return true;
+        if (target === 'officially enrolled' && (l.includes('enrolled') || l === 'coe')) return true;
+        if (target === 'gpa' && l.includes('gpa')) return true;
+        if (target === 'earned units' && (l.includes('earned') || l.includes('unit'))) return true;
+        if (target === 'endorsement' && l.includes('endorsement')) return true;
+        if (target === 'subjects w/ grades' && (l.includes('subject') || l.includes('grade'))) return true;
+        return false;
+      });
+
+      if (exists) {
+        return prev.filter((d) => {
+          const l = d.toLowerCase();
+          if (d === docKey || d === certLabel) return false;
+          if (target === 'car' && (l === 'car' || l.includes('- car'))) return false;
+          if (target === 'officially enrolled' && (l.includes('enrolled') || l === 'coe')) return false;
+          if (target === 'gpa' && l.includes('gpa')) return false;
+          if (target === 'earned units' && (l.includes('earned') || l.includes('unit'))) return false;
+          if (target === 'endorsement' && l.includes('endorsement')) return false;
+          if (target === 'subjects w/ grades' && (l.includes('subject') || l.includes('grade'))) return false;
+          return true;
+        });
+      } else {
+        return [...prev, docKey];
+      }
+    });
+  };
+
+  // Toggle parent Certification (P80)
+  const handleToggleCertGeneral = () => {
+    if (isCertActive) {
+      // De-select all certification items
+      setSelectedDocs((prev) =>
+        prev.filter((d) => {
+          const l = d.toLowerCase();
+          return !(
+            l.includes('cert') ||
+            l === 'car' ||
+            l.includes('- car') ||
+            l.includes('enrolled') ||
+            l === 'coe' ||
+            l.includes('gpa') ||
+            l.includes('unit') ||
+            l.includes('endorsement') ||
+            l.includes('subject') ||
+            l.includes('grade')
+          );
+        })
+      );
+    } else {
+      // Select parent Certification (P80)
+      setSelectedDocs((prev) => [...prev, 'Certification (P80)']);
+    }
+  };
+
+  // Generic document toggle for non-certification items
+  const handleToggleDocument = (docName) => {
+    setSelectedDocs((prev) => {
+      const exists = prev.includes(docName);
+      if (exists) {
+        return prev.filter((d) => d !== docName);
+      } else {
+        return [...prev, docName];
+      }
+    });
+  };
+
+  const handleToggleEvaluation = () => {
+    setSelectedDocs((prev) => {
+      const exists = prev.some((d) => {
+        const l = d.toLowerCase();
+        return l === 'evaluation (p50)' || l.includes('evaluation') || l === 'eval';
+      });
+      if (exists) {
+        return prev.filter((d) => {
+          const l = d.toLowerCase();
+          return !(l === 'evaluation (p50)' || l.includes('evaluation') || l === 'eval');
+        });
+      }
+      return [...prev, 'Evaluation (P50)'];
+    });
+  };
+
+  const handleToggleHonorableDismissal = () => {
+    setSelectedDocs((prev) => {
+      const exists = prev.some((d) => {
+        const l = d.toLowerCase();
+        return l === 'honorable dismissal (p100)' || l.includes('honorable') || l.includes('dismissal') || l === 'hd';
+      });
+      if (exists) {
+        return prev.filter((d) => {
+          const l = d.toLowerCase();
+          return !(l === 'honorable dismissal (p100)' || l.includes('honorable') || l.includes('dismissal') || l === 'hd');
+        });
+      }
+      return [...prev, 'Honorable Dismissal (P100)'];
+    });
+  };
+
+  const handleToggleTranscript = () => {
+    setSelectedDocs((prev) => {
+      const exists = prev.some((d) => {
+        const l = d.toLowerCase();
+        return l.includes('transcript') || l.includes('tor');
+      });
+      if (exists) {
+        return prev.filter((d) => {
+          const l = d.toLowerCase();
+          return !(l.includes('transcript') || l.includes('tor'));
+        });
+      }
+      return [...prev, 'Transcript of Records (P125/pg)'];
+    });
+  };
+
+  const handleToggleAuthentication = () => {
+    setSelectedDocs((prev) => {
+      const exists = prev.some((d) => {
+        const l = d.toLowerCase();
+        return l.includes('authentication') || l.includes('auth');
+      });
+      if (exists) {
+        return prev.filter((d) => {
+          const l = d.toLowerCase();
+          return !(l.includes('authentication') || l.includes('auth'));
+        });
+      }
+      return [...prev, 'Authentication (P5/pg)'];
+    });
+  };
+
+  // Helper for single selection or external clicks
   const handleDocumentSelect = (docName, typeId = null) => {
-    setSelectedDocName(docName);
-    const resolvedId = typeId || resolveCredentialTypeId(docName, credentialTypes);
-    setSelectedCredTypeId(resolvedId);
+    setSelectedDocs((prev) => (prev.includes(docName) ? prev : [...prev, docName]));
+    if (typeId) {
+      setSelectedCredTypeId(typeId);
+    }
   };
 
   // Automatically select document in Part 2 when navigated from Available Credentials
@@ -403,9 +596,37 @@ export default function RequestDocumentPage() {
     }
   }, [docQuery, credentialTypes]);
 
+  // Multiple Purpose Selection Handlers
+  const syncPurposeInput = (purposes, otherVal) => {
+    const list = purposes.map((p) => {
+      if (p === 'Others') {
+        const trimmed = (otherVal || '').trim();
+        return trimmed ? `Others (${trimmed})` : 'Others';
+      }
+      return p;
+    });
+    setPurposeInput(list.length > 0 ? list.join(', ') : '');
+  };
+
+  const handleTogglePurpose = (p) => {
+    setSelectedPurposes((prev) => {
+      const next = prev.includes(p) ? prev.filter((item) => item !== p) : [...prev, p];
+      syncPurposeInput(next, otherPurpose);
+      return next;
+    });
+  };
+
+  const handleOtherPurposeChange = (val) => {
+    setOtherPurpose(val);
+    setSelectedPurposes((prev) => {
+      const next = val.trim() ? (prev.includes('Others') ? prev : [...prev, 'Others']) : prev;
+      syncPurposeInput(next, val);
+      return next;
+    });
+  };
+
   const handlePurposeSelect = (p) => {
-    setPurposeOption(p);
-    setPurposeInput(p);
+    handleTogglePurpose(p);
   };
 
   // Step 1 -> Step 2
@@ -434,15 +655,25 @@ export default function RequestDocumentPage() {
       return;
     }
 
-    if (!selectedDocName) {
-      toast.warning('Please check the document you need in Part 2 before proceeding.');
+    if (selectedDocs.length === 0) {
+      toast.warning('Please check the document/s you need in Part 2 before proceeding.');
       const el = document.getElementById('ustp-part-2-section');
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
+    if (selectedPurposes.length === 0 && !purposeInput.trim()) {
+      toast.warning('Please check the purpose of your request in Part 3 before proceeding.');
+      return;
+    }
+
     setClearanceError(false);
-    const chosenPurpose = purposeOption === 'Others' ? (otherPurpose || 'Others') : purposeOption;
+    const chosenPurpose =
+      purposeInput.trim() ||
+      selectedPurposes
+        .map((p) => (p === 'Others' ? (otherPurpose.trim() ? `Others (${otherPurpose.trim()})` : 'Others') : p))
+        .join(', ') ||
+      'For Personal Files';
     setPurposeInput(chosenPurpose);
     setCurrentStep(2);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -493,9 +724,10 @@ export default function RequestDocumentPage() {
         } catch {}
       }
 
-      const targetCredTypeId = selectedCredTypeId || resolveCredentialTypeId(selectedDocName, credentialTypes);
-      const exactDocTitle = currentDocDetails.title || selectedDocName || 'Document Request';
-      const cleanPurpose = purposeInput || purposeOption || 'Official Academic Credential Request';
+      const primaryDoc = selectedDocs[0] || '';
+      const targetCredTypeId = selectedCredTypeId || resolveCredentialTypeId(primaryDoc, credentialTypes);
+      const exactDocTitle = currentDocDetails.title || primaryDoc || 'Document Request';
+      const cleanPurpose = purposeInput || selectedPurposes.join(', ') || 'Official Academic Credential Request';
       const formattedRemarks = `[${exactDocTitle}] ${cleanPurpose}`;
 
       // Submit directly to backend API so it persists in the database for Admin and Staff
@@ -983,14 +1215,15 @@ export default function RequestDocumentPage() {
                   <div className="ustp-doc-col">
                     {/* Evaluation */}
                     {(() => {
-                      const isSelected = Boolean(selectedDocName) && (selectedDocName === 'Evaluation (P50)' || selectedDocName.toLowerCase().includes('evaluation') || selectedDocName.toLowerCase() === 'eval');
+                      const isSelected = selectedDocs.some(
+                        (d) => d === 'Evaluation (P50)' || d.toLowerCase().includes('evaluation') || d.toLowerCase() === 'eval'
+                      );
                       return (
                         <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
                           <input
-                            type="radio"
-                            name="selectedDoc"
+                            type="checkbox"
                             checked={isSelected}
-                            onChange={() => handleDocumentSelect('Evaluation (P50)')}
+                            onChange={handleToggleEvaluation}
                             className="ustp-checkbox-input"
                           />
                           <span>Evaluation (P50)</span>
@@ -1000,14 +1233,15 @@ export default function RequestDocumentPage() {
 
                     {/* Honorable Dismissal */}
                     {(() => {
-                      const isSelected = Boolean(selectedDocName) && (selectedDocName === 'Honorable Dismissal (P100)' || selectedDocName.toLowerCase().includes('honorable') || selectedDocName.toLowerCase().includes('dismissal') || selectedDocName.toLowerCase() === 'hd');
+                      const isSelected = selectedDocs.some(
+                        (d) => d === 'Honorable Dismissal (P100)' || d.toLowerCase().includes('honorable') || d.toLowerCase().includes('dismissal') || d.toLowerCase() === 'hd'
+                      );
                       return (
                         <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
                           <input
-                            type="radio"
-                            name="selectedDoc"
+                            type="checkbox"
                             checked={isSelected}
-                            onChange={() => handleDocumentSelect('Honorable Dismissal (P100)')}
+                            onChange={handleToggleHonorableDismissal}
                             className="ustp-checkbox-input"
                           />
                           <span>Honorable Dismissal (P100)</span>
@@ -1017,14 +1251,15 @@ export default function RequestDocumentPage() {
 
                     {/* Transcript of Records */}
                     {(() => {
-                      const isSelected = Boolean(selectedDocName) && (selectedDocName.toLowerCase().includes('transcript') || selectedDocName.toLowerCase().includes('tor'));
+                      const isSelected = selectedDocs.some(
+                        (d) => d.toLowerCase().includes('transcript') || d.toLowerCase().includes('tor')
+                      );
                       return (
                         <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
                           <input
-                            type="radio"
-                            name="selectedDoc"
+                            type="checkbox"
                             checked={isSelected}
-                            onChange={() => handleDocumentSelect('Transcript of Records (P125/pg)')}
+                            onChange={handleToggleTranscript}
                             className="ustp-checkbox-input"
                           />
                           <span>Transcript of Records (P125/pg)</span>
@@ -1034,14 +1269,15 @@ export default function RequestDocumentPage() {
 
                     {/* Authentication */}
                     {(() => {
-                      const isSelected = Boolean(selectedDocName) && (selectedDocName.toLowerCase().includes('authentication') || selectedDocName.toLowerCase().includes('auth'));
+                      const isSelected = selectedDocs.some(
+                        (d) => d.toLowerCase().includes('authentication') || d.toLowerCase().includes('auth')
+                      );
                       return (
                         <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
                           <input
-                            type="radio"
-                            name="selectedDoc"
+                            type="checkbox"
                             checked={isSelected}
-                            onChange={() => handleDocumentSelect('Authentication (P5/pg)')}
+                            onChange={handleToggleAuthentication}
                             className="ustp-checkbox-input"
                           />
                           <span>Authentication (P5/pg)</span>
@@ -1082,17 +1318,18 @@ export default function RequestDocumentPage() {
                         );
                       })
                       .map((ctype) => {
-                        const isSelected = Boolean(selectedDocName) && (selectedDocName === ctype.name || (selectedCredTypeId && selectedCredTypeId === ctype.id));
+                        const isSelected = selectedDocs.some(
+                          (d) => d === ctype.name || d.toLowerCase() === ctype.name.toLowerCase()
+                        );
                         return (
                           <label
                             key={ctype.id}
                             className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}
                           >
                             <input
-                              type="radio"
-                              name="selectedDoc"
+                              type="checkbox"
                               checked={isSelected}
-                              onChange={() => handleDocumentSelect(ctype.name, ctype.id)}
+                              onChange={() => handleToggleDocument(ctype.name)}
                               className="ustp-checkbox-input"
                             />
                             <span className="ustp-dynamic-cred-name">
@@ -1105,22 +1342,16 @@ export default function RequestDocumentPage() {
 
                   {/* Column 2: Certification and Sub-items */}
                   <div className="ustp-doc-col">
-                    {/* General Certification */}
-                    {(() => {
-                      const isCertGeneralSelected = Boolean(selectedDocName) && (selectedDocName === 'Certification (P80)' || selectedDocName === 'Certification');
-                      return (
-                        <label className={`ustp-doc-label ${isCertGeneralSelected ? 'selected' : ''}`}>
-                          <input
-                            type="radio"
-                            name="selectedDoc"
-                            checked={isCertGeneralSelected}
-                            onChange={() => handleDocumentSelect('Certification (P80)')}
-                            className="ustp-checkbox-input"
-                          />
-                          <span>Certification (P80)</span>
-                        </label>
-                      );
-                    })()}
+                    {/* General Certification - Highlights when parent OR any sub-option is selected */}
+                    <label className={`ustp-doc-label ${isCertActive ? 'selected' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={isCertActive}
+                        onChange={handleToggleCertGeneral}
+                        className="ustp-checkbox-input"
+                      />
+                      <span>Certification (P80)</span>
+                    </label>
 
                     {/* Specific Certification Sub-options */}
                     <div className="ustp-cert-subgrid">
@@ -1132,17 +1363,7 @@ export default function RequestDocumentPage() {
                         { label: 'Endorsement', key: 'Endorsement' },
                         { label: 'Subjects w/ grades', key: 'Subjects w/ grades' },
                       ].map((cert) => {
-                        const lower = (selectedDocName || '').toLowerCase();
-                        const isSubSelected = Boolean(selectedDocName) && (
-                          selectedDocName === `Certification - ${cert.label}` ||
-                          selectedDocName === cert.label ||
-                          (cert.label === 'CAR' && (selectedDocName === 'CAR' || lower === 'car' || lower.includes('- car'))) ||
-                          (cert.label === 'Officially enrolled' && (lower.includes('enrolled') || lower === 'coe')) ||
-                          (cert.label === 'GPA' && lower.includes('gpa')) ||
-                          (cert.label === 'Endorsement' && lower.includes('endorsement')) ||
-                          (cert.label === 'Earned Units' && (lower.includes('earned') || lower.includes('unit'))) ||
-                          (cert.label === 'Subjects w/ grades' && (lower.includes('subject') || lower.includes('grade')))
-                        );
+                        const isSubSelected = isCertSubSelected(cert.label);
 
                         return (
                           <label
@@ -1150,10 +1371,9 @@ export default function RequestDocumentPage() {
                             className={`ustp-cert-subitem ${isSubSelected ? 'selected' : ''}`}
                           >
                             <input
-                              type="radio"
-                              name="selectedDoc"
+                              type="checkbox"
                               checked={isSubSelected}
-                              onChange={() => handleDocumentSelect(`Certification - ${cert.label}`)}
+                              onChange={() => handleToggleCertSub(cert.label)}
                               className="ustp-checkbox-input"
                             />
                             <span>{cert.label}</span>
@@ -1176,10 +1396,9 @@ export default function RequestDocumentPage() {
                     {['For Evaluation', 'For Scholarship', 'For Passport', 'For Board Exam'].map((p) => (
                       <label key={p} className="ustp-checkbox-row">
                         <input
-                          type="radio"
-                          name="purposeSelection"
-                          checked={purposeOption === p}
-                          onChange={() => handlePurposeSelect(p)}
+                          type="checkbox"
+                          checked={selectedPurposes.includes(p)}
+                          onChange={() => handleTogglePurpose(p)}
                           className="ustp-checkbox-input"
                         />
                         <span>{p}</span>
@@ -1192,10 +1411,9 @@ export default function RequestDocumentPage() {
                     {['For Employment', 'For Personal File', 'For Advanced Studies', 'For Ranking'].map((p) => (
                       <label key={p} className="ustp-checkbox-row">
                         <input
-                          type="radio"
-                          name="purposeSelection"
-                          checked={purposeOption === p}
-                          onChange={() => handlePurposeSelect(p)}
+                          type="checkbox"
+                          checked={selectedPurposes.includes(p)}
+                          onChange={() => handleTogglePurpose(p)}
                           className="ustp-checkbox-input"
                         />
                         <span>{p}</span>
@@ -1208,10 +1426,9 @@ export default function RequestDocumentPage() {
                 <div className="ustp-purpose-other-row">
                   <label className="ustp-checkbox-row">
                     <input
-                      type="radio"
-                      name="purposeSelection"
-                      checked={purposeOption === 'Others'}
-                      onChange={() => handlePurposeSelect('Others')}
+                      type="checkbox"
+                      checked={selectedPurposes.includes('Others')}
+                      onChange={() => handleTogglePurpose('Others')}
                       className="ustp-checkbox-input"
                     />
                     <span>Others (Specify):</span>
@@ -1219,10 +1436,7 @@ export default function RequestDocumentPage() {
                   <input
                     type="text"
                     value={otherPurpose}
-                    onChange={(e) => {
-                      setOtherPurpose(e.target.value);
-                      setPurposeInput(e.target.value);
-                    }}
+                    onChange={(e) => handleOtherPurposeChange(e.target.value)}
                     placeholder="Specify other purpose..."
                     className="ustp-underline-field ustp-flex-1"
                   />
@@ -1360,12 +1574,23 @@ export default function RequestDocumentPage() {
                 <div>
                   <h3 className="review-sub-title">Document Request:</h3>
                   <div className="review-doc-header">
-                    <div>
+                    <div className="flex-1 min-w-0 pr-3">
                       <h4 className="review-doc-name">{currentDocDetails.title}</h4>
-                      <p className="review-doc-sub">{currentDocDetails.description}</p>
+                      {currentDocDetails.items && currentDocDetails.items.length > 1 ? (
+                        <div className="my-2 space-y-1 pl-2.5 border-l-2 border-amber-400">
+                          {currentDocDetails.items.map((it, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-xs text-slate-700 pr-2">
+                              <span className="font-medium truncate mr-2">• {it.title}</span>
+                              <span className="font-mono text-slate-600 font-semibold shrink-0">₱{it.unitPrice.toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="review-doc-sub">{currentDocDetails.description}</p>
+                      )}
                       {currentDocDetails.unitPrice > 0 && (
                         <p className="review-doc-pricing">
-                          ₱{currentDocDetails.unitPrice.toFixed(2)} per copy
+                          ₱{currentDocDetails.unitPrice.toFixed(2)} {currentDocDetails.items?.length > 1 ? 'total per copy set' : 'per copy'}
                           {copies > 1 && ` • Estimated Total: ₱${currentDocDetails.totalPrice.toFixed(2)}`}
                         </p>
                       )}
