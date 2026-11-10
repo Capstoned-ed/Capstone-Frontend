@@ -122,6 +122,7 @@ export default function RegistrarRequestsPage() {
   const [processModalOpen, setProcessModalOpen] = useState(false);
   const [clearances, setClearances] = useState([]);
   const [showAllBatch, setShowAllBatch] = useState(false);
+  const [showAllHistoryBatch, setShowAllHistoryBatch] = useState(false);
   const [showAllRequests, setShowAllRequests] = useState(false);
   const [activeTab, setActiveTab] = useState('active'); // 'active' | 'history'
   const [archivedMap, setArchivedMap] = useState(() => getArchivedRequestsMap());
@@ -539,6 +540,16 @@ export default function RegistrarRequestsPage() {
     }
     return activeReqs.filter((r) => r.batchId === selectedBatch).sort(sortRequestsNewestFirst);
   }, [requests, selectedBatch, archivedMap, activityTimestamps, assignmentTimestamps, assignments]);
+
+  const historyBatchRequests = useMemo(() => {
+    const histReqs = requests.filter((r) => isRequestArchived(r, archivedMap));
+    const filtered = selectedBatch === 'ALL' ? histReqs : histReqs.filter((r) => r.batchId === selectedBatch);
+    return [...filtered].sort((a, b) => {
+      const timeA = archivedMap[a.id]?.archived_at || archivedMap[a.rawId]?.archived_at || a.assigned_at || a.created_at || 0;
+      const timeB = archivedMap[b.id]?.archived_at || archivedMap[b.rawId]?.archived_at || b.assigned_at || b.created_at || 0;
+      return new Date(timeB) - new Date(timeA);
+    });
+  }, [requests, selectedBatch, archivedMap]);
 
   const handleAssignStaff = (requestId, rawId, staffName) => {
     setAssignments((prev) => {
@@ -1289,6 +1300,144 @@ export default function RegistrarRequestsPage() {
         </>
       ) : (
         <>
+          <div className="assign-table-card">
+            <div className="flex items-center justify-between flex-wrap gap-3 pb-3 mb-3 border-b border-slate-100">
+              <div>
+                <h3 className="assign-table-title !mb-0.5">
+                  Requests Assignment History - {selectedBatch === 'ALL' ? 'All Batches' : selectedBatch}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Archived and completed request assignments showing assigned staff members and release details
+                </p>
+              </div>
+              <div className="batch-select-row !mt-0">
+                <span className="batch-select-label">Select Batch:</span>
+                <select
+                  value={selectedBatch}
+                  onChange={(e) => setSelectedBatch(e.target.value)}
+                  className="batch-select-input"
+                >
+                  {batchOptions.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="table-responsive">
+              <table className="custom-data-table">
+                <thead>
+                  <tr>
+                    <th>Request ID</th>
+                    <th>Student</th>
+                    <th>Document Type</th>
+                    <th>Status</th>
+                    <th>Assigned Staff</th>
+                    <th>Assignment Status</th>
+                    <th className="text-right whitespace-nowrap min-w-[170px]">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
+                        Loading requests from server...
+                      </td>
+                    </tr>
+                  ) : historyBatchRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
+                        {historyTotalCount === 0
+                          ? 'No requests assignment history yet.'
+                          : 'No archived requests found in this batch.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    (showAllHistoryBatch ? historyBatchRequests : historyBatchRequests.slice(0, 10)).map((item) => (
+                      <tr key={item.rawId || item.id}>
+                        <td className="req-id-text">{item.id}</td>
+                        <td>
+                          <div className="student-name-text">{item.student_name}</div>
+                          <div className="student-id-sub">{item.student_id}</div>
+                        </td>
+                        <td>
+                          <div className="doc-name-text">{item.document_type}</div>
+                          <div className="doc-copies-sub">{item.copies}</div>
+                        </td>
+                        <td>{getStatusBadge(item.batch_status || item.status)}</td>
+                        <td>
+                          <div className="font-semibold text-slate-800 text-sm">
+                            {item.assigned_staff || item.verified_by_name || item.processed_by || item.archived_by || (
+                              <span className="text-slate-400 italic font-normal text-xs">Unassigned</span>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span>Completed</span>
+                          </span>
+                        </td>
+                        <td className="text-right whitespace-nowrap">
+                          <div className="inline-flex items-center justify-end gap-2 flex-nowrap whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleRestoreRequest(item)}
+                              className="staff-btn-restore"
+                              title="Restore back to Active Processing queue"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              <span>Restore</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenProcess(item)}
+                              className="staff-btn-view"
+                              title="View request details"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="3" strokeWidth={2} />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                              <span>View</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {!loading && historyBatchRequests.length > 10 && (
+              <div className="table-see-more-wrap">
+                <button
+                  type="button"
+                  onClick={() => setShowAllHistoryBatch((prev) => !prev)}
+                  className="table-see-more-btn"
+                >
+                  <span>
+                    {showAllHistoryBatch ? 'See Less' : 'See More'}
+                  </span>
+                  <svg
+                    className={`w-4 h-4 transition-transform ${showAllHistoryBatch ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
           <div className="req-search-card">
             <h4 className="req-search-title">Search History</h4>
             <div className="req-search-controls">
