@@ -31,6 +31,43 @@ export function saveStaffAssignments(map) {
   }
 }
 
+export const ACTIVITY_TIMESTAMPS_KEY = 'regquest_activity_timestamps';
+
+export function getRequestActivityTimestamps() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(ACTIVITY_TIMESTAMPS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function recordRequestActivityTimestamp(idOrItem, timestamp = Date.now()) {
+  if (typeof window === 'undefined' || !idOrItem) return;
+  try {
+    const map = getRequestActivityTimestamps();
+    const ts = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime();
+    if (isNaN(ts) || ts <= 0) return;
+
+    const keys = [];
+    if (typeof idOrItem === 'object') {
+      keys.push(idOrItem.id, idOrItem.rawId, idOrItem.tracking_number, idOrItem.trackingId);
+    } else {
+      keys.push(idOrItem);
+    }
+
+    keys.filter(Boolean).forEach((k) => {
+      map[String(k).trim()] = ts;
+    });
+
+    localStorage.setItem(ACTIVITY_TIMESTAMPS_KEY, JSON.stringify(map));
+    window.dispatchEvent(new Event('regquest_activity_updated'));
+  } catch (err) {
+    console.warn('Failed to record request activity timestamp:', err);
+  }
+}
+
 export function getStaffAssignmentTimestamps() {
   if (typeof window === 'undefined') return {};
   try {
@@ -399,13 +436,39 @@ export function isValidRequest(item) {
 
 /**
  * Safely parse a timestamp (milliseconds) from any request object.
- * Inspects all possible update and activity timestamps so newly updated
- * or newly created requests sort directly to the very top.
+ * Inspects recorded activity timestamps, recent updates, and creation dates
+ * so newly updated or newly created requests sort directly to the very top.
  */
 export function getRequestTimestamp(r) {
   if (!r) return 0;
 
+  const keys = [r.tracking_number, r.id, r.rawId, r.trackingId].filter(Boolean).map((k) => String(k).trim());
+
+  const activityMap = getRequestActivityTimestamps();
+  let activityTime = 0;
+  for (const k of keys) {
+    if (activityMap[k]) {
+      const num = Number(activityMap[k]);
+      if (!isNaN(num) && num > activityTime) {
+        activityTime = num;
+      }
+    }
+  }
+
+  const assignTimestamps = getStaffAssignmentTimestamps();
+  let assignTime = 0;
+  for (const k of keys) {
+    if (assignTimestamps[k]) {
+      const num = Number(assignTimestamps[k]);
+      if (!isNaN(num) && num > assignTime) {
+        assignTime = num;
+      }
+    }
+  }
+
   const candidates = [
+    activityTime,
+    assignTime,
     r.updated_at,
     r.updatedAt,
     r.last_updated,
@@ -422,6 +485,8 @@ export function getRequestTimestamp(r) {
     let t = 0;
     if (typeof c === 'number') {
       t = c;
+    } else if (typeof c === 'string' && /^\d{10,}$/.test(c.trim())) {
+      t = Number(c.trim());
     } else {
       const parsed = new Date(c).getTime();
       if (!isNaN(parsed) && parsed > 0) {
@@ -680,6 +745,12 @@ export function saveStoredRequest(requestItem) {
       } catch {}
     }
 
+    // Always record activity timestamp so this request instantly sorts to the top
+    const nowTime = Date.now();
+    candidateIds.forEach((cid) => {
+      recordRequestActivityTimestamp(cid, nowTime);
+    });
+
     const trackingCode = requestItem.tracking_number || requestItem.trackingId || requestItem.id || 'REQ';
     const docTitle = requestItem.document_type || requestItem.credential_type_details?.name || 'Document';
     const studentName = requestItem.student_name || 'Student';
@@ -815,6 +886,12 @@ export function updateStoredRequest(idOrTracking, patch, options = {}) {
         localStorage.setItem('regquest_stored_requests', JSON.stringify(trimmed));
       } catch {}
     }
+
+    // Always record activity timestamp so this request instantly sorts to the top
+    const nowTime = Date.now();
+    candidateIds.forEach((cid) => {
+      recordRequestActivityTimestamp(cid, nowTime);
+    });
 
     // Exactly ONE notification per real status change (sent to the student).
     // Callers that send their own tailored message pass { silentNotify: true }.
