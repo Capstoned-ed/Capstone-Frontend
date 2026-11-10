@@ -442,6 +442,19 @@ export default function RegistrarRequestsPage() {
           rawStatus: effectiveRawStatus,
           batch_status: formatStatusDisplay(effectiveRawStatus),
           assigned_staff: assignedStaff,
+          assigned_at:
+            assignments[String(r.id)] ||
+            assignments[String(r.tracking_number)] ||
+            assignments[String(r.rawId)] ||
+            r.assigned_at ||
+            matchedStored?.assigned_at ||
+            null,
+          updated_at:
+            matchedStored?.updated_at ||
+            matchedStored?.updatedAt ||
+            r.updated_at ||
+            r.updatedAt ||
+            null,
           archived_by: archivedMap[r.id]?.archived_by || archivedMap[r.rawId]?.archived_by || r.archived_by || null,
           archived_at: archivedMap[r.id]?.archived_at || archivedMap[r.rawId]?.archived_at || r.archived_at || null,
           created_at: r.created_at,
@@ -512,7 +525,7 @@ export default function RegistrarRequestsPage() {
   const batchRequests = useMemo(() => {
     const activeReqs = requests.filter((r) => !isRequestArchived(r, archivedMap));
     if (selectedBatch === 'ALL') {
-      return activeReqs;
+      return [...activeReqs].sort(sortRequestsNewestFirst);
     }
     return activeReqs.filter((r) => r.batchId === selectedBatch).sort(sortRequestsNewestFirst);
   }, [requests, selectedBatch, archivedMap]);
@@ -553,6 +566,7 @@ export default function RegistrarRequestsPage() {
       updateStoredRequest(requestId || rawId, {
         assigned_staff: staffName || '',
         assigned_at: staffName ? nowIso : null,
+        updated_at: nowIso,
         status: staffName ? 'For Processing' : undefined,
       });
       if (staffName) {
@@ -569,7 +583,7 @@ export default function RegistrarRequestsPage() {
           String(r.id) === String(requestId) ||
           String(r.rawId) === String(rawId) ||
           String(r.tracking_number) === String(requestId)
-            ? { ...r, assigned_staff: staffName, assigned_at: now, status: 'For Processing' }
+            ? { ...r, assigned_staff: staffName, assigned_at: now, updated_at: nowIso, status: 'For Processing' }
             : r
         )
       );
@@ -632,6 +646,7 @@ export default function RegistrarRequestsPage() {
   };
 
   const handleRequestUpdated = (updatedReq) => {
+    const nowIso = new Date().toISOString();
     setRawRequests((prev) =>
       prev.map((r) =>
         String(r.id) === String(updatedReq.rawId) ||
@@ -640,6 +655,8 @@ export default function RegistrarRequestsPage() {
         String(r.tracking_number) === String(updatedReq.tracking_number)
           ? {
               ...r,
+              ...updatedReq,
+              updated_at: updatedReq.updated_at || nowIso,
               status: updatedReq.status,
               remarks: updatedReq.remarks ?? r.remarks,
               payment_status: updatedReq.payment_status ?? r.payment_status,
@@ -712,7 +729,9 @@ export default function RegistrarRequestsPage() {
   }, [requests, searchQuery, docTypeFilter, statusFilter]);
 
   const activeFilteredRequests = useMemo(() => {
-    return filteredRequests.filter((r) => !isRequestArchived(r, archivedMap));
+    return filteredRequests
+      .filter((r) => !isRequestArchived(r, archivedMap))
+      .sort(sortRequestsNewestFirst);
   }, [filteredRequests, archivedMap]);
 
   const historyRequests = useMemo(() => {

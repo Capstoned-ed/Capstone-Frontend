@@ -288,9 +288,10 @@ export default function ProcessRequestModal({
       }
     }
 
+    const nowIso = new Date().toISOString();
     updateStoredRequest(
       targetId,
-      { clearance_status: statusToSet },
+      { clearance_status: statusToSet, updated_at: nowIso },
       { fallbackItem: requestItem, silentNotify: true }
     );
 
@@ -298,6 +299,7 @@ export default function ProcessRequestModal({
       onUpdated({
         ...requestItem,
         clearance_status: statusToSet,
+        updated_at: nowIso,
       });
     }
 
@@ -348,6 +350,7 @@ export default function ProcessRequestModal({
       payment_date: '',
       is_confirmed: true,
       confirmed_for_payment: true,
+      updated_at: new Date().toISOString(),
     };
 
     requestItem.status = 'Pending Payment';
@@ -435,6 +438,7 @@ export default function ProcessRequestModal({
         remarks: reason,
         rejected_by: user?.full_name || user?.username || 'Staff/Registrar',
         rejected_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       updateStoredRequest(targetId, rejectPatch, { fallbackItem: requestItem });
@@ -483,17 +487,20 @@ export default function ProcessRequestModal({
     const trackingCode = requestItem.tracking_number || requestItem.id;
 
     if (actionToSet === 'PENDING') {
+      const nowIso = new Date().toISOString();
       setPaymentStatus('PENDING');
       requestItem.status = 'Pending Payment';
       requestItem.rawStatus = 'PAYMENT_PENDING';
       requestItem.batch_status = 'Pending Payment';
       requestItem.payment_status = 'PENDING';
+      requestItem.updated_at = nowIso;
       updateStoredRequest(
         targetId,
         {
           payment_status: 'PENDING',
           status: 'Pending Payment',
           rawStatus: 'PAYMENT_PENDING',
+          updated_at: nowIso,
         },
         { fallbackItem: requestItem, silentNotify: true }
       );
@@ -505,6 +512,7 @@ export default function ProcessRequestModal({
           rawStatus: 'PAYMENT_PENDING',
           batch_status: 'Pending Payment',
           payment_status: 'PENDING',
+          updated_at: nowIso,
         });
       }
       toast.info('Payment verification reset to pending.');
@@ -532,6 +540,7 @@ export default function ProcessRequestModal({
     const updatedStatus = isVerified ? 'For Processing' : 'Pending Payment';
     handleManualStatusChange(updatedStatus);
 
+    const nowIso = new Date().toISOString();
     const paymentPatch = {
       status: updatedStatus,
       rawStatus: isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING',
@@ -541,6 +550,7 @@ export default function ProcessRequestModal({
       receipt_reference_number: finalOrNumber,
       receipt_image: activeReceiptImage,
       payment_date: new Date().toISOString().split('T')[0],
+      updated_at: nowIso,
     };
 
     requestItem.status = updatedStatus;
@@ -548,6 +558,7 @@ export default function ProcessRequestModal({
     requestItem.batch_status = updatedStatus;
     requestItem.payment_status = isVerified ? 'VERIFIED' : 'REJECTED';
     requestItem.or_number = finalOrNumber;
+    requestItem.updated_at = nowIso;
 
     updateStoredRequest(targetId, paymentPatch, { fallbackItem: requestItem, silentNotify: true });
 
@@ -682,6 +693,7 @@ export default function ProcessRequestModal({
         }
       }
 
+      const nowIso = new Date().toISOString();
       const finalPatch = {
         status: localStatus,
         remarks: notes.trim() ? notes.trim() : (requestItem.remarks || ''),
@@ -695,10 +707,11 @@ export default function ProcessRequestModal({
         confirmed_for_payment: isOrderConfirmed,
         payment_status: paymentStatus,
         or_number: activeOrNumber || requestItem.or_number || '',
+        updated_at: nowIso,
       };
 
       updateStoredRequest(requestItem.id || targetId, finalPatch, {
-        fallbackItem: requestItem,
+        fallbackItem: { ...requestItem, ...finalPatch, updated_at: nowIso },
       });
 
       logProcessedAction({
