@@ -115,6 +115,7 @@ export default function RegistrarRequestsPage() {
 
   const [selectedBatch, setSelectedBatch] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [assignmentHistorySearch, setAssignmentHistorySearch] = useState('');
   const [docTypeFilter, setDocTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -543,13 +544,27 @@ export default function RegistrarRequestsPage() {
 
   const historyBatchRequests = useMemo(() => {
     const histReqs = requests.filter((r) => isRequestArchived(r, archivedMap));
-    const filtered = selectedBatch === 'ALL' ? histReqs : histReqs.filter((r) => r.batchId === selectedBatch);
+    let filtered = selectedBatch === 'ALL' ? histReqs : histReqs.filter((r) => r.batchId === selectedBatch);
+
+    if (assignmentHistorySearch.trim()) {
+      const q = assignmentHistorySearch.toLowerCase().trim();
+      filtered = filtered.filter(
+        (r) =>
+          (r.id && r.id.toLowerCase().includes(q)) ||
+          (r.tracking_number && r.tracking_number.toLowerCase().includes(q)) ||
+          (r.student_name && r.student_name.toLowerCase().includes(q)) ||
+          (r.student_id && r.student_id.toLowerCase().includes(q)) ||
+          (r.assigned_staff && r.assigned_staff.toLowerCase().includes(q)) ||
+          (r.document_type && r.document_type.toLowerCase().includes(q))
+      );
+    }
+
     return [...filtered].sort((a, b) => {
       const timeA = archivedMap[a.id]?.archived_at || archivedMap[a.rawId]?.archived_at || a.assigned_at || a.created_at || 0;
       const timeB = archivedMap[b.id]?.archived_at || archivedMap[b.rawId]?.archived_at || b.assigned_at || b.created_at || 0;
       return new Date(timeB) - new Date(timeA);
     });
-  }, [requests, selectedBatch, archivedMap]);
+  }, [requests, selectedBatch, archivedMap, assignmentHistorySearch]);
 
   const handleAssignStaff = (requestId, rawId, staffName) => {
     setAssignments((prev) => {
@@ -783,10 +798,6 @@ export default function RegistrarRequestsPage() {
           }
         }
 
-        if (statusFilter && r.status.toLowerCase() !== statusFilter.toLowerCase()) {
-          return false;
-        }
-
         return true;
       })
       .sort((a, b) => {
@@ -794,7 +805,7 @@ export default function RegistrarRequestsPage() {
         const timeB = archivedMap[b.id]?.archived_at || archivedMap[b.rawId]?.archived_at || b.created_at || 0;
         return new Date(timeB) - new Date(timeA);
       });
-  }, [requests, archivedMap, searchQuery, docTypeFilter, statusFilter]);
+  }, [requests, archivedMap, searchQuery, docTypeFilter]);
 
   const activeTotalCount = useMemo(() => {
     return requests.filter((r) => !isRequestArchived(r, archivedMap)).length;
@@ -869,7 +880,10 @@ export default function RegistrarRequestsPage() {
 
         <button
           type="button"
-          onClick={() => setActiveTab('history')}
+          onClick={() => {
+            setActiveTab('history');
+            setStatusFilter('');
+          }}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
             activeTab === 'history'
               ? 'bg-[#0B0B36] text-white shadow-sm'
@@ -1326,6 +1340,36 @@ export default function RegistrarRequestsPage() {
               </div>
             </div>
 
+            {/* Search Input for Requests Assignment History */}
+            <div className="mb-4">
+              <div className="relative max-w-md">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search by ID, Student Name, Student ID, or Assigned Staff"
+                  value={assignmentHistorySearch}
+                  onChange={(e) => setAssignmentHistorySearch(e.target.value)}
+                  className="w-full pl-10 pr-9 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-950/20 focus:border-indigo-950 transition-all text-slate-800 placeholder-slate-400 font-medium"
+                />
+                {assignmentHistorySearch && (
+                  <button
+                    type="button"
+                    onClick={() => setAssignmentHistorySearch('')}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                    title="Clear search"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="table-responsive">
               <table className="custom-data-table">
                 <thead>
@@ -1349,7 +1393,9 @@ export default function RegistrarRequestsPage() {
                   ) : historyBatchRequests.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
-                        {historyTotalCount === 0
+                        {assignmentHistorySearch
+                          ? 'No matching archived assignments found.'
+                          : historyTotalCount === 0
                           ? 'No requests assignment history yet.'
                           : 'No archived requests found in this batch.'}
                       </td>
@@ -1440,7 +1486,7 @@ export default function RegistrarRequestsPage() {
           </div>
           <div className="req-search-card">
             <h4 className="req-search-title">Search History</h4>
-            <div className="req-search-controls">
+            <div className="req-search-controls md:!grid-cols-[2.5fr_1fr]">
               <div className="req-input-wrap">
                 <svg className="req-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -1467,24 +1513,6 @@ export default function RegistrarRequestsPage() {
                   {credentialTypes.map((ct) => (
                     <option key={ct.id} value={ct.name}>
                       {ct.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="req-input-wrap">
-                <svg className="req-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="req-dropdown-field"
-                >
-                  <option value="">All Statuses</option>
-                  {REQUEST_STATUSES.map((st) => (
-                    <option key={st} value={st}>
-                      {st}
                     </option>
                   ))}
                 </select>
