@@ -1094,7 +1094,6 @@ export default function StaffRequestsPage() {
         <StaffRequestsTable
           title="Completed & Claimed Requests History"
           subtitle="Document requests that have been claimed by students and archived from active queue"
-          badgeCount={historyRequests.length}
           loading={loading}
           error={error}
           filteredRequests={historyRequests}

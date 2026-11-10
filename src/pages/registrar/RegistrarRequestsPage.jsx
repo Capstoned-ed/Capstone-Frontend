@@ -869,11 +869,6 @@ export default function RegistrarRequestsPage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span>Request History</span>
-          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-            activeTab === 'history' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
-          }`}>
-            {historyTotalCount}
-          </span>
         </button>
       </div>
 
@@ -1351,7 +1346,6 @@ export default function RegistrarRequestsPage() {
           <StaffRequestsTable
             title="Completed & Claimed Requests History"
             subtitle="Document requests that have been claimed by students and archived from active queue"
-            badgeCount={historyRequests.length}
             loading={loading}
             error={error}
             filteredRequests={historyRequests}

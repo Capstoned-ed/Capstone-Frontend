@@ -548,15 +548,6 @@ export default function TrackStatusPage() {
               }`}
             >
               <span>Request History</span>
-              <span
-                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                  activeQueueTab === 'history'
-                    ? 'bg-amber-400 text-slate-900'
-                    : 'bg-slate-200 text-slate-700'
-                }`}
-              >
-                {historyStudentRequests.length}
-              </span>
             </button>
           </div>
         )}
@@ -576,7 +567,9 @@ export default function TrackStatusPage() {
                     {activeQueueTab === 'history' ? 'Completed & Claimed Requests History' : 'Select a Request to Track'}
                   </h3>
                   <p className="text-[11px] text-slate-500 font-medium">
-                    Showing {displayedRequests.length} {displayedRequests.length === 1 ? 'request' : 'requests'} • Newest to Oldest
+                    {activeQueueTab === 'history'
+                      ? 'Archived & completed documents • Newest to Oldest'
+                      : `Showing ${displayedRequests.length} ${displayedRequests.length === 1 ? 'request' : 'requests'} • Newest to Oldest`}
                   </p>
                 </div>
               </div>
