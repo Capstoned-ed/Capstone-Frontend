@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import requestsApi, { resolveRequestDocType } from '../../api/requests';
+import requestsApi, { resolveRequestDocType, sortRequestsNewestFirst } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
@@ -169,7 +169,7 @@ export default function TrackStatusPage() {
     return map;
   }, [credentialTypes]);
 
-  // Student's Requests List (filtered for this student, sorted strictly from OLDEST to NEWEST)
+  // Student's Requests List (filtered for this student, sorted strictly from NEWEST to OLDEST)
   const studentRequests = useMemo(() => {
     const currentUserId = user?.userId || user?.id;
     const currentStudentId = user?.student_id || user?.username;
@@ -186,17 +186,8 @@ export default function TrackStatusPage() {
 
     const targetList = list.length > 0 ? list : rawRequests;
 
-    // Sort strictly from oldest to newest (ascending date)
-    return [...targetList].sort((a, b) => {
-      const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
-      if (dateA && dateB && dateA !== dateB) {
-        return dateA - dateB;
-      }
-      const numA = parseInt(String(a.tracking_number || a.id).replace(/\D/g, ''), 10) || 0;
-      const numB = parseInt(String(b.tracking_number || b.id).replace(/\D/g, ''), 10) || 0;
-      return numA - numB;
-    });
+    // Sort strictly from newest to oldest (descending date)
+    return [...targetList].sort(sortRequestsNewestFirst);
   }, [rawRequests, user]);
 
   // Determine active tracking ID:
@@ -248,24 +239,33 @@ export default function TrackStatusPage() {
 
   // Step Index for 5-Step Timeline (0 to 4)
   const currentStepIndex = useMemo(() => {
-    switch (displayStatus) {
-      case 'Claimed':
-      case 'Released':
-        return 5;
-      case 'Releasing':
-      case 'For release':
-        return 4;
-      case 'Processing':
-        return 3;
-      case 'For Processing':
-        return 2;
-      case 'Pending Payment':
-        return 1;
-      case 'Pending':
-      default:
-        return 0;
+    const s = String(displayStatus || matchedRequest?.status || '').trim().toLowerCase();
+    if (s === 'claimed' || s === 'released' || s.includes('claim')) {
+      return 5;
     }
-  }, [displayStatus]);
+    if (s === 'releasing' || s === 'for release' || s.includes('release') || s === 'ready_for_release' || s === 'ready_for_pickup') {
+      return 4;
+    }
+    if (s === 'processing' || (s.includes('processing') && !s.includes('for processing'))) {
+      return 3;
+    }
+    if (s === 'for processing' || s.includes('for processing') || s.includes('payment verified') || s.includes('payment_verified')) {
+      return 2;
+    }
+    if (
+      s === 'for payment' ||
+      s === 'pending payment' ||
+      s === 'payment pending' ||
+      s.includes('for payment') ||
+      s.includes('pending payment') ||
+      s.includes('cleared for payment') ||
+      s.includes('payment_pending') ||
+      s.includes('pending_payment')
+    ) {
+      return 1;
+    }
+    return 0;
+  }, [displayStatus, matchedRequest]);
 
   const [mlEstimatedCompletion, setMlEstimatedCompletion] = useState(null);
 
@@ -447,7 +447,7 @@ export default function TrackStatusPage() {
                     Select a Request to Track
                   </h3>
                   <p className="text-[11px] text-slate-500 font-medium">
-                    Showing {studentRequests.length} {studentRequests.length === 1 ? 'request' : 'requests'} • Oldest to Newest
+                    Showing {studentRequests.length} {studentRequests.length === 1 ? 'request' : 'requests'} • Newest to Oldest
                   </p>
                 </div>
               </div>
@@ -498,7 +498,7 @@ export default function TrackStatusPage() {
                         ? 'processing'
                         : status === 'For Processing'
                         ? 'for-processing'
-                        : status === 'Pending Payment'
+                        : status === 'Pending Payment' || status === 'For Payment'
                         ? 'payment-pending'
                         : 'pending'
                     }`}>
@@ -570,7 +570,7 @@ export default function TrackStatusPage() {
                       ? 'processing'
                       : displayStatus === 'For Processing'
                       ? 'for-processing'
-                      : displayStatus === 'Pending Payment'
+                      : displayStatus === 'Pending Payment' || displayStatus === 'For Payment'
                       ? 'payment-pending'
                       : 'pending'
                   }`}>
