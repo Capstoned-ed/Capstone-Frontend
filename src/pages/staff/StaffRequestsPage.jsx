@@ -174,7 +174,7 @@ export default function StaffRequestsPage() {
   const [updating, setUpdating] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState(new Set());
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectionModeTable, setSelectionModeTable] = useState(null); // 'assigned' | 'unassigned' | 'history' | null
   const [batchModalOpen, setBatchModalOpen] = useState(false);
 
   const handleToggleSelect = (rawOrId) => {
@@ -811,8 +811,132 @@ export default function StaffRequestsPage() {
     window.dispatchEvent(new Event('regquest_requests_updated'));
     toast.success(`Successfully updated ${selectedRequestsList.length} requests!`);
     setSelectedIds(new Set());
-    setIsSelectionMode(false);
+    setSelectionModeTable(null);
     setBatchModalOpen(false);
+  };
+
+  const handleBatchClaimAndProcess = () => {
+    if (selectedRequestsList.length === 0) return;
+
+    const staffName =
+      user?.full_name ||
+      [user?.first_name, user?.last_name].filter(Boolean).join(' ') ||
+      user?.username ||
+      'Staff';
+
+    const now = Date.now();
+    const nowIso = new Date(now).toISOString();
+
+    const claimedMap = JSON.parse(localStorage.getItem('regquest_claimed_requests') || '{}');
+    const tsMap = getStaffAssignmentTimestamps();
+    const updatedAssignments = { ...assignments };
+
+    for (const item of selectedRequestsList) {
+      const reqId = item.id;
+      const rawId = item.rawId || item.id;
+      const trackingNo = item.tracking_number || item.id;
+
+      if (rawId) claimedMap[String(rawId)] = user?.username || user?.full_name || 'claimed';
+      if (reqId) claimedMap[String(reqId)] = user?.username || user?.full_name || 'claimed';
+      if (trackingNo) claimedMap[String(trackingNo)] = user?.username || user?.full_name || 'claimed';
+
+      if (reqId) tsMap[String(reqId)] = now;
+      if (rawId) tsMap[String(rawId)] = now;
+      if (trackingNo) tsMap[String(trackingNo)] = now;
+
+      if (rawId) {
+        updatedAssignments[rawId] = staffName;
+        updatedAssignments[String(rawId)] = staffName;
+      }
+      if (reqId) {
+        updatedAssignments[reqId] = staffName;
+        updatedAssignments[String(reqId)] = staffName;
+      }
+      if (trackingNo) {
+        updatedAssignments[trackingNo] = staffName;
+        updatedAssignments[String(trackingNo)] = staffName;
+      }
+
+      const currentStatus = item.status || 'Pending';
+      const updatedItem = {
+        ...item,
+        assigned_staff: staffName,
+        assigned_at: nowIso,
+        accepted_at: nowIso,
+        updated_at: nowIso,
+        status: currentStatus,
+        rawStatus: currentStatus === 'Pending' ? 'PENDING' : (item.rawStatus || 'PENDING'),
+      };
+
+      updateStoredRequest(
+        trackingNo || reqId || rawId,
+        {
+          assigned_staff: staffName,
+          assigned_at: nowIso,
+          accepted_at: nowIso,
+          updated_at: nowIso,
+          status: currentStatus,
+        },
+        { fallbackItem: updatedItem }
+      );
+
+      logProcessedAction({
+        actor: user?.username || 'staff',
+        actorName: staffName,
+        actorId: user?.id,
+        actorRole: user?.role || 'staff',
+        targetName: item.student_name,
+        targetId: item.student_id || trackingNo,
+        trackingNumber: trackingNo,
+        documentType: item.document_type,
+        action: 'Claimed request for staff verification & processing',
+        status: currentStatus,
+      });
+
+      recordRequestActivityTimestamp(trackingNo || reqId || rawId, now);
+    }
+
+    localStorage.setItem('regquest_claimed_requests', JSON.stringify(claimedMap));
+    localStorage.setItem(ASSIGNMENT_TIMESTAMPS_KEY, JSON.stringify(tsMap));
+    setAssignmentTimestamps((prev) => ({
+      ...prev,
+      ...tsMap,
+    }));
+    setAssignments(updatedAssignments);
+    localStorage.setItem(ASSIGNMENTS_KEY, JSON.stringify(updatedAssignments));
+
+    const selectedKeys = new Set(
+      selectedRequestsList.flatMap((r) => [
+        String(r.id),
+        String(r.rawId),
+        String(r.tracking_number),
+      ]).filter(Boolean)
+    );
+
+    setRawRequests((prev) =>
+      prev.map((r) => {
+        const matches =
+          selectedKeys.has(String(r.id)) ||
+          selectedKeys.has(String(r.rawId)) ||
+          (r.tracking_number && selectedKeys.has(String(r.tracking_number)));
+        return matches
+          ? {
+              ...r,
+              assigned_staff: staffName,
+              assigned_at: now,
+              accepted_at: now,
+              updated_at: nowIso,
+            }
+          : r;
+      })
+    );
+
+    window.dispatchEvent(new Event('regquest_assignments_updated'));
+    window.dispatchEvent(new Event('regquest_requests_updated'));
+
+    toast.success(`Now processing ${selectedRequestsList.length} request(s)! Successfully assigned to you.`);
+    setSelectedIds(new Set());
+    setSelectionModeTable(null);
   };
 
   const getStatusBadge = (status) => {
@@ -1166,7 +1290,7 @@ export default function StaffRequestsPage() {
             type="button"
             onClick={() => {
               setActiveTab('active');
-              setIsSelectionMode(false);
+              setSelectionModeTable(null);
               setSelectedIds(new Set());
             }}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
@@ -1182,7 +1306,7 @@ export default function StaffRequestsPage() {
             type="button"
             onClick={() => {
               setActiveTab('history');
-              setIsSelectionMode(false);
+              setSelectionModeTable(null);
               setSelectedIds(new Set());
               setStatusFilter('');
             }}
@@ -1228,10 +1352,15 @@ export default function StaffRequestsPage() {
             onArchive={handleArchiveRequest}
             emptyMessage="No requests currently assigned to you for processing."
             enableSelection={true}
-            isSelectionMode={isSelectionMode}
+            isSelectionMode={selectionModeTable === 'assigned'}
             onToggleSelectionMode={() => {
-              setIsSelectionMode((p) => !p);
-              if (isSelectionMode) setSelectedIds(new Set());
+              if (selectionModeTable === 'assigned') {
+                setSelectionModeTable(null);
+                setSelectedIds(new Set());
+              } else {
+                setSelectionModeTable('assigned');
+                setSelectedIds(new Set());
+              }
             }}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
@@ -1253,10 +1382,15 @@ export default function StaffRequestsPage() {
             onAction={handleClaimAndProcess}
             emptyMessage="No unassigned requests found in queue."
             enableSelection={true}
-            isSelectionMode={isSelectionMode}
+            isSelectionMode={selectionModeTable === 'unassigned'}
             onToggleSelectionMode={() => {
-              setIsSelectionMode((p) => !p);
-              if (isSelectionMode) setSelectedIds(new Set());
+              if (selectionModeTable === 'unassigned') {
+                setSelectionModeTable(null);
+                setSelectedIds(new Set());
+              } else {
+                setSelectionModeTable('unassigned');
+                setSelectedIds(new Set());
+              }
             }}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
@@ -1278,10 +1412,15 @@ export default function StaffRequestsPage() {
           onRestore={handleRestoreRequest}
           emptyMessage="No claimed document requests in history yet."
           enableSelection={true}
-          isSelectionMode={isSelectionMode}
+          isSelectionMode={selectionModeTable === 'history'}
           onToggleSelectionMode={() => {
-            setIsSelectionMode((p) => !p);
-            if (isSelectionMode) setSelectedIds(new Set());
+            if (selectionModeTable === 'history') {
+              setSelectionModeTable(null);
+              setSelectedIds(new Set());
+            } else {
+              setSelectionModeTable('history');
+              setSelectedIds(new Set());
+            }
           }}
           selectedIds={selectedIds}
           onToggleSelect={handleToggleSelect}
@@ -1313,19 +1452,42 @@ export default function StaffRequestsPage() {
           <div className="h-4 w-px bg-white/20 hidden sm:block" />
 
           <div className="flex items-center gap-2">
+            {selectionModeTable === 'unassigned' ||
+            selectedRequestsList.every(
+              (r) =>
+                !r.assigned_staff ||
+                r.assigned_staff.trim() === '' ||
+                r.assigned_staff.toLowerCase() === 'unassigned'
+            ) ? (
+              <button
+                type="button"
+                onClick={handleBatchClaimAndProcess}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold transition-all shadow-sm cursor-pointer"
+                title="Assign selected requests to you and begin processing"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+                <span>Process This</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setBatchModalOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold transition-all shadow-sm cursor-pointer"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span>Update Status & Releasing Date</span>
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => setBatchModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold transition-all shadow-sm cursor-pointer"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-              <span>Update Status & Releasing Date</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedIds(new Set())}
+              onClick={() => {
+                setSelectedIds(new Set());
+                setSelectionModeTable(null);
+              }}
               className="px-3 py-1.5 text-xs text-white/70 hover:text-white transition-colors cursor-pointer"
             >
               Clear Selection
