@@ -24,7 +24,7 @@ function isPaymentArchived(req, map = null) {
   const keys = [req.id, req.rawId, req.tracking_number, req.trackingId]
     .filter((k) => k !== undefined && k !== null && String(k).trim() !== '')
     .map((k) => String(k).trim());
-  return keys.some((k) => Boolean(aMap[k]));
+  return keys.some((k) => Boolean(aMap[k] || aMap[k.toUpperCase()] || aMap[k.toLowerCase()]));
 }
 
 function setPaymentArchived(req, isArchived = true) {
@@ -41,10 +41,13 @@ function setPaymentArchived(req, isArchived = true) {
       };
       keys.forEach((k) => {
         aMap[k] = info;
+        aMap[k.toUpperCase()] = info;
       });
     } else {
       keys.forEach((k) => {
         delete aMap[k];
+        delete aMap[k.toUpperCase()];
+        delete aMap[k.toLowerCase()];
       });
     }
 
@@ -186,19 +189,30 @@ export default function StudentPaymentsPage() {
       proof = getStoredPaymentProof([trackingCode, req.id, req.rawId]);
     }
 
+    const s = String(req.status || '').trim().toUpperCase();
+    const rawS = String(req.rawStatus || req.raw_status || '').trim().toUpperCase();
+    const pStatus = String(req.payment_status || '').trim().toUpperCase();
+    const proofStatus = String(proof?.status || '').trim().toUpperCase();
+
     const isPaymentVerified =
-      req.payment_status === 'VERIFIED' ||
-      proof?.status === 'VERIFIED' ||
-      String(req.status || '').toUpperCase() === 'FOR_PROCESSING' ||
-      String(req.status || '').toUpperCase() === 'PROCESSING' ||
-      String(req.status || '').toUpperCase() === 'READY_FOR_RELEASE' ||
-      String(req.status || '').toUpperCase() === 'RELEASED' ||
-      String(req.status || '').toUpperCase() === 'CLAIMED';
+      pStatus === 'VERIFIED' ||
+      proofStatus === 'VERIFIED' ||
+      s === 'PAYMENT VERIFIED' ||
+      s === 'PAYMENT_VERIFIED' ||
+      rawS === 'PAYMENT_VERIFIED' ||
+      s === 'FOR PROCESSING' ||
+      s === 'FOR_PROCESSING' ||
+      s === 'PROCESSING' ||
+      s === 'READY_FOR_RELEASE' ||
+      s === 'READY FOR RELEASE' ||
+      s === 'RELEASING' ||
+      s === 'FOR RELEASE' ||
+      s === 'RELEASED' ||
+      s === 'CLAIMED';
 
     const hasProofSubmitted =
       !isPaymentVerified && Boolean(proof);
 
-    const s = String(req.status || '').toUpperCase();
     const isReadyForPayment =
       !isPaymentVerified &&
       !hasProofSubmitted &&
@@ -550,12 +564,27 @@ export default function StudentPaymentsPage() {
                           Receipt Attached (Pending Verification)
                         </span>
                       ) : isPaymentVerified ? (
-                        <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300 inline-flex items-center gap-1">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                          Payment Verified
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300 inline-flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            Payment Verified
+                          </span>
+                          {viewMode !== 'history' && (
+                            <button
+                              type="button"
+                              onClick={() => handleMarkPaymentDone(req)}
+                              className="payment-btn-done text-xs py-1 px-3 shadow-xs"
+                              title="Mark as Done and move to Payment History"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span>Done</span>
+                            </button>
+                          )}
+                        </div>
                       ) : (
                         <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-900 border border-indigo-200 inline-flex items-center gap-1">
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
@@ -630,6 +659,36 @@ export default function StudentPaymentsPage() {
 
                   {/* Actions Row */}
                   <div className="payment-card-actions">
+                    {/* Mark as Done button when Payment Verified in Active View */}
+                    {isPaymentVerified && viewMode !== 'history' && (
+                      <button
+                        type="button"
+                        onClick={() => handleMarkPaymentDone(req)}
+                        className="payment-btn-done"
+                        title="Mark payment as Done and move to Payment History"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>✓ Done (Move to History)</span>
+                      </button>
+                    )}
+
+                    {/* Restore to Active button in History View */}
+                    {viewMode === 'history' && (
+                      <button
+                        type="button"
+                        onClick={() => handleRestorePayment(req)}
+                        className="payment-btn-outline"
+                        title="Restore to Active Payments"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a5 5 0 015 5v2m0 0l-3-3m3 3l3-3M3 10l3-3m-3 3l3 3" />
+                        </svg>
+                        <span>↩ Restore to Active</span>
+                      </button>
+                    )}
+
                     {/* Button 1: Download Assessed Form (Only for confirmed / for-payment documents) */}
                     <button
                       type="button"
@@ -644,18 +703,20 @@ export default function StudentPaymentsPage() {
                     </button>
 
                     {/* Button 2: Attach Payment Picture */}
-                    <button
-                      type="button"
-                      onClick={() => handleOpenUploadModal(req)}
-                      className="payment-btn-emerald"
-                      title="Upload picture of Cashier Official Receipt"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      <span>{hasProofSubmitted ? 'Update Receipt Picture' : 'Attach Payment Picture'}</span>
-                    </button>
+                    {viewMode !== 'history' && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenUploadModal(req)}
+                        className="payment-btn-emerald"
+                        title="Upload picture of Cashier Official Receipt"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span>{hasProofSubmitted ? 'Update Receipt Picture' : 'Attach Payment Picture'}</span>
+                      </button>
+                    )}
 
                     {/* Button 3: Track Status Link */}
                     <button
@@ -684,7 +745,9 @@ export default function StudentPaymentsPage() {
               </svg>
             </div>
             <h3 className="text-base font-extrabold text-slate-900 mb-1">
-              {activeTab === 'READY_PAYMENT'
+              {viewMode === 'history'
+                ? 'No Completed Payments in History'
+                : activeTab === 'READY_PAYMENT'
                 ? 'No Requests Ready for Payment'
                 : activeTab === 'PENDING_VERIFY'
                 ? 'No Receipts Awaiting Verification'
@@ -693,20 +756,32 @@ export default function StudentPaymentsPage() {
                 : 'No Requests Confirmed for Payment Yet'}
             </h3>
             <p className="text-xs text-slate-500 max-w-sm mx-auto mb-5 leading-relaxed">
-              {pendingReviewRequests.length > 0
+              {viewMode === 'history'
+                ? 'When a verified payment is marked as "Done", it will appear here in your payment history.'
+                : pendingReviewRequests.length > 0
                 ? `You have ${pendingReviewRequests.length} request(s) awaiting confirmation by the Registrar. Once confirmed by staff or marked "For Payment", your assessed form and receipt attachment will appear here automatically.`
                 : 'Document requests only appear here after the Registrar Staff or Admin confirms the request and sets the status to "For Payment".'}
             </p>
-            <button
-              type="button"
-              onClick={() => navigate(ROUTES.STUDENT.REQUESTS)}
-              className="payment-btn-primary"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
-              </svg>
-              Track Status of Submitted Requests
-            </button>
+            {viewMode === 'history' ? (
+              <button
+                type="button"
+                onClick={() => setViewMode('active')}
+                className="payment-btn-primary"
+              >
+                Back to Active Payments
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.STUDENT.REQUESTS)}
+                className="payment-btn-primary"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+                </svg>
+                Track Status of Submitted Requests
+              </button>
+            )}
           </div>
         )}
       </div>
