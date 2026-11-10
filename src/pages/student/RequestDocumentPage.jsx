@@ -158,7 +158,8 @@ export default function RequestDocumentPage() {
     setClearanceIsPdf(false);
   };
 
-  // Step 2 State
+  // Step 2 State: Per-document copies map { [docTitle]: number }
+  const [docCopies, setDocCopies] = useState({});
   const [copies, setCopies] = useState(1);
   const [yearLevel, setYearLevel] = useState(user?.year_level || '4th year');
   const [studentId, setStudentId] = useState(user?.student_id || user?.username || '2026202666');
@@ -316,6 +317,23 @@ export default function RequestDocumentPage() {
     };
   }, [selectedDocs]);
 
+  // Helper to get number of copies for a specific document
+  const getCopiesForDoc = (docTitle) => {
+    if (!docTitle) return 1;
+    return docCopies[docTitle] || 1;
+  };
+
+  // Helper to update number of copies for a specific document
+  const handleUpdateDocCopies = (docTitle, count) => {
+    if (!docTitle) return;
+    const safeCount = Math.max(1, Math.min(10, count));
+    setDocCopies((prev) => ({
+      ...prev,
+      [docTitle]: safeCount,
+    }));
+    setCopies(safeCount);
+  };
+
   // Compute dynamic document info, description, and pricing for Review Data
   const currentDocDetails = useMemo(() => {
     if (selectedDocs.length === 0) {
@@ -324,26 +342,40 @@ export default function RequestDocumentPage() {
         description: 'Please select document/s in Part 2 below.',
         unitPrice: 0,
         totalPrice: 0,
+        totalCopies: 0,
         items: [],
       };
     }
 
-    const items = selectedDocs.map((name) => getDocumentItemInfo(name, credentialTypes));
-    const totalUnit = items.reduce((sum, item) => sum + item.unitPrice, 0);
+    const items = selectedDocs.map((name) => {
+      const info = getDocumentItemInfo(name, credentialTypes);
+      const itemCopies = docCopies[info.title] || docCopies[name] || 1;
+      const itemTotal = info.unitPrice * itemCopies;
+      return {
+        ...info,
+        copies: itemCopies,
+        itemTotal,
+      };
+    });
+
+    const totalUnitPrice = items.reduce((sum, item) => sum + item.unitPrice, 0);
+    const totalPrice = items.reduce((sum, item) => sum + item.itemTotal, 0);
+    const totalCopies = items.reduce((sum, item) => sum + item.copies, 0);
     const title = items.map((item) => item.title).join(', ');
     const description =
       items.length === 1
         ? items[0].description
-        : items.map((item) => `${item.title} (₱${item.unitPrice})`).join(' + ');
+        : items.map((item) => `${item.title} (${item.copies} ${item.copies > 1 ? 'copies' : 'copy'} @ ₱${item.unitPrice})`).join(' + ');
 
     return {
       title,
       description,
-      unitPrice: totalUnit,
-      totalPrice: totalUnit * copies,
+      unitPrice: totalUnitPrice,
+      totalPrice,
+      totalCopies,
       items,
     };
-  }, [selectedDocs, credentialTypes, copies]);
+  }, [selectedDocs, credentialTypes, docCopies]);
 
   // Backward compatibility alias for single doc name
   const selectedDocName = selectedDocs[0] || '';
@@ -754,6 +786,11 @@ export default function RequestDocumentPage() {
       setGeneratedTrackingId(trackingCode);
 
       // Build comprehensive request record that is immediately accessible to Admin, Staff, and Student
+      const totalCopiesCount = currentDocDetails.totalCopies || 1;
+      const copiesSummary = currentDocDetails.items.length > 1
+        ? `${totalCopiesCount} copies (${currentDocDetails.items.map((it) => `${it.title}: ${it.copies}`).join(', ')})`
+        : `${totalCopiesCount} ${totalCopiesCount > 1 ? 'copies' : 'copy'}`;
+
       const requestRecord = {
         id: createdItem?.id || trackingCode,
         rawId: createdItem?.id || trackingCode,
@@ -770,7 +807,15 @@ export default function RequestDocumentPage() {
           price: currentDocDetails.unitPrice,
         },
         document_type: exactDocTitle,
-        copies: `${copies} ${copies > 1 ? 'copies' : 'copy'}`,
+        documents: currentDocDetails.items.map((it) => it.title),
+        doc_details: currentDocDetails.items.map((it) => ({
+          title: it.title,
+          copies: it.copies,
+          unitPrice: it.unitPrice,
+          total: it.itemTotal,
+        })),
+        copies: copiesSummary,
+        total_copies: totalCopiesCount,
         amount: `P${currentDocDetails.totalPrice}`,
         price: currentDocDetails.totalPrice,
         status: 'Pending',
@@ -1572,57 +1617,141 @@ export default function RequestDocumentPage() {
               <div className="review-gray-box">
                 {/* Document Request */}
                 <div>
-                  <h3 className="review-sub-title">Document Request:</h3>
-                  <div className="review-doc-header">
-                    <div className="flex-1 min-w-0 pr-3">
-                      <h4 className="review-doc-name">{currentDocDetails.title}</h4>
-                      {currentDocDetails.items && currentDocDetails.items.length > 1 ? (
-                        <div className="my-2 space-y-1 pl-2.5 border-l-2 border-amber-400">
-                          {currentDocDetails.items.map((it, idx) => (
-                            <div key={idx} className="flex items-center justify-between text-xs text-slate-700 pr-2">
-                              <span className="font-medium truncate mr-2">• {it.title}</span>
-                              <span className="font-mono text-slate-600 font-semibold shrink-0">₱{it.unitPrice.toFixed(2)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="review-doc-sub">{currentDocDetails.description}</p>
-                      )}
-                      {currentDocDetails.unitPrice > 0 && (
-                        <p className="review-doc-pricing">
-                          ₱{currentDocDetails.unitPrice.toFixed(2)} {currentDocDetails.items?.length > 1 ? 'total per copy set' : 'per copy'}
-                          {copies > 1 && ` • Estimated Total: ₱${currentDocDetails.totalPrice.toFixed(2)}`}
-                        </p>
-                      )}
-                    </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="review-sub-title mb-0">Document Request:</h3>
+                    {currentDocDetails.items.length > 1 && (
+                      <span className="text-xs font-semibold text-slate-500">
+                        {currentDocDetails.items.length} documents selected
+                      </span>
+                    )}
+                  </div>
 
-                    <div className="review-copies-control">
-                      <span className="review-copies-label">Number of copies</span>
-                      <div className="review-copies-stepper">
-                        <button
-                          type="button"
-                          onClick={() => setCopies((c) => Math.max(1, c - 1))}
-                          className="review-stepper-btn"
-                        >
-                          -
-                        </button>
-                        <input
-                          type="number"
-                          value={copies}
-                          min={1}
-                          max={10}
-                          onChange={(e) => setCopies(Math.max(1, parseInt(e.target.value) || 1))}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setCopies((c) => Math.min(10, c + 1))}
-                          className="review-stepper-btn"
-                        >
-                          +
-                        </button>
+                  {currentDocDetails.items.length > 1 ? (
+                    <div className="space-y-2.5">
+                      {currentDocDetails.items.map((it) => {
+                        const itemCopies = getCopiesForDoc(it.title);
+                        const itemSubtotal = it.unitPrice * itemCopies;
+
+                        return (
+                          <div
+                            key={it.title}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-white rounded-lg border border-slate-200 shadow-2xs hover:border-amber-300 transition-colors"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <h4 className="review-doc-name text-sm">{it.title}</h4>
+                              <p className="review-doc-sub">{it.description}</p>
+                              <div className="text-xs text-slate-700 mt-1 font-medium flex items-center gap-2">
+                                <span>₱{it.unitPrice.toFixed(2)} per copy</span>
+                                <span className="text-slate-300">•</span>
+                                <span className="font-bold text-amber-700 font-mono">
+                                  Subtotal: ₱{itemSubtotal.toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="review-copies-control shrink-0 self-end sm:self-center">
+                              <span className="review-copies-label">Number of copies</span>
+                              <div className="review-copies-stepper">
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateDocCopies(it.title, itemCopies - 1)}
+                                  className="review-stepper-btn"
+                                  title="Decrease copies"
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  value={itemCopies}
+                                  min={1}
+                                  max={10}
+                                  onChange={(e) =>
+                                    handleUpdateDocCopies(it.title, parseInt(e.target.value) || 1)
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateDocCopies(it.title, itemCopies + 1)}
+                                  className="review-stepper-btn"
+                                  title="Increase copies"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Summary breakdown row */}
+                      <div className="flex items-center justify-between p-3 bg-amber-50/80 rounded-lg border border-amber-200">
+                        <div className="text-xs font-semibold text-amber-900">
+                          Total Copies: <span className="font-bold">{currentDocDetails.totalCopies}</span>
+                        </div>
+                        <div className="text-xs sm:text-sm font-extrabold text-slate-900">
+                          Estimated Total: <span className="font-mono text-amber-800">₱{currentDocDetails.totalPrice.toFixed(2)}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="review-doc-header">
+                      <div>
+                        <h4 className="review-doc-name">{currentDocDetails.title}</h4>
+                        <p className="review-doc-sub">{currentDocDetails.description}</p>
+                        {currentDocDetails.unitPrice > 0 && (
+                          <p className="review-doc-pricing">
+                            ₱{currentDocDetails.unitPrice.toFixed(2)} per copy
+                            {getCopiesForDoc(currentDocDetails.title) > 1 &&
+                              ` • Estimated Total: ₱${currentDocDetails.totalPrice.toFixed(2)}`}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="review-copies-control">
+                        <span className="review-copies-label">Number of copies</span>
+                        <div className="review-copies-stepper">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUpdateDocCopies(
+                                currentDocDetails.title,
+                                getCopiesForDoc(currentDocDetails.title) - 1
+                              )
+                            }
+                            className="review-stepper-btn"
+                            title="Decrease copies"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            value={getCopiesForDoc(currentDocDetails.title)}
+                            min={1}
+                            max={10}
+                            onChange={(e) =>
+                              handleUpdateDocCopies(
+                                currentDocDetails.title,
+                                parseInt(e.target.value) || 1
+                              )
+                            }
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUpdateDocCopies(
+                                currentDocDetails.title,
+                                getCopiesForDoc(currentDocDetails.title) + 1
+                              )
+                            }
+                            className="review-stepper-btn"
+                            title="Increase copies"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="review-divider" />
