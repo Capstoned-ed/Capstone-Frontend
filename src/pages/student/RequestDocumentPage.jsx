@@ -1639,7 +1639,6 @@ export default function RequestDocumentPage() {
                           >
                             <div className="flex-1 min-w-0">
                               <h4 className="review-doc-name text-sm">{it.title}</h4>
-                              <p className="review-doc-sub">{it.description}</p>
                               <div className="text-xs text-slate-700 mt-1 font-medium flex items-center gap-2">
                                 <span>₱{it.unitPrice.toFixed(2)} per copy</span>
                                 <span className="text-slate-300">•</span>
@@ -1697,7 +1696,6 @@ export default function RequestDocumentPage() {
                     <div className="review-doc-header">
                       <div>
                         <h4 className="review-doc-name">{currentDocDetails.title}</h4>
-                        <p className="review-doc-sub">{currentDocDetails.description}</p>
                         {currentDocDetails.unitPrice > 0 && (
                           <p className="review-doc-pricing">
                             ₱{currentDocDetails.unitPrice.toFixed(2)} per copy
