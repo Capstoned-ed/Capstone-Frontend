@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, recordStaffAssignmentTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived } from '../../api/requests';
+import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, getStaffAssignmentTimestamps, recordStaffAssignmentTimestamp, getRequestActivityTimestamps, recordRequestActivityTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived } from '../../api/requests';
 import { saveStoredNotification } from '../../api/notifications';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
 import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
+import BatchUpdateModal from '../../components/common/BatchUpdateModal';
 import { StaffRequestsTable } from '../../components/staff';
 import useToast from '../../hooks/useToast';
 import '../../styles/admin/AdminRequestsPage.css';
@@ -107,12 +108,16 @@ export default function RegistrarRequestsPage() {
   const [users, setUsers] = useState([]);
   const [credentialTypes, setCredentialTypes] = useState([]);
   const [assignments, setAssignments] = useState(loadStoredAssignments);
+  const [activityTimestamps, setActivityTimestamps] = useState(getRequestActivityTimestamps);
+  const [assignmentTimestamps, setAssignmentTimestamps] = useState(getStaffAssignmentTimestamps);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const [selectedBatch, setSelectedBatch] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [assignmentHistorySearch, setAssignmentHistorySearch] = useState('');
+  const [assignmentHistoryDocType, setAssignmentHistoryDocType] = useState('');
   const [docTypeFilter, setDocTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -120,9 +125,60 @@ export default function RegistrarRequestsPage() {
   const [processModalOpen, setProcessModalOpen] = useState(false);
   const [clearances, setClearances] = useState([]);
   const [showAllBatch, setShowAllBatch] = useState(false);
+  const [showAllHistoryBatch, setShowAllHistoryBatch] = useState(false);
   const [showAllRequests, setShowAllRequests] = useState(false);
   const [activeTab, setActiveTab] = useState('active'); // 'active' | 'history'
   const [archivedMap, setArchivedMap] = useState(() => getArchivedRequestsMap());
+
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
+
+  const handleToggleSelect = (rawOrId) => {
+    const key = String(rawOrId);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = (items) => {
+    if (!items || items.length === 0) return;
+    const allSelected = items.every((i) =>
+      selectedIds.has(String(i.id)) ||
+      selectedIds.has(String(i.rawId)) ||
+      (i.tracking_number && selectedIds.has(String(i.tracking_number)))
+    );
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      items.forEach((i) => {
+        const key = String(i.rawId || i.id);
+        const idKey = String(i.id);
+        const trackKey = i.tracking_number ? String(i.tracking_number) : null;
+        if (allSelected) {
+          next.delete(key);
+          next.delete(idKey);
+          if (trackKey) next.delete(trackKey);
+        } else {
+          next.add(key);
+        }
+      });
+      return next;
+    });
+  };
+
+  const isItemSelected = (item) => {
+    return Boolean(
+      selectedIds.has(String(item.rawId)) ||
+      selectedIds.has(String(item.id)) ||
+      (item.tracking_number && selectedIds.has(String(item.tracking_number)))
+    );
+  };
 
   useEffect(() => {
     const handleArchivedUpdate = () => {
@@ -225,16 +281,24 @@ export default function RegistrarRequestsPage() {
     };
     const handleAssignmentsSync = () => {
       setAssignments(getStaffAssignments());
+      setAssignmentTimestamps(getStaffAssignmentTimestamps());
+    };
+    const handleActivitySync = () => {
+      setActivityTimestamps(getRequestActivityTimestamps());
     };
     window.addEventListener('regquest_requests_updated', handleSync);
     window.addEventListener('regquest_assignments_updated', handleAssignmentsSync);
+    window.addEventListener('regquest_activity_updated', handleActivitySync);
     window.addEventListener('storage', handleAssignmentsSync);
+    window.addEventListener('storage', handleActivitySync);
 
     return () => {
       ignore = true;
       window.removeEventListener('regquest_requests_updated', handleSync);
       window.removeEventListener('regquest_assignments_updated', handleAssignmentsSync);
+      window.removeEventListener('regquest_activity_updated', handleActivitySync);
       window.removeEventListener('storage', handleAssignmentsSync);
+      window.removeEventListener('storage', handleActivitySync);
     };
   }, []);
 
@@ -442,6 +506,19 @@ export default function RegistrarRequestsPage() {
           rawStatus: effectiveRawStatus,
           batch_status: formatStatusDisplay(effectiveRawStatus),
           assigned_staff: assignedStaff,
+          assigned_at:
+            assignmentTimestamps[String(r.id)] ||
+            assignmentTimestamps[String(r.tracking_number)] ||
+            assignmentTimestamps[String(r.rawId)] ||
+            r.assigned_at ||
+            matchedStored?.assigned_at ||
+            null,
+          updated_at:
+            matchedStored?.updated_at ||
+            matchedStored?.updatedAt ||
+            r.updated_at ||
+            r.updatedAt ||
+            null,
           archived_by: archivedMap[r.id]?.archived_by || archivedMap[r.rawId]?.archived_by || r.archived_by || null,
           archived_at: archivedMap[r.id]?.archived_at || archivedMap[r.rawId]?.archived_at || r.archived_at || null,
           created_at: r.created_at,
@@ -492,7 +569,7 @@ export default function RegistrarRequestsPage() {
         return true;
       })
       .sort(sortRequestsNewestFirst);
-  }, [rawRequests, userMap, credTypeMap, clearanceMap, assignments]);
+  }, [rawRequests, userMap, credTypeMap, clearanceMap, assignments, activityTimestamps, assignmentTimestamps]);
 
   const batchOptions = useMemo(() => {
     const batchesMap = new Map();
@@ -512,10 +589,42 @@ export default function RegistrarRequestsPage() {
   const batchRequests = useMemo(() => {
     const activeReqs = requests.filter((r) => !isRequestArchived(r, archivedMap));
     if (selectedBatch === 'ALL') {
-      return activeReqs;
+      return [...activeReqs].sort(sortRequestsNewestFirst);
     }
     return activeReqs.filter((r) => r.batchId === selectedBatch).sort(sortRequestsNewestFirst);
-  }, [requests, selectedBatch, archivedMap]);
+  }, [requests, selectedBatch, archivedMap, activityTimestamps, assignmentTimestamps, assignments]);
+
+  const historyBatchRequests = useMemo(() => {
+    const histReqs = requests.filter((r) => isRequestArchived(r, archivedMap));
+    let filtered = selectedBatch === 'ALL' ? histReqs : histReqs.filter((r) => r.batchId === selectedBatch);
+
+    if (assignmentHistorySearch.trim()) {
+      const q = assignmentHistorySearch.toLowerCase().trim();
+      filtered = filtered.filter(
+        (r) =>
+          (r.id && r.id.toLowerCase().includes(q)) ||
+          (r.tracking_number && r.tracking_number.toLowerCase().includes(q)) ||
+          (r.student_name && r.student_name.toLowerCase().includes(q)) ||
+          (r.student_id && r.student_id.toLowerCase().includes(q)) ||
+          (r.assigned_staff && r.assigned_staff.toLowerCase().includes(q)) ||
+          (r.document_type && r.document_type.toLowerCase().includes(q))
+      );
+    }
+
+    if (assignmentHistoryDocType) {
+      const filterLow = assignmentHistoryDocType.toLowerCase();
+      filtered = filtered.filter((r) => {
+        const docLow = (r.document_type || '').toLowerCase();
+        return docLow.includes(filterLow) || filterLow.includes(docLow);
+      });
+    }
+
+    return [...filtered].sort((a, b) => {
+      const timeA = archivedMap[a.id]?.archived_at || archivedMap[a.rawId]?.archived_at || a.assigned_at || a.created_at || 0;
+      const timeB = archivedMap[b.id]?.archived_at || archivedMap[b.rawId]?.archived_at || b.assigned_at || b.created_at || 0;
+      return new Date(timeB) - new Date(timeA);
+    });
+  }, [requests, selectedBatch, archivedMap, assignmentHistorySearch, assignmentHistoryDocType]);
 
   const handleAssignStaff = (requestId, rawId, staffName) => {
     setAssignments((prev) => {
@@ -553,12 +662,15 @@ export default function RegistrarRequestsPage() {
       updateStoredRequest(requestId || rawId, {
         assigned_staff: staffName || '',
         assigned_at: staffName ? nowIso : null,
+        updated_at: nowIso,
         status: staffName ? 'For Processing' : undefined,
       });
-      if (staffName) {
-        recordStaffAssignmentTimestamp(requestId, now);
-        if (rawId && rawId !== requestId) recordStaffAssignmentTimestamp(rawId, now);
-      }
+      recordStaffAssignmentTimestamp(requestId, now);
+      if (rawId && rawId !== requestId) recordStaffAssignmentTimestamp(rawId, now);
+      recordRequestActivityTimestamp(requestId, now);
+      if (rawId && rawId !== requestId) recordRequestActivityTimestamp(rawId, now);
+      setActivityTimestamps(getRequestActivityTimestamps());
+      setAssignmentTimestamps(getStaffAssignmentTimestamps());
     } catch {}
 
     // Update in-memory state
@@ -569,7 +681,7 @@ export default function RegistrarRequestsPage() {
           String(r.id) === String(requestId) ||
           String(r.rawId) === String(rawId) ||
           String(r.tracking_number) === String(requestId)
-            ? { ...r, assigned_staff: staffName, assigned_at: now, status: 'For Processing' }
+            ? { ...r, assigned_staff: staffName, assigned_at: now, updated_at: nowIso, status: 'For Processing' }
             : r
         )
       );
@@ -632,6 +744,12 @@ export default function RegistrarRequestsPage() {
   };
 
   const handleRequestUpdated = (updatedReq) => {
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+    recordRequestActivityTimestamp(updatedReq, nowTime);
+    recordStaffAssignmentTimestamp(updatedReq, nowTime);
+    setActivityTimestamps(getRequestActivityTimestamps());
+    setAssignmentTimestamps(getStaffAssignmentTimestamps());
     setRawRequests((prev) =>
       prev.map((r) =>
         String(r.id) === String(updatedReq.rawId) ||
@@ -640,6 +758,8 @@ export default function RegistrarRequestsPage() {
         String(r.tracking_number) === String(updatedReq.tracking_number)
           ? {
               ...r,
+              ...updatedReq,
+              updated_at: updatedReq.updated_at || nowIso,
               status: updatedReq.status,
               remarks: updatedReq.remarks ?? r.remarks,
               payment_status: updatedReq.payment_status ?? r.payment_status,
@@ -712,8 +832,10 @@ export default function RegistrarRequestsPage() {
   }, [requests, searchQuery, docTypeFilter, statusFilter]);
 
   const activeFilteredRequests = useMemo(() => {
-    return filteredRequests.filter((r) => !isRequestArchived(r, archivedMap));
-  }, [filteredRequests, archivedMap]);
+    return filteredRequests
+      .filter((r) => !isRequestArchived(r, archivedMap))
+      .sort(sortRequestsNewestFirst);
+  }, [filteredRequests, archivedMap, activityTimestamps, assignmentTimestamps, assignments]);
 
   const historyRequests = useMemo(() => {
     return requests
@@ -736,10 +858,6 @@ export default function RegistrarRequestsPage() {
           }
         }
 
-        if (statusFilter && r.status.toLowerCase() !== statusFilter.toLowerCase()) {
-          return false;
-        }
-
         return true;
       })
       .sort((a, b) => {
@@ -747,7 +865,7 @@ export default function RegistrarRequestsPage() {
         const timeB = archivedMap[b.id]?.archived_at || archivedMap[b.rawId]?.archived_at || b.created_at || 0;
         return new Date(timeB) - new Date(timeA);
       });
-  }, [requests, archivedMap, searchQuery, docTypeFilter, statusFilter]);
+  }, [requests, archivedMap, searchQuery, docTypeFilter]);
 
   const activeTotalCount = useMemo(() => {
     return requests.filter((r) => !isRequestArchived(r, archivedMap)).length;
@@ -756,6 +874,110 @@ export default function RegistrarRequestsPage() {
   const historyTotalCount = useMemo(() => {
     return requests.filter((r) => isRequestArchived(r, archivedMap)).length;
   }, [requests, archivedMap]);
+
+  const selectedRequestsList = useMemo(() => {
+    if (selectedIds.size === 0) return [];
+    return requests.filter((r) =>
+      selectedIds.has(String(r.id)) ||
+      selectedIds.has(String(r.rawId)) ||
+      (r.tracking_number && selectedIds.has(String(r.tracking_number)))
+    );
+  }, [requests, selectedIds]);
+
+  const handleBatchUpdate = async ({ newStatus, releasingDate, note }) => {
+    if (selectedRequestsList.length === 0) return;
+
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+
+    for (const item of selectedRequestsList) {
+      const targetId = item.rawId || item.id;
+      const trackingNo = item.tracking_number || item.id;
+
+      const patch = {
+        updated_at: nowIso,
+      };
+
+      if (newStatus) {
+        patch.status = newStatus;
+      }
+
+      if (releasingDate) {
+        patch.date_of_release = releasingDate;
+        patch.release_date = releasingDate;
+      }
+
+      if (note && note.trim()) {
+        const existingRemarks = item.remarks || '';
+        patch.remarks = existingRemarks
+          ? `${existingRemarks} | Note: ${note.trim()}`
+          : note.trim();
+        patch.notes = patch.remarks;
+      }
+
+      // Update in localStorage
+      updateStoredRequest(trackingNo || item.id || targetId, patch, {
+        fallbackItem: { ...item, ...patch },
+      });
+
+      // Record activity
+      recordRequestActivityTimestamp(trackingNo || item.id || targetId, nowTime);
+
+      // Log processed action
+      logProcessedAction({
+        actor: currentUser?.username || 'registrar',
+        actorName: currentUser?.full_name || currentUser?.username || 'Registrar',
+        actorId: currentUser?.id,
+        actorRole: currentUser?.role || 'registrar',
+        targetName: item.student_name,
+        targetId: item.student_id || trackingNo,
+        trackingNumber: trackingNo,
+        documentType: item.document_type,
+        action: `Batch updated: ${newStatus ? `Status -> ${newStatus}; ` : ''}${releasingDate ? `Release Date -> ${releasingDate}; ` : ''}${note ? `Note -> ${note}` : ''}`.trim(),
+        status: newStatus || item.status,
+      });
+
+      // Backend API transition if applicable and numeric
+      if (newStatus && targetId && !isNaN(Number(targetId))) {
+        requestsApi.transition(Number(targetId), {
+          status: newStatus,
+          remarks: note || `Batch updated by registrar`,
+        }).catch(() => {});
+      }
+    }
+
+    // Update in-memory state
+    setRawRequests((prev) =>
+      prev.map((r) => {
+        const isMatch =
+          selectedIds.has(String(r.id)) ||
+          selectedIds.has(String(r.rawId)) ||
+          (r.tracking_number && selectedIds.has(String(r.tracking_number)));
+        if (!isMatch) return r;
+
+        const updated = {
+          ...r,
+          updated_at: nowIso,
+        };
+        if (newStatus) updated.status = newStatus;
+        if (releasingDate) {
+          updated.release_date = releasingDate;
+          updated.date_of_release = releasingDate;
+        }
+        if (note && note.trim()) {
+          updated.remarks = r.remarks ? `${r.remarks} | Note: ${note.trim()}` : note.trim();
+          updated.notes = updated.remarks;
+        }
+        return updated;
+      })
+    );
+
+    setActivityTimestamps(getRequestActivityTimestamps());
+    window.dispatchEvent(new Event('regquest_requests_updated'));
+    toast.success(`Successfully updated ${selectedRequestsList.length} requests!`);
+    setSelectedIds(new Set());
+    setBatchModalOpen(false);
+  };
 
   const getStatusBadge = (status) => {
     const s = String(status || '').trim();
@@ -822,7 +1044,10 @@ export default function RegistrarRequestsPage() {
 
         <button
           type="button"
-          onClick={() => setActiveTab('history')}
+          onClick={() => {
+            setActiveTab('history');
+            setStatusFilter('');
+          }}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
             activeTab === 'history'
               ? 'bg-[#0B0B36] text-white shadow-sm'
@@ -833,11 +1058,6 @@ export default function RegistrarRequestsPage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span>Request History</span>
-          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-            activeTab === 'history' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
-          }`}>
-            {historyTotalCount}
-          </span>
         </button>
       </div>
 
@@ -936,14 +1156,60 @@ export default function RegistrarRequestsPage() {
       </div>
 
       <div className="assign-table-card">
-        <h3 className="assign-table-title">
-          Requests Assignment - {selectedBatch === 'ALL' ? 'All Batches' : selectedBatch}
-        </h3>
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <h3 className="assign-table-title !mb-0">
+            Requests Assignment - {selectedBatch === 'ALL' ? 'All Batches' : selectedBatch}
+          </h3>
+          <button
+            type="button"
+            onClick={() => {
+              setIsSelectionMode((prev) => !prev);
+              if (isSelectionMode) setSelectedIds(new Set());
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              isSelectionMode
+                ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                : 'bg-indigo-50 text-indigo-950 border border-indigo-200 hover:bg-indigo-100'
+            }`}
+          >
+            {isSelectionMode ? (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Cancel Selection</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                <span>Select Multiple</span>
+              </>
+            )}
+          </button>
+        </div>
 
         <div className="table-responsive">
           <table className="custom-data-table">
             <thead>
               <tr>
+                {isSelectionMode && (
+                  <th className="w-10 px-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={
+                        batchRequests.length > 0 &&
+                        (showAllBatch ? batchRequests : batchRequests.slice(0, 10)).every((item) => isItemSelected(item))
+                      }
+                      onChange={() =>
+                        handleToggleSelectAll(showAllBatch ? batchRequests : batchRequests.slice(0, 10))
+                      }
+                      className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                      title="Select all"
+                    />
+                  </th>
+                )}
                 <th>Request ID</th>
                 <th>Student</th>
                 <th>Document Type</th>
@@ -956,13 +1222,13 @@ export default function RegistrarRequestsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
+                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
                     Loading requests from server...
                   </td>
                 </tr>
               ) : batchRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
+                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
                     {requests.length === 0
                       ? 'No student requests have been submitted yet.'
                       : 'No requests found in this batch.'}
@@ -970,7 +1236,17 @@ export default function RegistrarRequestsPage() {
                 </tr>
               ) : (
                 (showAllBatch ? batchRequests : batchRequests.slice(0, 10)).map((item) => (
-                  <tr key={item.rawId || item.id}>
+                  <tr key={item.rawId || item.id} className={isItemSelected(item) && isSelectionMode ? 'bg-indigo-50/50' : ''}>
+                    {isSelectionMode && (
+                      <td className="w-10 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isItemSelected(item)}
+                          onChange={() => handleToggleSelect(item.rawId || item.id)}
+                          className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                        />
+                      </td>
+                    )}
                     <td className="req-id-text">{item.id}</td>
                     <td>
                       <div className="student-name-text">{item.student_name}</div>
@@ -1131,19 +1407,65 @@ export default function RegistrarRequestsPage() {
       </div>
 
       <div className="requests-list-card">
-        <div className="requests-list-header">
-          <h3 className="requests-list-title">Requests</h3>
-          <p className="requests-list-subtitle">
-            {isStaff
-              ? 'Process approved requests, prepare documents, and update request statuses'
-              : 'Review and approve/reject credential requests from students'}
-          </p>
+        <div className="requests-list-header flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h3 className="requests-list-title">Requests</h3>
+            <p className="requests-list-subtitle">
+              {isStaff
+                ? 'Process approved requests, prepare documents, and update request statuses'
+                : 'Review and approve/reject credential requests from students'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setIsSelectionMode((prev) => !prev);
+              if (isSelectionMode) setSelectedIds(new Set());
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              isSelectionMode
+                ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                : 'bg-indigo-50 text-indigo-950 border border-indigo-200 hover:bg-indigo-100'
+            }`}
+          >
+            {isSelectionMode ? (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Cancel Selection</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                <span>Select Multiple</span>
+              </>
+            )}
+          </button>
         </div>
 
         <div className="table-responsive">
           <table className="custom-data-table">
             <thead>
               <tr>
+                {isSelectionMode && (
+                  <th className="w-10 px-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={
+                        activeFilteredRequests.length > 0 &&
+                        (showAllRequests ? activeFilteredRequests : activeFilteredRequests.slice(0, 10)).every((item) => isItemSelected(item))
+                      }
+                      onChange={() =>
+                        handleToggleSelectAll(showAllRequests ? activeFilteredRequests : activeFilteredRequests.slice(0, 10))
+                      }
+                      className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                      title="Select all"
+                    />
+                  </th>
+                )}
                 <th>Request ID</th>
                 <th>Student</th>
                 <th>Document Type</th>
@@ -1156,19 +1478,19 @@ export default function RegistrarRequestsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
+                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
                     Loading requests from server...
                   </td>
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-sm text-rose-500">
+                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-rose-500">
                     {error}
                   </td>
                 </tr>
               ) : activeFilteredRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
+                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
                     {activeTotalCount === 0
                       ? 'No active student requests in queue.'
                       : 'No active requests found matching your filter criteria.'}
@@ -1176,7 +1498,17 @@ export default function RegistrarRequestsPage() {
                 </tr>
               ) : (
                 (showAllRequests ? activeFilteredRequests : activeFilteredRequests.slice(0, 10)).map((item) => (
-                  <tr key={item.rawId || item.id}>
+                  <tr key={item.rawId || item.id} className={isItemSelected(item) && isSelectionMode ? 'bg-indigo-50/50' : ''}>
+                    {isSelectionMode && (
+                      <td className="w-10 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isItemSelected(item)}
+                          onChange={() => handleToggleSelect(item.rawId || item.id)}
+                          className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                        />
+                      </td>
+                    )}
                     <td className="req-id-text">{item.id}</td>
                     <td>
                       <div className="student-name-text">{item.student_name}</div>
@@ -1258,18 +1590,73 @@ export default function RegistrarRequestsPage() {
         </>
       ) : (
         <>
-          <div className="req-search-card">
-            <h4 className="req-search-title">Search History</h4>
-            <div className="req-search-controls">
+          <div className="assign-table-card">
+            <div className="flex items-center justify-between flex-wrap gap-3 pb-3 mb-3 border-b border-slate-100">
+              <div>
+                <h3 className="assign-table-title !mb-0.5">
+                  Requests Assignment History - {selectedBatch === 'ALL' ? 'All Batches' : selectedBatch}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Archived and completed request assignments showing assigned staff members and release details
+                </p>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSelectionMode((prev) => !prev);
+                    if (isSelectionMode) setSelectedIds(new Set());
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    isSelectionMode
+                      ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                      : 'bg-indigo-50 text-indigo-950 border border-indigo-200 hover:bg-indigo-100'
+                  }`}
+                >
+                  {isSelectionMode ? (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      <span>Cancel Selection</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                      <span>Select Multiple</span>
+                    </>
+                  )}
+                </button>
+                <div className="batch-select-row !mt-0">
+                  <span className="batch-select-label">Select Batch:</span>
+                  <select
+                    value={selectedBatch}
+                    onChange={(e) => setSelectedBatch(e.target.value)}
+                    className="batch-select-input"
+                  >
+                    {batchOptions.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Search Controls for Requests Assignment History (replicated from Search History) */}
+            <div className="req-search-controls md:!grid-cols-[2.5fr_1fr] mb-4">
               <div className="req-input-wrap">
                 <svg className="req-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 <input
                   type="text"
-                  placeholder="Search history by ID, Student Name, or Student ID"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by ID, Student Name, Student ID, or Assigned Staff"
+                  value={assignmentHistorySearch}
+                  onChange={(e) => setAssignmentHistorySearch(e.target.value)}
                   className="req-search-field"
                 />
               </div>
@@ -1279,11 +1666,11 @@ export default function RegistrarRequestsPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <select
-                  value={docTypeFilter}
-                  onChange={(e) => setDocTypeFilter(e.target.value)}
+                  value={assignmentHistoryDocType}
+                  onChange={(e) => setAssignmentHistoryDocType(e.target.value)}
                   className="req-dropdown-field"
                 >
-                  <option value="">Document Type</option>
+                  <option value="">All Document Types</option>
                   {credentialTypes.map((ct) => (
                     <option key={ct.id} value={ct.name}>
                       {ct.name}
@@ -1291,31 +1678,151 @@ export default function RegistrarRequestsPage() {
                   ))}
                 </select>
               </div>
-
-              <div className="req-input-wrap">
-                <svg className="req-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="req-dropdown-field"
-                >
-                  <option value="">All Statuses</option>
-                  {REQUEST_STATUSES.map((st) => (
-                    <option key={st} value={st}>
-                      {st}
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
-          </div>
 
+            <div className="table-responsive">
+              <table className="custom-data-table">
+                <thead>
+                  <tr>
+                    {isSelectionMode && (
+                      <th className="w-10 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            historyBatchRequests.length > 0 &&
+                            (showAllHistoryBatch ? historyBatchRequests : historyBatchRequests.slice(0, 10)).every((item) => isItemSelected(item))
+                          }
+                          onChange={() =>
+                            handleToggleSelectAll(showAllHistoryBatch ? historyBatchRequests : historyBatchRequests.slice(0, 10))
+                          }
+                          className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                          title="Select all"
+                        />
+                      </th>
+                    )}
+                    <th>Request ID</th>
+                    <th>Student</th>
+                    <th>Document Type</th>
+                    <th>Status</th>
+                    <th>Assigned Staff</th>
+                    <th>Assignment Status</th>
+                    <th className="text-right whitespace-nowrap min-w-[170px]">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
+                        Loading requests from server...
+                      </td>
+                    </tr>
+                  ) : historyBatchRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
+                        {assignmentHistorySearch || assignmentHistoryDocType
+                          ? 'No matching archived assignments found.'
+                          : historyTotalCount === 0
+                          ? 'No requests assignment history yet.'
+                          : 'No archived requests found in this batch.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    (showAllHistoryBatch ? historyBatchRequests : historyBatchRequests.slice(0, 10)).map((item) => (
+                      <tr key={item.rawId || item.id} className={isItemSelected(item) && isSelectionMode ? 'bg-indigo-50/50' : ''}>
+                        {isSelectionMode && (
+                          <td className="w-10 px-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isItemSelected(item)}
+                              onChange={() => handleToggleSelect(item.rawId || item.id)}
+                              className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                            />
+                          </td>
+                        )}
+                        <td className="req-id-text">{item.id}</td>
+                        <td>
+                          <div className="student-name-text">{item.student_name}</div>
+                          <div className="student-id-sub">{item.student_id}</div>
+                        </td>
+                        <td>
+                          <div className="doc-name-text">{item.document_type}</div>
+                          <div className="doc-copies-sub">{item.copies}</div>
+                        </td>
+                        <td>{getStatusBadge(item.batch_status || item.status)}</td>
+                        <td>
+                          <div className="font-semibold text-slate-800 text-sm">
+                            {item.assigned_staff || item.verified_by_name || item.processed_by || item.archived_by || (
+                              <span className="text-slate-400 italic font-normal text-xs">Unassigned</span>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span>Completed</span>
+                          </span>
+                        </td>
+                        <td className="text-right whitespace-nowrap">
+                          <div className="inline-flex items-center justify-end gap-2 flex-nowrap whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleRestoreRequest(item)}
+                              className="staff-btn-restore"
+                              title="Restore back to Active Processing queue"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              <span>Restore</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenProcess(item)}
+                              className="staff-btn-view"
+                              title="View request details"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="3" strokeWidth={2} />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                              <span>View</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {!loading && historyBatchRequests.length > 10 && (
+              <div className="table-see-more-wrap">
+                <button
+                  type="button"
+                  onClick={() => setShowAllHistoryBatch((prev) => !prev)}
+                  className="table-see-more-btn"
+                >
+                  <span>
+                    {showAllHistoryBatch ? 'See Less' : 'See More'}
+                  </span>
+                  <svg
+                    className={`w-4 h-4 transition-transform ${showAllHistoryBatch ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
           <StaffRequestsTable
             title="Completed & Claimed Requests History"
             subtitle="Document requests that have been claimed by students and archived from active queue"
-            badgeCount={historyRequests.length}
             loading={loading}
             error={error}
             filteredRequests={historyRequests}
@@ -1326,6 +1833,49 @@ export default function RegistrarRequestsPage() {
             onRestore={handleRestoreRequest}
             showAssignedStaff={true}
             emptyMessage="No claimed document requests in history yet."
+            enableSelection={true}
+            isSelectionMode={isSelectionMode}
+            onToggleSelectionMode={() => {
+              setIsSelectionMode((p) => !p);
+              if (isSelectionMode) setSelectedIds(new Set());
+            }}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onToggleSelectAll={() => handleToggleSelectAll(historyRequests.slice(0, 10))}
+            searchControls={
+              <div className="req-search-controls md:!grid-cols-[2.5fr_1fr]">
+                <div className="req-input-wrap">
+                  <svg className="req-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Search history by ID, Student Name, or Student ID"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="req-search-field"
+                  />
+                </div>
+
+                <div className="req-input-wrap">
+                  <svg className="req-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <select
+                    value={docTypeFilter}
+                    onChange={(e) => setDocTypeFilter(e.target.value)}
+                    className="req-dropdown-field"
+                  >
+                    <option value="">All Document Types</option>
+                    {credentialTypes.map((ct) => (
+                      <option key={ct.id} value={ct.name}>
+                        {ct.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            }
           />
         </>
       )}
@@ -1336,6 +1886,49 @@ export default function RegistrarRequestsPage() {
         onClose={() => setProcessModalOpen(false)}
         requestItem={selectedRequest}
         onUpdated={handleRequestUpdated}
+      />
+
+      {/* Floating Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[#0B0B36] text-white px-5 py-3 rounded-2xl shadow-2xl border border-indigo-700/60 flex items-center gap-4 flex-wrap animate-in fade-in slide-in-from-bottom-4">
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-white/20 text-white font-black text-xs flex items-center justify-center">
+              {selectedRequestsList.length}
+            </span>
+            <span className="text-xs sm:text-sm font-bold tracking-tight">
+              {selectedRequestsList.length === 1 ? '1 request selected' : `${selectedRequestsList.length} requests selected`}
+            </span>
+          </div>
+
+          <div className="h-4 w-px bg-white/20 hidden sm:block" />
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setBatchModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold transition-all shadow-sm cursor-pointer"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              <span>Update Status & Releasing Date</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-1.5 text-xs text-white/70 hover:text-white transition-colors cursor-pointer"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
+
+      <BatchUpdateModal
+        isOpen={batchModalOpen}
+        onClose={() => setBatchModalOpen(false)}
+        selectedRequests={selectedRequestsList}
+        onConfirm={handleBatchUpdate}
       />
     </div>
   );

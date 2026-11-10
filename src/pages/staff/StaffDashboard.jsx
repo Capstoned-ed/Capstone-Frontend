@@ -7,6 +7,7 @@ import requestsApi, {
   updateStoredRequest,
   isValidRequest,
   logProcessedAction,
+  getRequestTimestamp,
   sortRequestsNewestFirst,
   resolveRequestDocType,
   getStaffAssignments,
@@ -356,11 +357,11 @@ export default function StaffDashboard() {
           return 0;
         };
 
-        const timeA = getAssignTime(a);
-        const timeB = getAssignTime(b);
+        const timeA = Math.max(getAssignTime(a), getRequestTimestamp(a));
+        const timeB = Math.max(getAssignTime(b), getRequestTimestamp(b));
 
         if (timeA !== timeB) {
-          return timeB - timeA; // Newly claimed or assigned ALWAYS AT THE VERY TOP!
+          return timeB - timeA; // Newly updated or assigned ALWAYS AT THE VERY TOP!
         }
 
         return sortRequestsNewestFirst(a, b);
