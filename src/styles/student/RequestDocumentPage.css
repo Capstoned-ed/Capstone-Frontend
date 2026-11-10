@@ -426,10 +426,20 @@
   width: 100%;
   border: none;
   outline: none;
+  background: transparent;
   font-size: 0.875rem;
   font-weight: 700;
   text-align: center;
   color: #0f172a;
+  -moz-appearance: textfield;
+  appearance: textfield;
+  cursor: default;
+}
+
+.review-copies-stepper input::-webkit-outer-spin-button,
+.review-copies-stepper input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 /* Attached Clearance & Photo Review Cards */

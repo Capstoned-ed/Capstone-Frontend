@@ -1664,9 +1664,8 @@ export default function RequestDocumentPage() {
                                   value={itemCopies}
                                   min={1}
                                   max={10}
-                                  onChange={(e) =>
-                                    handleUpdateDocCopies(it.title, parseInt(e.target.value) || 1)
-                                  }
+                                  readOnly
+                                  className="select-none pointer-events-none"
                                 />
                                 <button
                                   type="button"
@@ -1726,12 +1725,8 @@ export default function RequestDocumentPage() {
                             value={getCopiesForDoc(currentDocDetails.title)}
                             min={1}
                             max={10}
-                            onChange={(e) =>
-                              handleUpdateDocCopies(
-                                currentDocDetails.title,
-                                parseInt(e.target.value) || 1
-                              )
-                            }
+                            readOnly
+                            className="select-none pointer-events-none"
                           />
                           <button
                             type="button"
