@@ -7,6 +7,7 @@ import requestsApi, {
   updateStoredRequest,
   isValidRequest,
   logProcessedAction,
+  getRequestTimestamp,
   sortRequestsNewestFirst,
   resolveRequestDocType,
   getStaffAssignments,
