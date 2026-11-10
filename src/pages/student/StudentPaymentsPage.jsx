@@ -360,22 +360,7 @@ export default function StudentPaymentsPage() {
           </div>
         </div>
 
-        {/* History Banner (Shown in History View) */}
-        {viewMode === 'history' && (
-          <div className="mb-6 p-4 rounded-xl border border-emerald-200 bg-emerald-50/90 flex items-center justify-between text-xs sm:text-sm text-emerald-950 shadow-2xs">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
-              <span>Showing <strong>{historyConfirmedRequests.length}</strong> completed and verified payment(s) in your history.</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setViewMode('active')}
-              className="text-xs font-bold text-emerald-800 hover:underline cursor-pointer ml-3 shrink-0"
-            >
-              ← Back to Active Payments
-            </button>
-          </div>
-        )}
+
 
         {/* OTC 3-Step Guide Banner (Active View Only) */}
         {viewMode === 'active' && (
