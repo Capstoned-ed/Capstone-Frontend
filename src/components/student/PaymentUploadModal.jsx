@@ -13,17 +13,34 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
   const [receiptPreview, setReceiptPreview] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Prepopulate if proof was already submitted
+  // Prepopulate if proof was already submitted for THIS specific request
   useEffect(() => {
     if (request && isOpen) {
-      const existing =
-        request.payment_proof ||
-        getStoredPaymentProof([
+      const trackingCode = request.tracking_number || request.trackingId || request.id;
+      let existing = request.payment_proof;
+
+      // Verify proof belongs to THIS request
+      if (existing) {
+        const pTrack = String(existing.trackingNumber || '').trim().toUpperCase();
+        const pReqId = String(existing.requestId || '').trim().toUpperCase();
+        const thisTrack = String(trackingCode || '').trim().toUpperCase();
+        const thisId = String(request.id || request.rawId || '').trim().toUpperCase();
+        const matches =
+          (pTrack && (pTrack === thisTrack || pTrack === thisId)) ||
+          (pReqId && (pReqId === thisTrack || pReqId === thisId));
+        if (!matches) {
+          existing = null;
+        }
+      }
+
+      if (!existing) {
+        existing = getStoredPaymentProof([
           request.tracking_number,
           request.id,
           request.rawId,
-          request.student_id,
         ]);
+      }
+
       if (existing) {
         setOrNumberInput(existing.receiptReferenceNumber || '');
         setReceiptPreview(existing.receiptImage || null);
