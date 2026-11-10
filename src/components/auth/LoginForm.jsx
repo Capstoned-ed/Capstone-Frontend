@@ -37,20 +37,7 @@ export default function LoginForm({ onSuccess }) {
         } catch {}
       }
 
-      let backendPassword = password;
-      try {
-        const customPasswords = JSON.parse(localStorage.getItem('regquest_custom_passwords') || '{}');
-        const userCustom =
-          customPasswords[loginIdentifier] ||
-          customPasswords[String(loginIdentifier).toLowerCase()] ||
-          customPasswords[username.trim().toLowerCase()] ||
-          customPasswords[username.trim()];
-        if (userCustom && userCustom.newPassword && password === userCustom.newPassword) {
-          backendPassword = userCustom.originalPassword || loginIdentifier;
-        }
-      } catch {}
-
-      const result = await login(loginIdentifier, backendPassword);
+      const result = await login(loginIdentifier, password);
       if (onSuccess) {
         onSuccess(result.user);
       }
