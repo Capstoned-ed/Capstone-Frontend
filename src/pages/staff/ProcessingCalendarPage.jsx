@@ -211,7 +211,8 @@ export default function ProcessingCalendarPage() {
 
           const copiesNum = parseInt(r.copies) || 1;
           const reqDate = toLocalDateStr(r.created_at) || toLocalDateStr(r.request_date) || toLocalDateStr(new Date());
-          const relDate = r.release_date ? toLocalDateStr(r.release_date) : calculateReleaseDate(reqDate, cred?.processing_days);
+          const rawRelDate = r.release_date || r.date_of_release || r.target_release_date;
+          const relDate = rawRelDate ? toLocalDateStr(rawRelDate) : calculateReleaseDate(reqDate, cred?.processing_days);
 
           return {
             ...r,
