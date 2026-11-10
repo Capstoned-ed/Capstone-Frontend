@@ -1,6 +1,28 @@
 import apiClient from './client';
 import { saveStoredNotification } from './notifications';
 
+// Clean up legacy keys that were mistakenly saved by student ID or user ID
+if (typeof window !== 'undefined' && window.localStorage) {
+  try {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(PAYMENTS_STORAGE_PREFIX)) {
+        const suffix = k.replace(PAYMENTS_STORAGE_PREFIX, '');
+        // If suffix is purely numeric (student ID / user ID), purge it so it doesn't cross-contaminate requests
+        if (/^\d{5,12}$/.test(suffix)) {
+          keysToRemove.push(k);
+        }
+      }
+    }
+    keysToRemove.forEach((k) => {
+      localStorage.removeItem(k);
+      try { sessionStorage.removeItem(k); } catch {}
+    });
+    localStorage.removeItem('regquest_latest_payment_proof');
+  } catch {}
+}
+
 export const PAYMENTS_STORAGE_PREFIX = 'regquest_payment_';
 
 /**
@@ -75,10 +97,47 @@ export const paymentsApi = {
       userId,
     };
 
-    // Save proof across tracking number, request ID, student ID
-    saveStoredPaymentProof(trackingNumber || requestId, paymentRecord);
-    if (requestId) saveStoredPaymentProof(String(requestId), paymentRecord);
-    if (studentId) saveStoredPaymentProof(studentId, paymentRecord);
+    // Save proof ONLY for this specific request's tracking number and request ID!
+    // NEVER save by studentId or userId to avoid cross-attaching receipts to other requests.
+    if (trackingNumber) {
+      saveStoredPaymentProof(trackingNumber, paymentRecord);
+    }
+    if (requestId && String(requestId) !== String(trackingNumber)) {
+      saveStoredPaymentProof(String(requestId), paymentRecord);
+    }
+
+    // Immediately persist payment proof into the exact request in local storage
+    try {
+      ['regquest_submitted_requests', 'student_my_requests'].forEach((storageKey) => {
+        const raw = localStorage.getItem(storageKey);
+        if (raw) {
+          const list = JSON.parse(raw);
+          if (Array.isArray(list)) {
+            const updated = list.map((item) => {
+              const matches =
+                (trackingNumber && (item.tracking_number === trackingNumber || item.trackingId === trackingNumber)) ||
+                (requestId && (String(item.id) === String(requestId) || String(item.rawId) === String(requestId)));
+              if (matches) {
+                return {
+                  ...item,
+                  payment_proof: paymentRecord,
+                  payment_status: 'PAYMENT_SUBMITTED',
+                  or_number: receiptReferenceNumber || 'Submitted at Window',
+                  receipt_image: paymentRecord.receiptImage,
+                  payment_submission_type: submissionType,
+                  updated_at: new Date().toISOString(),
+                };
+              }
+              return item;
+            });
+            localStorage.setItem(storageKey, JSON.stringify(updated));
+          }
+        }
+      });
+      window.dispatchEvent(new Event('regquest_requests_updated'));
+    } catch (err) {
+      console.warn('Failed to update local requests with payment proof:', err);
+    }
 
     // Notify Staff & Admin that student has submitted proof of payment
     saveStoredNotification({
@@ -147,7 +206,6 @@ export function saveStoredPaymentProof(identifier, paymentData) {
 
   try {
     localStorage.setItem(`${PAYMENTS_STORAGE_PREFIX}${identifier}`, JSON.stringify(paymentData));
-    localStorage.setItem('regquest_latest_payment_proof', JSON.stringify(paymentData));
   } catch (err) {
     // If quota exceeded, clean up old payment records
     try {
@@ -173,22 +231,49 @@ export function saveStoredPaymentProof(identifier, paymentData) {
 }
 
 /**
- * Retrieve saved payment proof by candidate identifiers
+ * Retrieve saved payment proof by candidate identifiers.
+ * Strictly verifies that the stored record's trackingNumber or requestId matches one of the candidateKeys.
  */
 export function getStoredPaymentProof(candidateKeys = []) {
-  const keys = Array.isArray(candidateKeys) ? candidateKeys : [candidateKeys];
+  const keys = (Array.isArray(candidateKeys) ? candidateKeys : [candidateKeys])
+    .filter((k) => k !== undefined && k !== null && String(k).trim() !== '')
+    .map((k) => String(k).trim());
+
+  if (keys.length === 0) return null;
+
+  const cleanTargetKeys = keys.map((k) => k.toUpperCase());
 
   for (const k of keys) {
-    if (!k) continue;
+    let raw = null;
     try {
-      const sVal = sessionStorage.getItem(`${PAYMENTS_STORAGE_PREFIX}${k}`);
-      if (sVal) return JSON.parse(sVal);
+      raw = sessionStorage.getItem(`${PAYMENTS_STORAGE_PREFIX}${k}`);
     } catch {}
 
-    try {
-      const lVal = localStorage.getItem(`${PAYMENTS_STORAGE_PREFIX}${k}`);
-      if (lVal) return JSON.parse(lVal);
-    } catch {}
+    if (!raw) {
+      try {
+        raw = localStorage.getItem(`${PAYMENTS_STORAGE_PREFIX}${k}`);
+      } catch {}
+    }
+
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed) {
+          // STRICT VALIDATION: Ensure this payment record actually belongs to this specific request!
+          const recordTracking = String(parsed.trackingNumber || '').trim().toUpperCase();
+          const recordReqId = String(parsed.requestId || '').trim().toUpperCase();
+          const recordId = String(parsed.id || '').trim().toUpperCase();
+
+          const belongsToThisRequest = cleanTargetKeys.some(
+            (target) => target === recordTracking || target === recordReqId || target === recordId
+          );
+
+          if (belongsToThisRequest) {
+            return parsed;
+          }
+        }
+      } catch {}
+    }
   }
 
   return null;

@@ -844,10 +844,26 @@ export const requestsApi = {
     try {
       const response = await apiClient.get('/api/requests/', { params });
       const rawList = Array.isArray(response.data) ? response.data : (response.data?.results || []);
-      backendResults = rawList.map((b) => ({
-        ...b,
-        document_type: b.document_type || resolveRequestDocType(b),
-      }));
+      backendResults = rawList.map((b) => {
+        const latestBackendPayment = Array.isArray(b.payments) && b.payments.length > 0 ? b.payments[0] : null;
+        return {
+          ...b,
+          document_type: b.document_type || resolveRequestDocType(b),
+          payment_status: b.payment_status || latestBackendPayment?.status || null,
+          or_number: b.or_number || latestBackendPayment?.receipt_reference_number || '',
+          receipt_image: b.receipt_image || latestBackendPayment?.receipt_image || null,
+          payment_proof: b.payment_proof || (latestBackendPayment ? {
+            id: latestBackendPayment.id,
+            requestId: b.id,
+            trackingNumber: b.tracking_number,
+            amount: latestBackendPayment.amount,
+            receiptReferenceNumber: latestBackendPayment.receipt_reference_number,
+            receiptImage: latestBackendPayment.receipt_image,
+            status: latestBackendPayment.status,
+            remarks: latestBackendPayment.remarks,
+          } : null),
+        };
+      });
     } catch (err) {
       console.warn('requestsApi.list backend returned error, using local requests:', err);
     }
@@ -939,6 +955,27 @@ export const requestsApi = {
             enriched.clearance_is_pdf = Boolean(clRec.meta?.isPdf || clRec.dataUrl.startsWith('data:application/pdf'));
             enriched.clearance_file_name = clRec.meta?.fileName || enriched.clearance_file_name || 'Clearance Document';
             enriched.clearance_status = enriched.clearance_status || 'PENDING';
+          }
+        }
+
+        // Validate if enriched.payment_proof actually belongs to this specific request
+        if (enriched.payment_proof) {
+          const recTracking = String(enriched.payment_proof.trackingNumber || '').trim().toUpperCase();
+          const recReqId = String(enriched.payment_proof.requestId || '').trim().toUpperCase();
+          const thisTracking = String(enriched.tracking_number || enriched.trackingId || '').trim().toUpperCase();
+          const thisId = String(enriched.id || enriched.rawId || '').trim().toUpperCase();
+
+          const belongs =
+            (recTracking && (recTracking === thisTracking || recTracking === thisId)) ||
+            (recReqId && (recReqId === thisTracking || recReqId === thisId));
+
+          if (!belongs) {
+            enriched.payment_proof = null;
+            if (enriched.payment_status === 'PAYMENT_SUBMITTED') {
+              enriched.payment_status = null;
+            }
+            enriched.or_number = '';
+            enriched.receipt_image = null;
           }
         }
 
