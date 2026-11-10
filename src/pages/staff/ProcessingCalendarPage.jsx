@@ -3,7 +3,7 @@ import requestsApi, { getStoredRequests, isValidRequest, sortRequestsNewestFirst
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
-import ProcessCalendarCard from '../../components/calendar/ProcessCalendarCard';
+import ProcessCalendarCard, { isForProcessingStatus } from '../../components/calendar/ProcessCalendarCard';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
 import '../../styles/staff/ProcessingCalendar.css';
 
@@ -300,7 +300,9 @@ export default function ProcessingCalendarPage() {
     };
 
     return {
-      toProcess: syncList(dayCategories.toProcess),
+      toProcess: syncList(dayCategories.toProcess).filter((r) =>
+        isForProcessingStatus(r.status, r.rawStatus || r.raw?.status, r.payment_status)
+      ),
       releasing: syncList(dayCategories.releasing),
       newRequests: syncList(dayCategories.newRequests),
     };
@@ -317,7 +319,10 @@ export default function ProcessingCalendarPage() {
       return;
     }
 
-    const toProc = Array.isArray(categories) ? categories : (categories.toProcess || []);
+    const rawToProc = Array.isArray(categories) ? categories : (categories.toProcess || []);
+    const toProc = rawToProc.filter((r) =>
+      isForProcessingStatus(r.status, r.rawStatus || r.raw?.status, r.payment_status)
+    );
     const rel = Array.isArray(categories) ? [] : (categories.releasing || []);
     const newR = Array.isArray(categories) ? [] : (categories.newRequests || []);
 

@@ -31,6 +31,43 @@ export function saveStaffAssignments(map) {
   }
 }
 
+export const ACTIVITY_TIMESTAMPS_KEY = 'regquest_activity_timestamps';
+
+export function getRequestActivityTimestamps() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(ACTIVITY_TIMESTAMPS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function recordRequestActivityTimestamp(idOrItem, timestamp = Date.now()) {
+  if (typeof window === 'undefined' || !idOrItem) return;
+  try {
+    const map = getRequestActivityTimestamps();
+    const ts = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime();
+    if (isNaN(ts) || ts <= 0) return;
+
+    const keys = [];
+    if (typeof idOrItem === 'object') {
+      keys.push(idOrItem.id, idOrItem.rawId, idOrItem.tracking_number, idOrItem.trackingId);
+    } else {
+      keys.push(idOrItem);
+    }
+
+    keys.filter(Boolean).forEach((k) => {
+      map[String(k).trim()] = ts;
+    });
+
+    localStorage.setItem(ACTIVITY_TIMESTAMPS_KEY, JSON.stringify(map));
+    window.dispatchEvent(new Event('regquest_activity_updated'));
+  } catch (err) {
+    console.warn('Failed to record request activity timestamp:', err);
+  }
+}
+
 export function getStaffAssignmentTimestamps() {
   if (typeof window === 'undefined') return {};
   try {
@@ -41,13 +78,26 @@ export function getStaffAssignmentTimestamps() {
   }
 }
 
-export function recordStaffAssignmentTimestamp(requestId, timestamp = Date.now()) {
-  if (typeof window === 'undefined' || !requestId) return;
+export function recordStaffAssignmentTimestamp(idOrItem, timestamp = Date.now()) {
+  if (typeof window === 'undefined' || !idOrItem) return;
   try {
     const map = getStaffAssignmentTimestamps();
     const ts = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime();
-    map[String(requestId)] = ts;
+    if (isNaN(ts) || ts <= 0) return;
+
+    const keys = [];
+    if (typeof idOrItem === 'object') {
+      keys.push(idOrItem.id, idOrItem.rawId, idOrItem.tracking_number, idOrItem.trackingId);
+    } else {
+      keys.push(idOrItem);
+    }
+
+    keys.filter(Boolean).forEach((k) => {
+      map[String(k).trim()] = ts;
+    });
+
     localStorage.setItem(ASSIGNMENT_TIMESTAMPS_KEY, JSON.stringify(map));
+    recordRequestActivityTimestamp(idOrItem, ts);
     window.dispatchEvent(new Event('regquest_assignments_updated'));
   } catch (err) {
     console.warn('Failed to record staff assignment timestamp:', err);
@@ -399,19 +449,69 @@ export function isValidRequest(item) {
 
 /**
  * Safely parse a timestamp (milliseconds) from any request object.
+ * Inspects recorded activity timestamps, recent updates, and creation dates
+ * so newly updated or newly created requests sort directly to the very top.
  */
 export function getRequestTimestamp(r) {
   if (!r) return 0;
-  if (r.created_at) {
-    const t = new Date(r.created_at).getTime();
-    if (!isNaN(t) && t > 0) return t;
+
+  const keys = [r.tracking_number, r.id, r.rawId, r.trackingId].filter(Boolean).map((k) => String(k).trim());
+
+  const activityMap = getRequestActivityTimestamps();
+  let activityTime = 0;
+  for (const k of keys) {
+    if (activityMap[k]) {
+      const num = Number(activityMap[k]);
+      if (!isNaN(num) && num > activityTime) {
+        activityTime = num;
+      }
+    }
   }
-  const dStr = r.request_date || r.date;
-  if (dStr && dStr !== 'N/A') {
-    const t = new Date(dStr).getTime();
-    if (!isNaN(t) && t > 0) return t;
+
+  const assignTimestamps = getStaffAssignmentTimestamps();
+  let assignTime = 0;
+  for (const k of keys) {
+    if (assignTimestamps[k]) {
+      const num = Number(assignTimestamps[k]);
+      if (!isNaN(num) && num > assignTime) {
+        assignTime = num;
+      }
+    }
   }
-  return 0;
+
+  const candidates = [
+    activityTime,
+    assignTime,
+    r.updated_at,
+    r.updatedAt,
+    r.last_updated,
+    r.assigned_at,
+    r.accepted_at,
+    r.created_at,
+    r.request_date && r.request_date !== 'N/A' ? r.request_date : null,
+    r.date && r.date !== 'N/A' ? r.date : null,
+  ];
+
+  let maxTime = 0;
+  for (const c of candidates) {
+    if (!c) continue;
+    let t = 0;
+    if (typeof c === 'number') {
+      t = c;
+    } else if (typeof c === 'string' && /^\d{10,}$/.test(c.trim())) {
+      t = Number(c.trim());
+    } else {
+      const parsed = new Date(c).getTime();
+      if (!isNaN(parsed) && parsed > 0) {
+        t = parsed;
+      }
+    }
+    if (t > maxTime) {
+      maxTime = t;
+    }
+  }
+
+  return maxTime;
 }
 
 /**
@@ -658,6 +758,12 @@ export function saveStoredRequest(requestItem) {
       } catch {}
     }
 
+    // Always record activity timestamp so this request instantly sorts to the top
+    const nowTime = Date.now();
+    candidateIds.forEach((cid) => {
+      recordRequestActivityTimestamp(cid, nowTime);
+    });
+
     const trackingCode = requestItem.tracking_number || requestItem.trackingId || requestItem.id || 'REQ';
     const docTitle = requestItem.document_type || requestItem.credential_type_details?.name || 'Document';
     const studentName = requestItem.student_name || 'Student';
@@ -794,6 +900,12 @@ export function updateStoredRequest(idOrTracking, patch, options = {}) {
       } catch {}
     }
 
+    // Always record activity timestamp so this request instantly sorts to the top
+    const nowTime = Date.now();
+    candidateIds.forEach((cid) => {
+      recordRequestActivityTimestamp(cid, nowTime);
+    });
+
     // Exactly ONE notification per real status change (sent to the student).
     // Callers that send their own tailored message pass { silentNotify: true }.
     const statusChanged =
@@ -844,10 +956,26 @@ export const requestsApi = {
     try {
       const response = await apiClient.get('/api/requests/', { params });
       const rawList = Array.isArray(response.data) ? response.data : (response.data?.results || []);
-      backendResults = rawList.map((b) => ({
-        ...b,
-        document_type: b.document_type || resolveRequestDocType(b),
-      }));
+      backendResults = rawList.map((b) => {
+        const latestBackendPayment = Array.isArray(b.payments) && b.payments.length > 0 ? b.payments[0] : null;
+        return {
+          ...b,
+          document_type: b.document_type || resolveRequestDocType(b),
+          payment_status: b.payment_status || latestBackendPayment?.status || null,
+          or_number: b.or_number || latestBackendPayment?.receipt_reference_number || '',
+          receipt_image: b.receipt_image || latestBackendPayment?.receipt_image || null,
+          payment_proof: b.payment_proof || (latestBackendPayment ? {
+            id: latestBackendPayment.id,
+            requestId: b.id,
+            trackingNumber: b.tracking_number,
+            amount: latestBackendPayment.amount,
+            receiptReferenceNumber: latestBackendPayment.receipt_reference_number,
+            receiptImage: latestBackendPayment.receipt_image,
+            status: latestBackendPayment.status,
+            remarks: latestBackendPayment.remarks,
+          } : null),
+        };
+      });
     } catch (err) {
       console.warn('requestsApi.list backend returned error, using local requests:', err);
     }
@@ -902,6 +1030,7 @@ export const requestsApi = {
           assigned_staff: loc.assigned_staff || backendItem.assigned_staff || null,
           assigned_at: loc.assigned_at || backendItem.assigned_at || null,
           accepted_at: loc.accepted_at || backendItem.accepted_at || null,
+          updated_at: loc.updated_at || backendItem.updated_at || loc.updatedAt || backendItem.updatedAt || null,
           clearance_preview: loc.clearance_preview || backendItem.clearance_preview,
           clearance_id: loc.clearance_id || backendItem.clearance_id || null,
           clearance_is_pdf: loc.clearance_is_pdf ?? backendItem.clearance_is_pdf ?? false,
@@ -939,6 +1068,27 @@ export const requestsApi = {
             enriched.clearance_is_pdf = Boolean(clRec.meta?.isPdf || clRec.dataUrl.startsWith('data:application/pdf'));
             enriched.clearance_file_name = clRec.meta?.fileName || enriched.clearance_file_name || 'Clearance Document';
             enriched.clearance_status = enriched.clearance_status || 'PENDING';
+          }
+        }
+
+        // Validate if enriched.payment_proof actually belongs to this specific request
+        if (enriched.payment_proof) {
+          const recTracking = String(enriched.payment_proof.trackingNumber || '').trim().toUpperCase();
+          const recReqId = String(enriched.payment_proof.requestId || '').trim().toUpperCase();
+          const thisTracking = String(enriched.tracking_number || enriched.trackingId || '').trim().toUpperCase();
+          const thisId = String(enriched.id || enriched.rawId || '').trim().toUpperCase();
+
+          const belongs =
+            (recTracking && (recTracking === thisTracking || recTracking === thisId)) ||
+            (recReqId && (recReqId === thisTracking || recReqId === thisId));
+
+          if (!belongs) {
+            enriched.payment_proof = null;
+            if (enriched.payment_status === 'PAYMENT_SUBMITTED') {
+              enriched.payment_status = null;
+            }
+            enriched.or_number = '';
+            enriched.receipt_image = null;
           }
         }
 

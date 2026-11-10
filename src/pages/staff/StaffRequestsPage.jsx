@@ -3,6 +3,9 @@ import requestsApi, {
   updateStoredRequest,
   isValidRequest,
   logProcessedAction,
+  getRequestTimestamp,
+  getRequestActivityTimestamps,
+  recordRequestActivityTimestamp,
   sortRequestsNewestFirst,
   resolveRequestDocType,
   getStaffAssignments,
@@ -20,6 +23,7 @@ import usersApi from '../../api/users';
 import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
 import useToast from '../../hooks/useToast';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
+import BatchUpdateModal from '../../components/common/BatchUpdateModal';
 import { StaffRequestsTable, StaffSearchFilter } from '../../components/staff';
 import '../../styles/staff/StaffRequestsPage.css';
 
@@ -153,6 +157,7 @@ export default function StaffRequestsPage() {
   const [clearances, setClearances] = useState([]);
   const [assignments, setAssignments] = useState(getStaffAssignments);
   const [assignmentTimestamps, setAssignmentTimestamps] = useState(getStaffAssignmentTimestamps);
+  const [activityTimestamps, setActivityTimestamps] = useState(getRequestActivityTimestamps);
   const [archivedMap, setArchivedMap] = useState(getArchivedRequestsMap);
   const [activeTab, setActiveTab] = useState('active'); // 'active' | 'history'
 
@@ -167,6 +172,48 @@ export default function StaffRequestsPage() {
   const [newStatus, setNewStatus] = useState('Pending');
   const [notes, setNotes] = useState('');
   const [updating, setUpdating] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [selectionModeTable, setSelectionModeTable] = useState(null); // 'assigned' | 'unassigned' | 'history' | null
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
+
+  const handleToggleSelect = (rawOrId) => {
+    const key = String(rawOrId);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = (items) => {
+    if (!items || items.length === 0) return;
+    const allSelected = items.every((i) =>
+      selectedIds.has(String(i.id)) ||
+      selectedIds.has(String(i.rawId)) ||
+      (i.tracking_number && selectedIds.has(String(i.tracking_number)))
+    );
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      items.forEach((i) => {
+        const key = String(i.rawId || i.id);
+        const idKey = String(i.id);
+        const trackKey = i.tracking_number ? String(i.tracking_number) : null;
+        if (allSelected) {
+          next.delete(key);
+          next.delete(idKey);
+          if (trackKey) next.delete(trackKey);
+        } else {
+          next.add(key);
+        }
+      });
+      return next;
+    });
+  };
 
   useEffect(() => {
     let ignore = false;
@@ -225,22 +272,29 @@ export default function StaffRequestsPage() {
       setAssignments(getStaffAssignments());
       setAssignmentTimestamps(getStaffAssignmentTimestamps());
     };
+    const handleActivitySync = () => {
+      setActivityTimestamps(getRequestActivityTimestamps());
+    };
     const handleArchivedSync = () => {
       setArchivedMap(getArchivedRequestsMap());
     };
 
     window.addEventListener('regquest_requests_updated', handleSync);
     window.addEventListener('regquest_assignments_updated', handleAssignmentsSync);
+    window.addEventListener('regquest_activity_updated', handleActivitySync);
     window.addEventListener('regquest_archived_updated', handleArchivedSync);
     window.addEventListener('storage', handleAssignmentsSync);
+    window.addEventListener('storage', handleActivitySync);
     window.addEventListener('storage', handleArchivedSync);
 
     return () => {
       ignore = true;
       window.removeEventListener('regquest_requests_updated', handleSync);
       window.removeEventListener('regquest_assignments_updated', handleAssignmentsSync);
+      window.removeEventListener('regquest_activity_updated', handleActivitySync);
       window.removeEventListener('regquest_archived_updated', handleArchivedSync);
       window.removeEventListener('storage', handleAssignmentsSync);
+      window.removeEventListener('storage', handleActivitySync);
       window.removeEventListener('storage', handleArchivedSync);
     };
   }, []);
@@ -517,6 +571,12 @@ export default function StaffRequestsPage() {
           (r.accepted_at ? new Date(r.accepted_at).getTime() : 0) ||
           (matchedStored?.accepted_at ? new Date(matchedStored.accepted_at).getTime() : 0) ||
           0,
+        updated_at:
+          matchedStored?.updated_at ||
+          matchedStored?.updatedAt ||
+          r.updated_at ||
+          r.updatedAt ||
+          null,
       };
     })
     .filter((r) => {
@@ -587,40 +647,23 @@ export default function StaffRequestsPage() {
   }, [allFilteredRequests, archivedMap]);
 
   // Card 1: Requests assigned to this staff member (from Active queue)
-  // Sorted by: MOST RECENTLY ACCEPTED / ASSIGNED AT THE VERY TOP (REGARDLESS OF REQUEST DATE)!
+  // Sorted by: MOST RECENTLY UPDATED / ACCEPTED / ASSIGNED AT THE VERY TOP!
   const assignedRequests = useMemo(() => {
     return activeFilteredRequests
       .filter((r) => isRequestAssignedToUser(r, user, assignments, users))
-      .sort((a, b) => {
-        const getAssignTime = (item) => {
-          const keys = [item.tracking_number, item.id, item.rawId].filter(Boolean).map(String);
-          for (const k of keys) {
-            if (assignmentTimestamps[k]) return Number(assignmentTimestamps[k]);
-          }
-          if (item.assigned_at) return Number(item.assigned_at) || new Date(item.assigned_at).getTime() || 0;
-          if (item.accepted_at) return Number(item.accepted_at) || new Date(item.accepted_at).getTime() || 0;
-          return 0;
-        };
-
-        const timeA = getAssignTime(a);
-        const timeB = getAssignTime(b);
-
-        if (timeA !== timeB) {
-          return timeB - timeA; // Newly claimed or assigned ALWAYS AT THE VERY TOP!
-        }
-
-        return sortRequestsNewestFirst(a, b);
-      });
-  }, [activeFilteredRequests, user, assignments, users, assignmentTimestamps]);
+      .sort(sortRequestsNewestFirst);
+  }, [activeFilteredRequests, user, assignments, users, activityTimestamps]);
 
   // Card 2: All unassigned requests (from Active queue)
   const unassignedRequests = useMemo(() => {
-    return activeFilteredRequests.filter((r) => {
-      const isAssigned = isRequestAssignedToUser(r, user, assignments, users);
-      const hasStaff = Boolean(r.assigned_staff && r.assigned_staff.trim() !== '' && r.assigned_staff.toLowerCase() !== 'unassigned');
-      return !isAssigned && !hasStaff;
-    });
-  }, [activeFilteredRequests, user, assignments, users]);
+    return activeFilteredRequests
+      .filter((r) => {
+        const isAssigned = isRequestAssignedToUser(r, user, assignments, users);
+        const hasStaff = Boolean(r.assigned_staff && r.assigned_staff.trim() !== '' && r.assigned_staff.toLowerCase() !== 'unassigned');
+        return !isAssigned && !hasStaff;
+      })
+      .sort(sortRequestsNewestFirst);
+  }, [activeFilteredRequests, user, assignments, users, activityTimestamps]);
 
   // Handlers for Archiving (Move to History) and Restoring
   const handleArchiveRequest = (item) => {
@@ -665,6 +708,235 @@ export default function StaffRequestsPage() {
     });
 
     toast.success(`Request ${item.id} restored to Active Queue.`);
+  };
+
+  const selectedRequestsList = useMemo(() => {
+    if (selectedIds.size === 0) return [];
+    return requests.filter((r) =>
+      selectedIds.has(String(r.id)) ||
+      selectedIds.has(String(r.rawId)) ||
+      (r.tracking_number && selectedIds.has(String(r.tracking_number)))
+    );
+  }, [requests, selectedIds]);
+
+  const handleBatchUpdate = async ({ newStatus: statusToSet, releasingDate, note }) => {
+    if (selectedRequestsList.length === 0) return;
+
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+
+    for (const item of selectedRequestsList) {
+      const targetId = item.rawId || item.id;
+      const trackingNo = item.tracking_number || item.id;
+
+      const patch = {
+        updated_at: nowIso,
+      };
+
+      if (statusToSet) {
+        patch.status = statusToSet;
+      }
+
+      if (releasingDate) {
+        patch.date_of_release = releasingDate;
+        patch.release_date = releasingDate;
+      }
+
+      if (note && note.trim()) {
+        const existingRemarks = item.remarks || '';
+        patch.remarks = existingRemarks
+          ? `${existingRemarks} | Note: ${note.trim()}`
+          : note.trim();
+        patch.notes = patch.remarks;
+      }
+
+      // Update in localStorage
+      updateStoredRequest(trackingNo || item.id || targetId, patch, {
+        fallbackItem: { ...item, ...patch },
+      });
+
+      // Record activity
+      recordRequestActivityTimestamp(trackingNo || item.id || targetId, nowTime);
+
+      // Log processed action
+      logProcessedAction({
+        actor: user?.username || 'staff',
+        actorName: user?.full_name || user?.username || 'Staff',
+        actorId: user?.id,
+        actorRole: user?.role || 'staff',
+        targetName: item.student_name,
+        targetId: item.student_id || trackingNo,
+        trackingNumber: trackingNo,
+        documentType: item.document_type,
+        action: `Batch updated: ${statusToSet ? `Status -> ${statusToSet}; ` : ''}${releasingDate ? `Release Date -> ${releasingDate}; ` : ''}${note ? `Note -> ${note}` : ''}`.trim(),
+        status: statusToSet || item.status,
+      });
+
+      // Backend API transition if applicable and numeric
+      if (statusToSet && targetId && !isNaN(Number(targetId))) {
+        requestsApi.transition(Number(targetId), {
+          status: statusToSet,
+          remarks: note || `Batch updated by staff`,
+        }).catch(() => {});
+      }
+    }
+
+    // Update in-memory state
+    setRawRequests((prev) =>
+      prev.map((r) => {
+        const isMatch =
+          selectedIds.has(String(r.id)) ||
+          selectedIds.has(String(r.rawId)) ||
+          (r.tracking_number && selectedIds.has(String(r.tracking_number)));
+        if (!isMatch) return r;
+
+        const updated = {
+          ...r,
+          updated_at: nowIso,
+        };
+        if (statusToSet) updated.status = statusToSet;
+        if (releasingDate) {
+          updated.release_date = releasingDate;
+          updated.date_of_release = releasingDate;
+        }
+        if (note && note.trim()) {
+          updated.remarks = r.remarks ? `${r.remarks} | Note: ${note.trim()}` : note.trim();
+          updated.notes = updated.remarks;
+        }
+        return updated;
+      })
+    );
+
+    setActivityTimestamps(getRequestActivityTimestamps());
+    window.dispatchEvent(new Event('regquest_requests_updated'));
+    toast.success(`Successfully updated ${selectedRequestsList.length} requests!`);
+    setSelectedIds(new Set());
+    setSelectionModeTable(null);
+    setBatchModalOpen(false);
+  };
+
+  const handleBatchClaimAndProcess = () => {
+    if (selectedRequestsList.length === 0) return;
+
+    const staffName =
+      user?.full_name ||
+      [user?.first_name, user?.last_name].filter(Boolean).join(' ') ||
+      user?.username ||
+      'Staff';
+
+    const now = Date.now();
+    const nowIso = new Date(now).toISOString();
+
+    const claimedMap = JSON.parse(localStorage.getItem('regquest_claimed_requests') || '{}');
+    const tsMap = getStaffAssignmentTimestamps();
+    const updatedAssignments = { ...assignments };
+
+    for (const item of selectedRequestsList) {
+      const reqId = item.id;
+      const rawId = item.rawId || item.id;
+      const trackingNo = item.tracking_number || item.id;
+
+      if (rawId) claimedMap[String(rawId)] = user?.username || user?.full_name || 'claimed';
+      if (reqId) claimedMap[String(reqId)] = user?.username || user?.full_name || 'claimed';
+      if (trackingNo) claimedMap[String(trackingNo)] = user?.username || user?.full_name || 'claimed';
+
+      if (reqId) tsMap[String(reqId)] = now;
+      if (rawId) tsMap[String(rawId)] = now;
+      if (trackingNo) tsMap[String(trackingNo)] = now;
+
+      if (rawId) {
+        updatedAssignments[rawId] = staffName;
+        updatedAssignments[String(rawId)] = staffName;
+      }
+      if (reqId) {
+        updatedAssignments[reqId] = staffName;
+        updatedAssignments[String(reqId)] = staffName;
+      }
+      if (trackingNo) {
+        updatedAssignments[trackingNo] = staffName;
+        updatedAssignments[String(trackingNo)] = staffName;
+      }
+
+      const currentStatus = item.status || 'Pending';
+      const updatedItem = {
+        ...item,
+        assigned_staff: staffName,
+        assigned_at: nowIso,
+        accepted_at: nowIso,
+        updated_at: nowIso,
+        status: currentStatus,
+        rawStatus: currentStatus === 'Pending' ? 'PENDING' : (item.rawStatus || 'PENDING'),
+      };
+
+      updateStoredRequest(
+        trackingNo || reqId || rawId,
+        {
+          assigned_staff: staffName,
+          assigned_at: nowIso,
+          accepted_at: nowIso,
+          updated_at: nowIso,
+          status: currentStatus,
+        },
+        { fallbackItem: updatedItem }
+      );
+
+      logProcessedAction({
+        actor: user?.username || 'staff',
+        actorName: staffName,
+        actorId: user?.id,
+        actorRole: user?.role || 'staff',
+        targetName: item.student_name,
+        targetId: item.student_id || trackingNo,
+        trackingNumber: trackingNo,
+        documentType: item.document_type,
+        action: 'Claimed request for staff verification & processing',
+        status: currentStatus,
+      });
+
+      recordRequestActivityTimestamp(trackingNo || reqId || rawId, now);
+    }
+
+    localStorage.setItem('regquest_claimed_requests', JSON.stringify(claimedMap));
+    localStorage.setItem(ASSIGNMENT_TIMESTAMPS_KEY, JSON.stringify(tsMap));
+    setAssignmentTimestamps((prev) => ({
+      ...prev,
+      ...tsMap,
+    }));
+    setAssignments(updatedAssignments);
+    localStorage.setItem(ASSIGNMENTS_KEY, JSON.stringify(updatedAssignments));
+
+    const selectedKeys = new Set(
+      selectedRequestsList.flatMap((r) => [
+        String(r.id),
+        String(r.rawId),
+        String(r.tracking_number),
+      ]).filter(Boolean)
+    );
+
+    setRawRequests((prev) =>
+      prev.map((r) => {
+        const matches =
+          selectedKeys.has(String(r.id)) ||
+          selectedKeys.has(String(r.rawId)) ||
+          (r.tracking_number && selectedKeys.has(String(r.tracking_number)));
+        return matches
+          ? {
+              ...r,
+              assigned_staff: staffName,
+              assigned_at: now,
+              accepted_at: now,
+              updated_at: nowIso,
+            }
+          : r;
+      })
+    );
+
+    window.dispatchEvent(new Event('regquest_assignments_updated'));
+    window.dispatchEvent(new Event('regquest_requests_updated'));
+
+    toast.success(`Now processing ${selectedRequestsList.length} request(s)! Successfully assigned to you.`);
+    setSelectedIds(new Set());
+    setSelectionModeTable(null);
   };
 
   const getStatusBadge = (status) => {
@@ -779,6 +1051,7 @@ export default function StaffRequestsPage() {
         assigned_staff: staffName,
         assigned_at: nowIso,
         accepted_at: nowIso,
+        updated_at: nowIso,
         status: currentStatus,
         rawStatus: currentStatus === 'Pending' ? 'PENDING' : (item.rawStatus || 'PENDING'),
       };
@@ -789,6 +1062,7 @@ export default function StaffRequestsPage() {
           assigned_staff: staffName,
           assigned_at: nowIso,
           accepted_at: nowIso,
+          updated_at: nowIso,
           status: currentStatus,
         },
         {
@@ -811,6 +1085,7 @@ export default function StaffRequestsPage() {
                 assigned_staff: staffName,
                 assigned_at: now,
                 accepted_at: now,
+                updated_at: nowIso,
                 status: currentStatus,
               }
             : r;
@@ -832,6 +1107,7 @@ export default function StaffRequestsPage() {
       });
 
       // 8. Safely notify other listeners
+      recordRequestActivityTimestamp(trackingNo || reqId || rawId, now);
       window.dispatchEvent(new Event('regquest_assignments_updated'));
       window.dispatchEvent(new Event('regquest_requests_updated'));
     } catch (err) {
@@ -840,6 +1116,10 @@ export default function StaffRequestsPage() {
   };
 
   const handleRequestUpdated = (updatedReq) => {
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+    recordRequestActivityTimestamp(updatedReq, nowTime);
+    setActivityTimestamps(getRequestActivityTimestamps());
     setRawRequests((prev) =>
       prev.map((r) =>
         String(r.id) === String(updatedReq.rawId) ||
@@ -850,6 +1130,7 @@ export default function StaffRequestsPage() {
           ? {
               ...r,
               ...updatedReq,
+              updated_at: updatedReq.updated_at || nowIso,
               status: updatedReq.status || r.status,
               assigned_staff: updatedReq.assigned_staff || r.assigned_staff,
               assigned_at: updatedReq.assigned_at || r.assigned_at,
@@ -901,11 +1182,14 @@ export default function StaffRequestsPage() {
       user?.username ||
       'Staff';
 
+    const nowIso = new Date().toISOString();
+
     const fullPatch = {
       status: effectiveStatus,
       assigned_staff: staffName,
       assigned_at: selectedRequest.assigned_at,
       accepted_at: selectedRequest.accepted_at,
+      updated_at: nowIso,
       remarks: notes || selectedRequest.remarks || '',
       clearance_status: selectedRequest.clearance_status,
       assessed_amount: selectedRequest.assessed_amount,
@@ -948,7 +1232,7 @@ export default function StaffRequestsPage() {
       }
 
       updateStoredRequest(trackingNo || selectedRequest.id || targetId, fullPatch, {
-        fallbackItem: { ...selectedRequest, ...fullPatch },
+        fallbackItem: { ...selectedRequest, ...fullPatch, updated_at: nowIso },
       });
 
       logProcessedAction({
@@ -972,7 +1256,7 @@ export default function StaffRequestsPage() {
           String(r.rawId) === String(targetId) ||
           String(r.tracking_number) === String(trackingNo) ||
           String(r.id) === String(selectedRequest.id)
-            ? { ...r, ...fullPatch }
+            ? { ...r, ...fullPatch, updated_at: nowIso }
             : r
         )
       );
@@ -988,12 +1272,55 @@ export default function StaffRequestsPage() {
 
   return (
     <div className="staff-req-container space-y-6">
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Process Requests</h1>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+            {activeTab === 'history' ? 'Request History' : 'Process Requests'}
+          </h1>
           <p className="text-xs sm:text-sm text-slate-500">
-            Review, verify, and process credential requests in your queue
+            {activeTab === 'history'
+              ? 'Review past completed and claimed credential requests'
+              : 'Review, verify, and process credential requests in your queue'}
           </p>
+        </div>
+
+        {/* Upper Right: Active Requests vs Request History */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('active');
+              setSelectionModeTable(null);
+              setSelectedIds(new Set());
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+              activeTab === 'active'
+                ? 'bg-[#0B0B36] text-white shadow-sm'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <span>Active Requests</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('history');
+              setSelectionModeTable(null);
+              setSelectedIds(new Set());
+              setStatusFilter('');
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+              activeTab === 'history'
+                ? 'bg-[#0B0B36] text-white shadow-sm'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Request History</span>
+          </button>
         </div>
       </div>
 
@@ -1007,41 +1334,6 @@ export default function StaffRequestsPage() {
         credentialTypes={credentialTypes}
         requestStatuses={REQUEST_STATUSES}
       />
-
-      {/* Queue View Tabs: Active Processing vs Request History */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab('active')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-            activeTab === 'active'
-              ? 'bg-[#0B0B36] text-white shadow-sm'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          <span>Active Requests</span>
-          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-            activeTab === 'active' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
-          }`}>
-            {assignedRequests.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('history')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-            activeTab === 'history'
-              ? 'bg-[#0B0B36] text-white shadow-sm'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>Request History</span>
-        </button>
-      </div>
 
       {activeTab === 'active' ? (
         <>
@@ -1059,6 +1351,20 @@ export default function StaffRequestsPage() {
             actionType="view"
             onArchive={handleArchiveRequest}
             emptyMessage="No requests currently assigned to you for processing."
+            enableSelection={true}
+            isSelectionMode={selectionModeTable === 'assigned'}
+            onToggleSelectionMode={() => {
+              if (selectionModeTable === 'assigned') {
+                setSelectionModeTable(null);
+                setSelectedIds(new Set());
+              } else {
+                setSelectionModeTable('assigned');
+                setSelectedIds(new Set());
+              }
+            }}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onToggleSelectAll={() => handleToggleSelectAll(assignedRequests.slice(0, 10))}
           />
 
           {/* Card 2: Unassigned Requests Queue */}
@@ -1075,6 +1381,20 @@ export default function StaffRequestsPage() {
             actionType="claim"
             onAction={handleClaimAndProcess}
             emptyMessage="No unassigned requests found in queue."
+            enableSelection={true}
+            isSelectionMode={selectionModeTable === 'unassigned'}
+            onToggleSelectionMode={() => {
+              if (selectionModeTable === 'unassigned') {
+                setSelectionModeTable(null);
+                setSelectedIds(new Set());
+              } else {
+                setSelectionModeTable('unassigned');
+                setSelectedIds(new Set());
+              }
+            }}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onToggleSelectAll={() => handleToggleSelectAll(unassignedRequests.slice(0, 10))}
           />
         </>
       ) : (
@@ -1082,7 +1402,6 @@ export default function StaffRequestsPage() {
         <StaffRequestsTable
           title="Completed & Claimed Requests History"
           subtitle="Document requests that have been claimed by students and archived from active queue"
-          badgeCount={historyRequests.length}
           loading={loading}
           error={error}
           filteredRequests={historyRequests}
@@ -1092,6 +1411,20 @@ export default function StaffRequestsPage() {
           actionType="history"
           onRestore={handleRestoreRequest}
           emptyMessage="No claimed document requests in history yet."
+          enableSelection={true}
+          isSelectionMode={selectionModeTable === 'history'}
+          onToggleSelectionMode={() => {
+            if (selectionModeTable === 'history') {
+              setSelectionModeTable(null);
+              setSelectedIds(new Set());
+            } else {
+              setSelectionModeTable('history');
+              setSelectedIds(new Set());
+            }
+          }}
+          selectedIds={selectedIds}
+          onToggleSelect={handleToggleSelect}
+          onToggleSelectAll={() => handleToggleSelectAll(historyRequests.slice(0, 10))}
         />
       )}
 
@@ -1103,6 +1436,72 @@ export default function StaffRequestsPage() {
           onUpdated={handleRequestUpdated}
         />
       )}
+
+      {/* Floating Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[#0B0B36] text-white px-5 py-3 rounded-2xl shadow-2xl border border-indigo-700/60 flex items-center gap-4 flex-wrap animate-in fade-in slide-in-from-bottom-4">
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-white/20 text-white font-black text-xs flex items-center justify-center">
+              {selectedRequestsList.length}
+            </span>
+            <span className="text-xs sm:text-sm font-bold tracking-tight">
+              {selectedRequestsList.length === 1 ? '1 request selected' : `${selectedRequestsList.length} requests selected`}
+            </span>
+          </div>
+
+          <div className="h-4 w-px bg-white/20 hidden sm:block" />
+
+          <div className="flex items-center gap-2">
+            {selectionModeTable === 'unassigned' ||
+            selectedRequestsList.every(
+              (r) =>
+                !r.assigned_staff ||
+                r.assigned_staff.trim() === '' ||
+                r.assigned_staff.toLowerCase() === 'unassigned'
+            ) ? (
+              <button
+                type="button"
+                onClick={handleBatchClaimAndProcess}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold transition-all shadow-sm cursor-pointer"
+                title="Assign selected requests to you and begin processing"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+                <span>Process This</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setBatchModalOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold transition-all shadow-sm cursor-pointer"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span>Update Status & Releasing Date</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedIds(new Set());
+                setSelectionModeTable(null);
+              }}
+              className="px-3 py-1.5 text-xs text-white/70 hover:text-white transition-colors cursor-pointer"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
+
+      <BatchUpdateModal
+        isOpen={batchModalOpen}
+        onClose={() => setBatchModalOpen(false)}
+        selectedRequests={selectedRequestsList}
+        onConfirm={handleBatchUpdate}
+      />
     </div>
   );
 }

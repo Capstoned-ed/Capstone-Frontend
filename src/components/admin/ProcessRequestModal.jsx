@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useToast from '../../hooks/useToast';
 import { useAuth } from '../../hooks/useAuth';
-import requestsApi, { updateStoredRequest, logProcessedAction, setRequestArchived } from '../../api/requests';
+import requestsApi, { updateStoredRequest, logProcessedAction, setRequestArchived, recordRequestActivityTimestamp } from '../../api/requests';
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import { saveStoredNotification } from '../../api/notifications';
 import { getStoredPaymentProof, verifyStoredPaymentProof } from '../../api/payments';
@@ -113,11 +113,55 @@ export default function ProcessRequestModal({
 
   const hasOrNumber = Boolean(activeOrNumber);
 
-  const canConfirmPayment = Boolean(hasReceiptUploaded && hasOrNumber);
+  const canConfirmPayment = Boolean(hasOrNumber || hasReceiptUploaded);
+
+  const isAlreadyPastPayment = [
+    'FOR PROCESSING',
+    'FOR_PROCESSING',
+    'PROCESSING',
+    'RELEASING',
+    'READY_FOR_RELEASE',
+    'CLAIMED',
+    'RELEASED',
+  ].includes(String(localStatus || requestItem?.status || '').toUpperCase());
+
+  const isClearanceVerified = Boolean(
+    clearanceStatus === 'VERIFIED' ||
+    clearanceStatus === 'APPROVED' ||
+    requestItem?.clearance_status === 'VERIFIED' ||
+    requestItem?.clearance_status === 'APPROVED' ||
+    isAlreadyPastPayment
+  );
+
+  const isPaymentVerified = Boolean(
+    paymentStatus === 'VERIFIED' ||
+    requestItem?.payment_status === 'VERIFIED' ||
+    isAlreadyPastPayment
+  );
+
+  const canOverrideStatus = Boolean(isClearanceVerified && isPaymentVerified);
 
   const normalizeStatus = (val) => {
     if (val === 'For Payment' || val === 'FOR PAYMENT' || val === 'FOR_PAYMENT') return 'Pending Payment';
     return val;
+  };
+
+  const setStatusDirectly = (val) => {
+    const cleanVal = normalizeStatus(val);
+    setLocalStatus(cleanVal);
+    setNewStatus(cleanVal);
+  };
+
+  const handleManualStatusChange = (val) => {
+    if (!canOverrideStatus) {
+      if (!isClearanceVerified) {
+        toast.warning('Cannot change status: Please verify student clearance first.');
+      } else {
+        toast.warning('Cannot change status: Payment must be verified first.');
+      }
+      return;
+    }
+    setStatusDirectly(val);
   };
 
   useEffect(() => {
@@ -136,12 +180,6 @@ export default function ProcessRequestModal({
       dateOfRelease: relDateFormatted,
     };
   }, [requestItem, dateOfRelease]);
-
-  const handleManualStatusChange = (val) => {
-    const cleanVal = normalizeStatus(val);
-    setLocalStatus(cleanVal);
-    setNewStatus(cleanVal);
-  };
 
   const statusOptions = useMemo(() => {
     const base = [
@@ -288,9 +326,12 @@ export default function ProcessRequestModal({
       }
     }
 
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+    recordRequestActivityTimestamp(requestItem, nowTime);
     updateStoredRequest(
       targetId,
-      { clearance_status: statusToSet },
+      { clearance_status: statusToSet, updated_at: nowIso },
       { fallbackItem: requestItem, silentNotify: true }
     );
 
@@ -298,6 +339,7 @@ export default function ProcessRequestModal({
       onUpdated({
         ...requestItem,
         clearance_status: statusToSet,
+        updated_at: nowIso,
       });
     }
 
@@ -324,7 +366,7 @@ export default function ProcessRequestModal({
   };
 
   const handleConfirmAssessmentAndIssuePayment = async () => {
-    if (clearanceStatus !== 'VERIFIED' && clearanceStatus !== 'APPROVED') {
+    if (!isClearanceVerified) {
       toast.warning('Please verify the student clearance first before confirming the request.');
       return;
     }
@@ -333,6 +375,10 @@ export default function ProcessRequestModal({
     const trackingCode = requestItem.tracking_number || requestItem.trackingId || requestItem.id;
     const docName = requestItem.document_type || 'Requested Credential';
     const cleanAmount = assessedAmount.trim() || '₱100.00';
+
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+    recordRequestActivityTimestamp(requestItem, nowTime);
 
     const patch = {
       status: 'Pending Payment',
@@ -348,6 +394,7 @@ export default function ProcessRequestModal({
       payment_date: '',
       is_confirmed: true,
       confirmed_for_payment: true,
+      updated_at: nowIso,
     };
 
     requestItem.status = 'Pending Payment';
@@ -364,7 +411,7 @@ export default function ProcessRequestModal({
 
     updateStoredRequest(targetId, patch, { fallbackItem: requestItem, silentNotify: true });
 
-    handleManualStatusChange('Pending Payment');
+    setStatusDirectly('Pending Payment');
     setIsOrderConfirmed(true);
 
     if (requestItem.rawId && typeof requestItem.rawId === 'number') {
@@ -428,13 +475,18 @@ export default function ProcessRequestModal({
         }).catch(() => {});
       }
 
+      const nowTime = Date.now();
+      const nowIso = new Date(nowTime).toISOString();
+      recordRequestActivityTimestamp(requestItem, nowTime);
+
       const rejectPatch = {
         status: 'Rejected',
         rawStatus: 'REJECTED',
         batch_status: 'Rejected',
         remarks: reason,
         rejected_by: user?.full_name || user?.username || 'Staff/Registrar',
-        rejected_at: new Date().toISOString(),
+        rejected_at: nowIso,
+        updated_at: nowIso,
       };
 
       updateStoredRequest(targetId, rejectPatch, { fallbackItem: requestItem });
@@ -460,7 +512,7 @@ export default function ProcessRequestModal({
         tracking_number: trackingCode,
       });
 
-      handleManualStatusChange('Rejected');
+      setStatusDirectly('Rejected');
       if (onUpdated) {
         onUpdated({
           ...requestItem,
@@ -483,21 +535,24 @@ export default function ProcessRequestModal({
     const trackingCode = requestItem.tracking_number || requestItem.id;
 
     if (actionToSet === 'PENDING') {
+      const nowIso = new Date().toISOString();
       setPaymentStatus('PENDING');
       requestItem.status = 'Pending Payment';
       requestItem.rawStatus = 'PAYMENT_PENDING';
       requestItem.batch_status = 'Pending Payment';
       requestItem.payment_status = 'PENDING';
+      requestItem.updated_at = nowIso;
       updateStoredRequest(
         targetId,
         {
           payment_status: 'PENDING',
           status: 'Pending Payment',
           rawStatus: 'PAYMENT_PENDING',
+          updated_at: nowIso,
         },
         { fallbackItem: requestItem, silentNotify: true }
       );
-      handleManualStatusChange('Pending Payment');
+      setStatusDirectly('Pending Payment');
       if (onUpdated) {
         onUpdated({
           ...requestItem,
@@ -505,6 +560,7 @@ export default function ProcessRequestModal({
           rawStatus: 'PAYMENT_PENDING',
           batch_status: 'Pending Payment',
           payment_status: 'PENDING',
+          updated_at: nowIso,
         });
       }
       toast.info('Payment verification reset to pending.');
@@ -513,12 +569,12 @@ export default function ProcessRequestModal({
 
     const isVerified = actionToSet === 'VERIFIED';
 
-    if (isVerified && (!hasReceiptUploaded || !hasOrNumber)) {
-      toast.warning('Cannot confirm payment: Official receipt upload and O.R. Number are required.');
+    if (isVerified && (!hasReceiptUploaded && !hasOrNumber)) {
+      toast.warning('Cannot confirm payment: Official receipt upload or O.R. Number is required.');
       return;
     }
 
-    const finalOrNumber = activeOrNumber;
+    const finalOrNumber = activeOrNumber || 'Paid at USTP Cashier (FTF)';
 
     verifyStoredPaymentProof(
       [requestItem.tracking_number, requestItem.id, requestItem.rawId],
@@ -530,7 +586,11 @@ export default function ProcessRequestModal({
 
     setPaymentStatus(isVerified ? 'VERIFIED' : 'REJECTED');
     const updatedStatus = isVerified ? 'For Processing' : 'Pending Payment';
-    handleManualStatusChange(updatedStatus);
+    setStatusDirectly(updatedStatus);
+
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+    recordRequestActivityTimestamp(requestItem, nowTime);
 
     const paymentPatch = {
       status: updatedStatus,
@@ -541,6 +601,7 @@ export default function ProcessRequestModal({
       receipt_reference_number: finalOrNumber,
       receipt_image: activeReceiptImage,
       payment_date: new Date().toISOString().split('T')[0],
+      updated_at: nowIso,
     };
 
     requestItem.status = updatedStatus;
@@ -548,6 +609,7 @@ export default function ProcessRequestModal({
     requestItem.batch_status = updatedStatus;
     requestItem.payment_status = isVerified ? 'VERIFIED' : 'REJECTED';
     requestItem.or_number = finalOrNumber;
+    requestItem.updated_at = nowIso;
 
     updateStoredRequest(targetId, paymentPatch, { fallbackItem: requestItem, silentNotify: true });
 
@@ -670,6 +732,16 @@ export default function ProcessRequestModal({
 
     try {
       const targetId = requestItem.rawId || requestItem.id;
+      if (!canOverrideStatus && localStatus !== (requestItem.status || 'Pending')) {
+        toast.warning(
+          !isClearanceVerified
+            ? 'Manual status override is locked: Please verify student clearance first.'
+            : 'Manual status override is locked: Payment must be verified first.'
+        );
+        setLoading(false);
+        return;
+      }
+
       if (requestItem.rawId && typeof requestItem.rawId === 'number') {
         const backendStatus = BACKEND_STATUS_MAP[localStatus] || localStatus;
         try {
@@ -681,6 +753,10 @@ export default function ProcessRequestModal({
           console.warn('Backend transition notice:', apiErr);
         }
       }
+
+      const nowTime = Date.now();
+      const nowIso = new Date(nowTime).toISOString();
+      recordRequestActivityTimestamp(requestItem, nowTime);
 
       const finalPatch = {
         status: localStatus,
@@ -695,10 +771,11 @@ export default function ProcessRequestModal({
         confirmed_for_payment: isOrderConfirmed,
         payment_status: paymentStatus,
         or_number: activeOrNumber || requestItem.or_number || '',
+        updated_at: nowIso,
       };
 
       updateStoredRequest(requestItem.id || targetId, finalPatch, {
-        fallbackItem: requestItem,
+        fallbackItem: { ...requestItem, ...finalPatch, updated_at: nowIso },
       });
 
       logProcessedAction({
@@ -1206,14 +1283,21 @@ export default function ProcessRequestModal({
 
                 <div className="mt-3.5 pt-3 border-t border-indigo-100 flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    {isOrderConfirmed && (
+                    {isOrderConfirmed ? (
                       <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
                         <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
                         <span>Request Confirmed (Pending Payment)</span>
                       </span>
-                    )}
+                    ) : !isClearanceVerified ? (
+                      <span className="text-xs font-semibold text-amber-700 flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span>Verify clearance above to unlock confirmation</span>
+                      </span>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -1256,8 +1340,18 @@ export default function ProcessRequestModal({
                         </button>
                         <button
                           type="button"
+                          disabled={!isClearanceVerified}
                           onClick={handleConfirmAssessmentAndIssuePayment}
-                          className="px-4 py-2 bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                            isClearanceVerified
+                              ? 'bg-indigo-900 hover:bg-indigo-950 text-white shadow-md cursor-pointer'
+                              : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
+                          }`}
+                          title={
+                            !isClearanceVerified
+                              ? 'Please verify student clearance first before confirming the request.'
+                              : 'Confirm request and order of payment'
+                          }
                         >
                           <span>Confirm Request & Order of Payment</span>
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -1415,11 +1509,7 @@ export default function ProcessRequestModal({
                         }`}
                         title={
                           !hasReceiptUploaded && !hasOrNumber
-                            ? 'Cannot confirm payment: No receipt uploaded and no O.R. number yet'
-                            : !hasReceiptUploaded
-                            ? 'Cannot confirm payment: No receipt uploaded yet'
-                            : !hasOrNumber
-                            ? 'Cannot confirm payment: Please enter the O.R. Number'
+                            ? 'Cannot confirm payment: Please enter the O.R. Number or upload receipt'
                             : 'Confirm and verify payment'
                         }
                       >
@@ -1439,11 +1529,7 @@ export default function ProcessRequestModal({
                         }`}
                         title={
                           !hasReceiptUploaded && !hasOrNumber
-                            ? 'Cannot confirm payment: No receipt uploaded and no O.R. number yet'
-                            : !hasReceiptUploaded
-                            ? 'Cannot confirm payment: No receipt uploaded yet'
-                            : !hasOrNumber
-                            ? 'Cannot confirm payment: Please enter the O.R. Number'
+                            ? 'Cannot confirm payment: Please enter the O.R. Number or upload receipt'
                             : 'Confirm and verify payment'
                         }
                       >
@@ -1473,12 +1559,38 @@ export default function ProcessRequestModal({
 
               {/* Manual Status Override */}
               <div className="staff-form-group pt-2">
-                <label className="staff-form-label">Manual Status Override</label>
+                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+                  <label className="staff-form-label mb-0">Manual Status Override</label>
+                  {!canOverrideStatus && (
+                    <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 flex items-center gap-1 shadow-2xs">
+                      <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      <span>
+                        {!isClearanceVerified
+                          ? 'Locked: Clearance not yet verified'
+                          : 'Locked: Payment not yet verified'}
+                      </span>
+                    </span>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <select
                     value={localStatus || newStatus || 'Pending'}
                     onChange={(e) => handleManualStatusChange(e.target.value)}
-                    className="staff-select-input"
+                    disabled={!canOverrideStatus}
+                    className={`staff-select-input ${
+                      !canOverrideStatus
+                        ? 'opacity-60 bg-slate-100 cursor-not-allowed border-slate-300 text-slate-500'
+                        : ''
+                    }`}
+                    title={
+                      !isClearanceVerified
+                        ? 'Manual status override is locked: Please verify student clearance first.'
+                        : !isPaymentVerified
+                        ? 'Manual status override is locked: Payment must be verified first.'
+                        : 'Select status to override'
+                    }
                   >
                     {statusOptions.map((st) => (
                       <option key={st} value={st}>{st}</option>
@@ -1492,6 +1604,20 @@ export default function ProcessRequestModal({
                     className="staff-notes-input"
                   />
                 </div>
+                {!canOverrideStatus && (
+                  <p className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1">
+                    <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                    <span>
+                      {!isClearanceVerified
+                        ? 'Manual status override cannot be changed until clearance is verified.'
+                        : 'Manual status override cannot be changed until student payment is verified.'}
+                    </span>
+                  </p>
+                )}
               </div>
 
             </div>

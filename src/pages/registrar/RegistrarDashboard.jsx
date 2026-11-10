@@ -1,20 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
 import ustpBuilding from '../../assets/USTP.png';
 import PredictedInsightCard from '../../components/admin/PredictedInsightCard';
 import RequestVolumeCard from '../../components/admin/RequestVolumeCard';
 import useDashboardData from '../../hooks/useDashboardData';
+import { useAuth } from '../../hooks/useAuth';
+import useToast from '../../hooks/useToast';
 import requestsApi, {
   isValidRequest,
   sortRequestsNewestFirst,
   resolveRequestDocType,
+  setRequestArchived,
+  getArchivedRequestsMap,
+  isRequestArchived,
+  logProcessedAction,
 } from '../../api/requests';
 import usersApi from '../../api/users';
 import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
 import '../../styles/admin/AdminDashboard.css';
 import '../../styles/admin/AdminRequestsPage.css';
+import '../../styles/staff/StaffRequestsPage.css';
+
+const isClaimedStatus = (status) => {
+  const s = String(status || '').trim().toLowerCase();
+  return s === 'claimed' || s.includes('claim');
+};
 
 function calculateReleaseDate(createdAt, processingDays = 5) {
   if (!createdAt) return 'N/A';
@@ -138,6 +150,8 @@ function getStatusBadge(status) {
 
 export default function RegistrarDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const toast = useToast();
   const {
     loading,
     statusDistribution,
@@ -150,6 +164,43 @@ export default function RegistrarDashboard() {
   const [requestsLoading, setRequestsLoading] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [processModalOpen, setProcessModalOpen] = useState(false);
+  const [archivedMap, setArchivedMap] = useState(() => getArchivedRequestsMap());
+
+  useEffect(() => {
+    const handleArchivedUpdate = () => {
+      setArchivedMap(getArchivedRequestsMap());
+    };
+    window.addEventListener('regquest_archived_updated', handleArchivedUpdate);
+    window.addEventListener('storage', handleArchivedUpdate);
+    return () => {
+      window.removeEventListener('regquest_archived_updated', handleArchivedUpdate);
+      window.removeEventListener('storage', handleArchivedUpdate);
+    };
+  }, []);
+
+  const handleArchiveRequest = (item) => {
+    if (!item) return;
+    const reqId = item.id || item.rawId || item.tracking_number;
+    setRequestArchived(reqId, true, user, { fallbackItem: item });
+    setArchivedMap(getArchivedRequestsMap());
+    logProcessedAction({
+      actor: user?.username,
+      actorName: user?.full_name || user?.username,
+      actorId: user?.id,
+      actorRole: user?.role || 'registrar',
+      targetName: item.student_name,
+      targetId: item.student_id || reqId,
+      trackingNumber: item.tracking_number || reqId,
+      documentType: item.document_type,
+      action: 'Document claimed by student: Moved to History',
+      status: 'Claimed',
+    });
+    toast.success(`Request ${item.id || reqId} marked as Done and moved to Request History.`);
+  };
+
+  const activeRequests = useMemo(() => {
+    return requests.filter((r) => !isRequestArchived(r, archivedMap));
+  }, [requests, archivedMap]);
 
   const handleOpenProcess = (req) => {
     setSelectedRequest(req);
@@ -157,6 +208,7 @@ export default function RegistrarDashboard() {
   };
 
   const handleRequestUpdated = (updatedReq) => {
+    setArchivedMap(getArchivedRequestsMap());
     setRequests((prev) =>
       prev.map((r) =>
         String(r.rawId || r.id) === String(updatedReq.rawId || updatedReq.id) ||
@@ -370,10 +422,16 @@ export default function RegistrarDashboard() {
       loadRequests();
     };
     window.addEventListener('regquest_requests_updated', handleSync);
+    window.addEventListener('regquest_assignments_updated', handleSync);
+    window.addEventListener('regquest_activity_updated', handleSync);
+    window.addEventListener('storage', handleSync);
 
     return () => {
       ignore = true;
       window.removeEventListener('regquest_requests_updated', handleSync);
+      window.removeEventListener('regquest_assignments_updated', handleSync);
+      window.removeEventListener('regquest_activity_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
     };
   }, []);
 
@@ -566,7 +624,7 @@ export default function RegistrarDashboard() {
                     <th>Status</th>
                     <th>Request Date</th>
                     <th>Release Date</th>
-                    <th className="text-right">Action</th>
+                    <th className="text-right whitespace-nowrap min-w-[170px]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -576,14 +634,14 @@ export default function RegistrarDashboard() {
                         Loading requests...
                       </td>
                     </tr>
-                  ) : requests.length === 0 ? (
+                  ) : activeRequests.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
-                        No student requests found.
+                        No active student requests found.
                       </td>
                     </tr>
                   ) : (
-                    requests.slice(0, 5).map((item) => (
+                    activeRequests.slice(0, 5).map((item) => (
                       <tr key={item.rawId || item.id}>
                         <td className="req-id-text">{item.id}</td>
                         <td>
@@ -597,24 +655,39 @@ export default function RegistrarDashboard() {
                         <td>{getStatusBadge(item.status)}</td>
                         <td className="font-semibold text-slate-800">{item.request_date}</td>
                         <td className="font-semibold text-slate-800">{item.release_date}</td>
-                        <td className="text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenProcess(item)}
-                            className="btn-view-req"
-                            title="View Request Details"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <circle cx="12" cy="12" r="3" strokeWidth={2} />
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                              />
-                            </svg>
-                            <span>View</span>
-                          </button>
+                        <td className="text-right whitespace-nowrap">
+                          <div className="inline-flex items-center justify-end gap-2 flex-nowrap whitespace-nowrap">
+                            {isClaimedStatus(item.status) && !isRequestArchived(item, archivedMap) && (
+                              <button
+                                type="button"
+                                onClick={() => handleArchiveRequest(item)}
+                                className="staff-btn-archive"
+                                title="Document claimed: Mark as Done and move to History"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                </svg>
+                                <span>Done</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenProcess(item)}
+                              className="btn-view-req"
+                              title="View Request Details"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="3" strokeWidth={2} />
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                />
+                              </svg>
+                              <span>View</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -623,7 +696,7 @@ export default function RegistrarDashboard() {
               </table>
             </div>
 
-            {!requestsLoading && requests.length > 5 && (
+            {!requestsLoading && activeRequests.length > 5 && (
               <div className="table-see-more-wrap">
                 <button
                   type="button"

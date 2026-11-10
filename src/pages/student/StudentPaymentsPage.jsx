@@ -8,6 +8,58 @@ import useToast from '../../hooks/useToast';
 import PaymentUploadModal from '../../components/student/PaymentUploadModal';
 import '../../styles/student/StudentPaymentsPage.css';
 
+const PAYMENT_ARCHIVED_KEY = 'regquest_archived_payments';
+
+function getArchivedPaymentsMap() {
+  try {
+    return JSON.parse(localStorage.getItem(PAYMENT_ARCHIVED_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function isPaymentArchived(req, map = null) {
+  if (!req) return false;
+  const aMap = map || getArchivedPaymentsMap();
+  const keys = [req.id, req.rawId, req.tracking_number, req.trackingId]
+    .filter((k) => k !== undefined && k !== null && String(k).trim() !== '')
+    .map((k) => String(k).trim());
+  return keys.some((k) => Boolean(aMap[k] || aMap[k.toUpperCase()] || aMap[k.toLowerCase()]));
+}
+
+function setPaymentArchived(req, isArchived = true) {
+  try {
+    const aMap = getArchivedPaymentsMap();
+    const keys = [req.id, req.rawId, req.tracking_number, req.trackingId]
+      .filter((k) => k !== undefined && k !== null && String(k).trim() !== '')
+      .map((k) => String(k).trim());
+
+    if (isArchived) {
+      const info = {
+        archived_at: new Date().toISOString(),
+        tracking_number: req.tracking_number || req.trackingId || req.id,
+      };
+      keys.forEach((k) => {
+        aMap[k] = info;
+        aMap[k.toUpperCase()] = info;
+      });
+    } else {
+      keys.forEach((k) => {
+        delete aMap[k];
+        delete aMap[k.toUpperCase()];
+        delete aMap[k.toLowerCase()];
+      });
+    }
+
+    localStorage.setItem(PAYMENT_ARCHIVED_KEY, JSON.stringify(aMap));
+    window.dispatchEvent(new Event('regquest_payments_archived_updated'));
+    return true;
+  } catch (err) {
+    console.error('Failed to setPaymentArchived:', err);
+    return false;
+  }
+}
+
 export default function StudentPaymentsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -19,12 +71,29 @@ export default function StudentPaymentsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [copiedId, setCopiedId] = useState('');
 
+  // View Mode: 'active' | 'history'
+  const [viewMode, setViewMode] = useState('active');
+  const [archivedPaymentsMap, setArchivedPaymentsMap] = useState(() => getArchivedPaymentsMap());
+
   // Filter Tab State: 'ALL' | 'READY_PAYMENT' | 'PENDING_VERIFY' | 'VERIFIED'
   const [activeTab, setActiveTab] = useState('ALL');
 
   // Modal State for uploading proof of payment
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
+  const [paymentModalOption, setPaymentModalOption] = useState('ONLINE');
+
+  useEffect(() => {
+    const handleSyncPaymentsArchived = () => {
+      setArchivedPaymentsMap(getArchivedPaymentsMap());
+    };
+    window.addEventListener('regquest_payments_archived_updated', handleSyncPaymentsArchived);
+    window.addEventListener('storage', handleSyncPaymentsArchived);
+    return () => {
+      window.removeEventListener('regquest_payments_archived_updated', handleSyncPaymentsArchived);
+      window.removeEventListener('storage', handleSyncPaymentsArchived);
+    };
+  }, []);
 
   // Fetch Requests & Credential Types
   const fetchData = async (isManual = false) => {
@@ -101,26 +170,50 @@ export default function StudentPaymentsPage() {
   // Request categorization helper for confirmed items
   const categorizeRequest = (req) => {
     const trackingCode = req.tracking_number || req.trackingId || req.id;
-    const proof =
-      req.payment_proof ||
-      getStoredPaymentProof([trackingCode, req.id, req.rawId, req.student_id]);
+    let proof = req.payment_proof;
+
+    // Verify proof on req actually belongs to this specific request
+    if (proof) {
+      const pTrack = String(proof.trackingNumber || '').trim().toUpperCase();
+      const pReqId = String(proof.requestId || '').trim().toUpperCase();
+      const thisTrack = String(trackingCode || '').trim().toUpperCase();
+      const thisId = String(req.id || req.rawId || '').trim().toUpperCase();
+      const matches =
+        (pTrack && (pTrack === thisTrack || pTrack === thisId)) ||
+        (pReqId && (pReqId === thisTrack || pReqId === thisId));
+      if (!matches) {
+        proof = null;
+      }
+    }
+
+    if (!proof) {
+      proof = getStoredPaymentProof([trackingCode, req.id, req.rawId]);
+    }
+
+    const s = String(req.status || '').trim().toUpperCase();
+    const rawS = String(req.rawStatus || req.raw_status || '').trim().toUpperCase();
+    const pStatus = String(req.payment_status || '').trim().toUpperCase();
+    const proofStatus = String(proof?.status || '').trim().toUpperCase();
 
     const isPaymentVerified =
-      req.payment_status === 'VERIFIED' ||
-      proof?.status === 'VERIFIED' ||
-      String(req.status || '').toUpperCase() === 'FOR_PROCESSING' ||
-      String(req.status || '').toUpperCase() === 'PROCESSING' ||
-      String(req.status || '').toUpperCase() === 'READY_FOR_RELEASE' ||
-      String(req.status || '').toUpperCase() === 'RELEASED' ||
-      String(req.status || '').toUpperCase() === 'CLAIMED';
+      pStatus === 'VERIFIED' ||
+      proofStatus === 'VERIFIED' ||
+      s === 'PAYMENT VERIFIED' ||
+      s === 'PAYMENT_VERIFIED' ||
+      rawS === 'PAYMENT_VERIFIED' ||
+      s === 'FOR PROCESSING' ||
+      s === 'FOR_PROCESSING' ||
+      s === 'PROCESSING' ||
+      s === 'READY_FOR_RELEASE' ||
+      s === 'READY FOR RELEASE' ||
+      s === 'RELEASING' ||
+      s === 'FOR RELEASE' ||
+      s === 'RELEASED' ||
+      s === 'CLAIMED';
 
     const hasProofSubmitted =
-      !isPaymentVerified &&
-      (proof ||
-        req.payment_status === 'PAYMENT_SUBMITTED' ||
-        String(req.status || '').toUpperCase() === 'PAYMENT_VERIFIED');
+      !isPaymentVerified && Boolean(proof);
 
-    const s = String(req.status || '').toUpperCase();
     const isReadyForPayment =
       !isPaymentVerified &&
       !hasProofSubmitted &&
@@ -139,13 +232,22 @@ export default function StudentPaymentsPage() {
     };
   };
 
-  // Counts for filter tabs (calculated strictly on confirmed requests)
+  // Split confirmed requests into Active Payments vs Payment History
+  const activeConfirmedRequests = useMemo(() => {
+    return confirmedRequests.filter((req) => !isPaymentArchived(req, archivedPaymentsMap));
+  }, [confirmedRequests, archivedPaymentsMap]);
+
+  const historyConfirmedRequests = useMemo(() => {
+    return confirmedRequests.filter((req) => isPaymentArchived(req, archivedPaymentsMap));
+  }, [confirmedRequests, archivedPaymentsMap]);
+
+  // Counts for filter tabs (calculated strictly on active confirmed requests)
   const tabCounts = useMemo(() => {
     let readyCount = 0;
     let pendingVerifyCount = 0;
     let verifiedCount = 0;
 
-    confirmedRequests.forEach((req) => {
+    activeConfirmedRequests.forEach((req) => {
       const { isReadyForPayment, hasProofSubmitted, isPaymentVerified } = categorizeRequest(req);
       if (isReadyForPayment) readyCount++;
       if (hasProofSubmitted) pendingVerifyCount++;
@@ -153,25 +255,47 @@ export default function StudentPaymentsPage() {
     });
 
     return {
-      all: confirmedRequests.length,
+      all: activeConfirmedRequests.length,
       readyPayment: readyCount,
       pendingVerify: pendingVerifyCount,
       verified: verifiedCount,
     };
-  }, [confirmedRequests]);
+  }, [activeConfirmedRequests]);
 
-  // Filtered requests according to tab
+  // Filtered requests according to viewMode and activeTab
   const filteredRequests = useMemo(() => {
-    if (activeTab === 'ALL') return confirmedRequests;
+    if (viewMode === 'history') {
+      return historyConfirmedRequests;
+    }
 
-    return confirmedRequests.filter((req) => {
+    if (activeTab === 'ALL') return activeConfirmedRequests;
+
+    return activeConfirmedRequests.filter((req) => {
       const { isReadyForPayment, hasProofSubmitted, isPaymentVerified } = categorizeRequest(req);
       if (activeTab === 'READY_PAYMENT') return isReadyForPayment;
       if (activeTab === 'PENDING_VERIFY') return hasProofSubmitted;
       if (activeTab === 'VERIFIED') return isPaymentVerified;
       return true;
     });
-  }, [confirmedRequests, activeTab]);
+  }, [viewMode, historyConfirmedRequests, activeConfirmedRequests, activeTab]);
+
+  const handleMarkPaymentDone = (req) => {
+    if (!req) return;
+    const trackingCode = req.tracking_number || req.trackingId || req.id;
+    setPaymentArchived(req, true);
+    setArchivedPaymentsMap(getArchivedPaymentsMap());
+    toast.success(`Payment for ${trackingCode} marked as Done and moved to Payment History!`);
+    // Stay in active payments view
+  };
+
+  const handleRestorePayment = (req) => {
+    if (!req) return;
+    const trackingCode = req.tracking_number || req.trackingId || req.id;
+    setPaymentArchived(req, false);
+    setArchivedPaymentsMap(getArchivedPaymentsMap());
+    toast.info(`Payment for ${trackingCode} restored to Active Payments.`);
+    setViewMode('active');
+  };
 
   const handleCopy = (code) => {
     if (!code) return;
@@ -181,8 +305,9 @@ export default function StudentPaymentsPage() {
     setTimeout(() => setCopiedId(''), 2000);
   };
 
-  const handleOpenUploadModal = (req) => {
+  const handleOpenUploadModal = (req, option = 'ONLINE') => {
     setSelectedRequest(req);
+    setPaymentModalOption(option);
     setIsPaymentModalOpen(true);
   };
 
@@ -192,18 +317,38 @@ export default function StudentPaymentsPage() {
         {/* Header */}
         <div className="payments-header">
           <div>
-            <h1 className="payments-title">Payments &amp; Order of Payment</h1>
+            <h1 className="payments-title">
+              {viewMode === 'history' ? 'Payment History' : 'Payments & Order of Payment'}
+            </h1>
             <p className="payments-subtitle">
-              Download your assessed official request form for Over-The-Counter Cashier payment and attach your Official Receipt (O.R.) proof of payment.
+              {viewMode === 'history'
+                ? 'Review your past verified and completed cashier payments.'
+                : 'Download your assessed official request form for Over-The-Counter Cashier payment and attach your Official Receipt (O.R.) proof of payment.'}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => fetchData(true)}
-            disabled={refreshing}
-            className="payments-refresh-btn"
-          >
-            {refreshing ? (
+
+          <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+            {/* Payment History Button in upper right right beside refresh */}
+            <button
+              type="button"
+              onClick={() => setViewMode(viewMode === 'history' ? 'active' : 'history')}
+              className={`payments-history-btn ${viewMode === 'history' ? 'active' : ''}`}
+              title={viewMode === 'history' ? 'Switch to Active Payments' : 'View Payment History'}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{viewMode === 'history' ? 'Active Payments' : 'Payment History'}</span>
+            </button>
+
+            {/* Refresh Records Button */}
+            <button
+              type="button"
+              onClick={() => fetchData(true)}
+              disabled={refreshing}
+              className="payments-refresh-btn"
+            >
+              {refreshing ? (
                 'Refreshing...'
               ) : (
                 <>
@@ -213,56 +358,61 @@ export default function StudentPaymentsPage() {
                   Refresh Records
                 </>
               )}
-          </button>
-        </div>
-
-        {/* OTC 3-Step Guide Banner */}
-        <div className="otc-guide-banner">
-          <div className="otc-guide-header">
-            <div className="otc-guide-icon">₱</div>
-            <div>
-              <h2 className="otc-guide-title">How Over-The-Counter (OTC) Payment Works</h2>
-              <p className="otc-guide-sub">
-                Once staff or admin confirms your request and assesses the fee:
-              </p>
-            </div>
-          </div>
-
-          <div className="otc-steps-grid">
-            <div className="otc-step-item">
-              <div className="otc-step-num">1</div>
-              <div>
-                <h4 className="otc-step-heading">Download Assessed Form</h4>
-                <p className="otc-step-text">
-                  Download and print your official request form showing the fee assessed by Registrar Staff.
-                </p>
-              </div>
-            </div>
-
-            <div className="otc-step-item">
-              <div className="otc-step-num">2</div>
-              <div>
-                <h4 className="otc-step-heading">Pay at USTP Cashier</h4>
-                <p className="otc-step-text">
-                  Present your printed form at the <strong>USTP Cashier's Office</strong> and pay the assessed amount.
-                </p>
-              </div>
-            </div>
-
-            <div className="otc-step-item">
-              <div className="otc-step-num">3</div>
-              <div>
-                <h4 className="otc-step-heading">Attach Receipt Picture</h4>
-                <p className="otc-step-text">
-                  Upload a clear photo of your Official Receipt (O.R.) below so Registrar Staff can verify and begin preparing your document.
-                </p>
-              </div>
-            </div>
+            </button>
           </div>
         </div>
 
-        {/* Notice for requests awaiting staff confirmation */}
-        {pendingReviewRequests.length > 0 && (
+
+
+        {/* OTC 3-Step Guide Banner (Active View Only) */}
+        {viewMode === 'active' && (
+          <div className="otc-guide-banner">
+            <div className="otc-guide-header">
+              <div className="otc-guide-icon">₱</div>
+              <div>
+                <h2 className="otc-guide-title">How Over-The-Counter (OTC) Payment Works</h2>
+                <p className="otc-guide-sub">
+                  Once staff or admin confirms your request and assesses the fee:
+                </p>
+              </div>
+            </div>
+
+            <div className="otc-steps-grid">
+              <div className="otc-step-item">
+                <div className="otc-step-num">1</div>
+                <div>
+                  <h4 className="otc-step-heading">Download Assessed Form</h4>
+                  <p className="otc-step-text">
+                    Download and print your official request form showing the fee assessed by Registrar Staff.
+                  </p>
+                </div>
+              </div>
+
+              <div className="otc-step-item">
+                <div className="otc-step-num">2</div>
+                <div>
+                  <h4 className="otc-step-heading">Pay at USTP Cashier</h4>
+                  <p className="otc-step-text">
+                    Present your printed form at the <strong>USTP Cashier's Office</strong> and pay the assessed amount.
+                  </p>
+                </div>
+              </div>
+
+              <div className="otc-step-item">
+                <div className="otc-step-num">3</div>
+                <div>
+                  <h4 className="otc-step-heading">Attach Receipt Picture</h4>
+                  <p className="otc-step-text">
+                    Upload a clear photo of your Official Receipt (O.R.) below so Registrar Staff can verify and begin preparing your document.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Notice for requests awaiting staff confirmation (Active View Only) */}
+        {viewMode === 'active' && pendingReviewRequests.length > 0 && (
           <div className="mb-6 p-4 rounded-xl border border-amber-200 bg-amber-50/80 flex items-start gap-3 text-xs text-amber-900 shadow-2xs">
             <span className="text-base shrink-0 mt-0.5">
                 <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -289,44 +439,46 @@ export default function StudentPaymentsPage() {
           </div>
         )}
 
-        {/* Filter Tabs */}
-        <div className="payments-filter-tabs">
-          <button
-            type="button"
-            onClick={() => setActiveTab('ALL')}
-            className={`payments-filter-tab ${activeTab === 'ALL' ? 'active' : ''}`}
-          >
-            <span>All Confirmed Requests</span>
-            <span className="payments-tab-count">{tabCounts.all}</span>
-          </button>
+        {/* Filter Tabs (Active View Only) */}
+        {viewMode === 'active' && (
+          <div className="payments-filter-tabs">
+            <button
+              type="button"
+              onClick={() => setActiveTab('ALL')}
+              className={`payments-filter-tab ${activeTab === 'ALL' ? 'active' : ''}`}
+            >
+              <span>All Confirmed Requests</span>
+              <span className="payments-tab-count">{tabCounts.all}</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('READY_PAYMENT')}
-            className={`payments-filter-tab ${activeTab === 'READY_PAYMENT' ? 'active' : ''}`}
-          >
-            <span>Ready for Payment</span>
-            <span className="payments-tab-count">{tabCounts.readyPayment}</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('READY_PAYMENT')}
+              className={`payments-filter-tab ${activeTab === 'READY_PAYMENT' ? 'active' : ''}`}
+            >
+              <span>Ready for Payment</span>
+              <span className="payments-tab-count">{tabCounts.readyPayment}</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('PENDING_VERIFY')}
-            className={`payments-filter-tab ${activeTab === 'PENDING_VERIFY' ? 'active' : ''}`}
-          >
-            <span>Pending Verification</span>
-            <span className="payments-tab-count">{tabCounts.pendingVerify}</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('PENDING_VERIFY')}
+              className={`payments-filter-tab ${activeTab === 'PENDING_VERIFY' ? 'active' : ''}`}
+            >
+              <span>Pending Verification</span>
+              <span className="payments-tab-count">{tabCounts.pendingVerify}</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('VERIFIED')}
-            className={`payments-filter-tab ${activeTab === 'VERIFIED' ? 'active' : ''}`}
-          >
-            <span>Payment Verified</span>
-            <span className="payments-tab-count">{tabCounts.verified}</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('VERIFIED')}
+              className={`payments-filter-tab ${activeTab === 'VERIFIED' ? 'active' : ''}`}
+            >
+              <span>Payment Verified</span>
+              <span className="payments-tab-count">{tabCounts.verified}</span>
+            </button>
+          </div>
+        )}
 
         {/* Requests List (Confirmed / For Payment Only) */}
         {filteredRequests.length > 0 ? (
@@ -476,6 +628,36 @@ export default function StudentPaymentsPage() {
 
                   {/* Actions Row */}
                   <div className="payment-card-actions">
+                    {/* Mark as Done button when Payment Verified in Active View */}
+                    {isPaymentVerified && viewMode !== 'history' && (
+                      <button
+                        type="button"
+                        onClick={() => handleMarkPaymentDone(req)}
+                        className="payment-btn-done"
+                        title="Mark payment as Done and move to Payment History"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>Done</span>
+                      </button>
+                    )}
+
+                    {/* Restore to Active button in History View */}
+                    {viewMode === 'history' && (
+                      <button
+                        type="button"
+                        onClick={() => handleRestorePayment(req)}
+                        className="payment-btn-outline"
+                        title="Restore to Active Payments"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                        </svg>
+                        <span>Restore to Active</span>
+                      </button>
+                    )}
+
                     {/* Button 1: Download Assessed Form (Only for confirmed / for-payment documents) */}
                     <button
                       type="button"
@@ -489,19 +671,35 @@ export default function StudentPaymentsPage() {
                       <span>Download Assessed Form ({assessedFee})</span>
                     </button>
 
-                    {/* Button 2: Attach Payment Picture */}
-                    <button
-                      type="button"
-                      onClick={() => handleOpenUploadModal(req)}
-                      className="payment-btn-emerald"
-                      title="Upload picture of Cashier Official Receipt"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      <span>{hasProofSubmitted ? 'Update Receipt Picture' : 'Attach Payment Picture'}</span>
-                    </button>
+                    {/* Button 2: Payment Action Buttons (Hidden once payment is verified) */}
+                    {!isPaymentVerified && viewMode !== 'history' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenUploadModal(req, 'PERSONAL')}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+                          title="Confirm face-to-face cashier payment (FTF)"
+                        >
+                          <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Confirm Payment (FTF)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenUploadModal(req, 'ONLINE')}
+                          className="payment-btn-emerald"
+                          title="Upload picture of Cashier Official Receipt"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <span>{hasProofSubmitted ? 'Update Receipt Picture' : 'Attach Payment Picture'}</span>
+                        </button>
+                      </>
+                    )}
 
                     {/* Button 3: Track Status Link */}
                     <button
@@ -530,7 +728,9 @@ export default function StudentPaymentsPage() {
               </svg>
             </div>
             <h3 className="text-base font-extrabold text-slate-900 mb-1">
-              {activeTab === 'READY_PAYMENT'
+              {viewMode === 'history'
+                ? 'No Completed Payments in History'
+                : activeTab === 'READY_PAYMENT'
                 ? 'No Requests Ready for Payment'
                 : activeTab === 'PENDING_VERIFY'
                 ? 'No Receipts Awaiting Verification'
@@ -539,20 +739,32 @@ export default function StudentPaymentsPage() {
                 : 'No Requests Confirmed for Payment Yet'}
             </h3>
             <p className="text-xs text-slate-500 max-w-sm mx-auto mb-5 leading-relaxed">
-              {pendingReviewRequests.length > 0
+              {viewMode === 'history'
+                ? 'When a verified payment is marked as "Done", it will appear here in your payment history.'
+                : pendingReviewRequests.length > 0
                 ? `You have ${pendingReviewRequests.length} request(s) awaiting confirmation by the Registrar. Once confirmed by staff or marked "For Payment", your assessed form and receipt attachment will appear here automatically.`
                 : 'Document requests only appear here after the Registrar Staff or Admin confirms the request and sets the status to "For Payment".'}
             </p>
-            <button
-              type="button"
-              onClick={() => navigate(ROUTES.STUDENT.REQUESTS)}
-              className="payment-btn-primary"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
-              </svg>
-              Track Status of Submitted Requests
-            </button>
+            {viewMode === 'history' ? (
+              <button
+                type="button"
+                onClick={() => setViewMode('active')}
+                className="payment-btn-primary"
+              >
+                Back to Active Payments
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.STUDENT.REQUESTS)}
+                className="payment-btn-primary"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+                </svg>
+                Track Status of Submitted Requests
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -560,6 +772,7 @@ export default function StudentPaymentsPage() {
       {/* Payment Upload Modal */}
       <PaymentUploadModal
         isOpen={isPaymentModalOpen}
+        defaultOption={paymentModalOption}
         onClose={() => {
           setIsPaymentModalOpen(false);
           setSelectedRequest(null);
