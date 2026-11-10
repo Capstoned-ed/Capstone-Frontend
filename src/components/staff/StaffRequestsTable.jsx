@@ -17,6 +17,7 @@ export default function StaffRequestsTable({
   onArchive,
   onRestore,
   showAssignedStaff = false,
+  searchControls = null,
 }) {
   const toast = useToast();
   const [showAll, setShowAll] = useState(false);
@@ -43,6 +44,12 @@ export default function StaffRequestsTable({
           <p className="staff-list-subtitle">{subtitle}</p>
         </div>
       </div>
+
+      {searchControls && (
+        <div className="mb-4">
+          {searchControls}
+        </div>
+      )}
 
       <div className="table-responsive">
         <table className="staff-data-table">
