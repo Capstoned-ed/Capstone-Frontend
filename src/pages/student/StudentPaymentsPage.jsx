@@ -564,27 +564,12 @@ export default function StudentPaymentsPage() {
                           Receipt Attached (Pending Verification)
                         </span>
                       ) : isPaymentVerified ? (
-                        <div className="flex items-center gap-2">
-                          <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300 inline-flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                            Payment Verified
-                          </span>
-                          {viewMode !== 'history' && (
-                            <button
-                              type="button"
-                              onClick={() => handleMarkPaymentDone(req)}
-                              className="payment-btn-done text-xs py-1 px-3 shadow-xs"
-                              title="Mark as Done and move to Payment History"
-                            >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                              </svg>
-                              <span>Done</span>
-                            </button>
-                          )}
-                        </div>
+                        <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300 inline-flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          Payment Verified
+                        </span>
                       ) : (
                         <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-900 border border-indigo-200 inline-flex items-center gap-1">
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
@@ -670,7 +655,7 @@ export default function StudentPaymentsPage() {
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
-                        <span>✓ Done (Move to History)</span>
+                        <span>Done</span>
                       </button>
                     )}
 
@@ -702,8 +687,8 @@ export default function StudentPaymentsPage() {
                       <span>Download Assessed Form ({assessedFee})</span>
                     </button>
 
-                    {/* Button 2: Attach Payment Picture */}
-                    {viewMode !== 'history' && (
+                    {/* Button 2: Attach Payment Picture (Hidden once payment is verified) */}
+                    {!isPaymentVerified && viewMode !== 'history' && (
                       <button
                         type="button"
                         onClick={() => handleOpenUploadModal(req)}
