@@ -54,6 +54,62 @@ function formatDateStrReadable(dateStr, options = { month: 'long', day: 'numeric
   return dateObj.toLocaleDateString('en-US', options);
 }
 
+// Helper to check if a request status qualifies for "Process Document" on the calendar
+export function isForProcessingStatus(status, rawStatus = '', paymentStatus = '') {
+  const s = String(status || '').trim().toUpperCase();
+  const rawS = String(rawStatus || '').trim().toUpperCase();
+  const pStatus = String(paymentStatus || '').trim().toUpperCase();
+
+  // If status is Pending or For Payment or On Hold, it is NOT for processing!
+  if (
+    s === 'PENDING' ||
+    s === 'RECEIVED' ||
+    s === 'REQUEST SUBMITTED' ||
+    s === 'PENDING PAYMENT' ||
+    s === 'PENDING_PAYMENT' ||
+    s === 'PAYMENT_PENDING' ||
+    s === 'PAYMENT PENDING' ||
+    s === 'FOR PAYMENT' ||
+    s === 'FOR_PAYMENT' ||
+    s === 'CLEARED FOR PAYMENT' ||
+    s === 'ON HOLD' ||
+    s === 'ON_HOLD' ||
+    s === 'HOLD' ||
+    s === 'CANCELLED' ||
+    s === 'REJECTED' ||
+    rawS === 'PENDING' ||
+    rawS === 'PAYMENT_PENDING' ||
+    rawS === 'PENDING_PAYMENT' ||
+    rawS === 'FOR_PAYMENT'
+  ) {
+    if (pStatus !== 'VERIFIED' && rawS !== 'PAYMENT_VERIFIED') {
+      return false;
+    }
+  }
+
+  return (
+    s === 'FOR PROCESSING' ||
+    s === 'FOR_PROCESSING' ||
+    s === 'PROCESSING' ||
+    s === 'DOCUMENT PREPARATION' ||
+    s === 'DOCUMENT_PREPARATION' ||
+    s === 'PAYMENT VERIFIED' ||
+    s === 'PAYMENT_VERIFIED' ||
+    rawS === 'FOR_PROCESSING' ||
+    rawS === 'PAYMENT_VERIFIED' ||
+    pStatus === 'VERIFIED' ||
+    s === 'FOR RELEASE' ||
+    s === 'FOR_RELEASE' ||
+    s === 'RELEASING' ||
+    s === 'READY_FOR_RELEASE' ||
+    s === 'READY FOR RELEASE' ||
+    s === 'READY_FOR_PICKUP' ||
+    s === 'READY FOR PICKUP' ||
+    s === 'CLAIMED' ||
+    s === 'RELEASED'
+  );
+}
+
 /**
  * Reusable ProcessCalendarCard Component
  * Displays the full month processing calendar with batch scheduling and active batches list
@@ -93,6 +149,12 @@ export default function ProcessCalendarCard({
       if (!newRequestsMap[reqDate]) newRequestsMap[reqDate] = [];
       newRequestsMap[reqDate].push(...reqs);
 
+      // ONLY requests that have reached 'For Processing' (or beyond) reflect in the Process Document schedule!
+      const processingReqs = reqs.filter((r) =>
+        isForProcessingStatus(r.status, r.rawStatus || r.raw?.status, r.payment_status)
+      );
+      const totalProcessingInBatch = processingReqs.length;
+
       // Determine batch expected release date
       const firstWithRelDate = reqs.find((r) => r.release_date && r.release_date > reqDate);
       const releaseDate = firstWithRelDate ? firstWithRelDate.release_date : addDaysToDateStr(reqDate, 5);
@@ -101,31 +163,37 @@ export default function ProcessCalendarCard({
       const diffDays = getDaysBetween(reqDate, releaseDate);
       const numProcessingDays = Math.max(1, diffDays - 1);
 
-      // Divide requests across scheduled processing days
-      const baseQuota = Math.floor(totalInBatch / numProcessingDays);
-      const remainder = totalInBatch % numProcessingDays;
+      // Divide ONLY the for-processing requests across scheduled processing days
+      if (totalProcessingInBatch > 0) {
+        const baseQuota = Math.floor(totalProcessingInBatch / numProcessingDays);
+        const remainder = totalProcessingInBatch % numProcessingDays;
 
-      let startIndex = 0;
-      for (let i = 0; i < numProcessingDays; i++) {
-        const procDate = addDaysToDateStr(reqDate, i + 1);
-        const dailyQuota = baseQuota + (i < remainder ? 1 : 0);
-        const slice = reqs.slice(startIndex, startIndex + dailyQuota);
-        startIndex += dailyQuota;
+        let startIndex = 0;
+        for (let i = 0; i < numProcessingDays; i++) {
+          const procDate = addDaysToDateStr(reqDate, i + 1);
+          const dailyQuota = baseQuota + (i < remainder ? 1 : 0);
+          const slice = processingReqs.slice(startIndex, startIndex + dailyQuota);
+          startIndex += dailyQuota;
 
-        dailyProcessingMap[procDate] = (dailyProcessingMap[procDate] || 0) + dailyQuota;
-        if (!dailyProcessingRequestsMap[procDate]) {
-          dailyProcessingRequestsMap[procDate] = [];
+          if (dailyQuota > 0) {
+            dailyProcessingMap[procDate] = (dailyProcessingMap[procDate] || 0) + dailyQuota;
+            if (!dailyProcessingRequestsMap[procDate]) {
+              dailyProcessingRequestsMap[procDate] = [];
+            }
+            dailyProcessingRequestsMap[procDate].push(...slice);
+          }
         }
-        dailyProcessingRequestsMap[procDate].push(...slice);
       }
 
       // Count processed requests in this batch (status 'For Release', 'Claimed', or 'Released')
-      const processedCount = reqs.filter((r) => {
+      const processedCount = processingReqs.filter((r) => {
         const s = (r.status || '').toLowerCase();
         return s.includes('release') || s.includes('pickup') || s.includes('ready') || s.includes('claim');
       }).length;
 
-      const completionPercentage = totalInBatch > 0 ? Math.round((processedCount / totalInBatch) * 100) : 100;
+      const completionPercentage = totalProcessingInBatch > 0
+        ? Math.round((processedCount / totalProcessingInBatch) * 100)
+        : 100;
 
       const batchObj = {
         batchId: `batch-${reqDate}`,
@@ -134,9 +202,11 @@ export default function ProcessCalendarCard({
         releaseDate,
         releaseDateFormatted: formatDateStrReadable(releaseDate),
         totalRequests: totalInBatch,
+        processingRequestsCount: totalProcessingInBatch,
         processedCount,
         completionPercentage,
-        requests: reqs,
+        requests: processingReqs,
+        allBatchRequests: reqs,
       };
 
       if (!releaseBatchesMap[releaseDate]) {
@@ -511,8 +581,11 @@ export default function ProcessCalendarCard({
                       batch.requestDate,
                       {
                         toProcess: batch.requests || [],
-                        releasing: [],
-                        newRequests: batch.requests || [],
+                        releasing: (batch.allBatchRequests || []).filter((r) => {
+                          const s = String(r.status || '').toLowerCase();
+                          return s.includes('release') || s.includes('pickup') || s.includes('ready') || s.includes('claim');
+                        }),
+                        newRequests: batch.allBatchRequests || batch.requests || [],
                       },
                       {
                         isBatch: true,
