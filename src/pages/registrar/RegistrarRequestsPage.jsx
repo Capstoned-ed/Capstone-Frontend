@@ -131,6 +131,7 @@ export default function RegistrarRequestsPage() {
   const [archivedMap, setArchivedMap] = useState(() => getArchivedRequestsMap());
 
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [batchModalOpen, setBatchModalOpen] = useState(false);
 
   const handleToggleSelect = (rawOrId) => {
@@ -1155,28 +1156,60 @@ export default function RegistrarRequestsPage() {
       </div>
 
       <div className="assign-table-card">
-        <h3 className="assign-table-title">
-          Requests Assignment - {selectedBatch === 'ALL' ? 'All Batches' : selectedBatch}
-        </h3>
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <h3 className="assign-table-title !mb-0">
+            Requests Assignment - {selectedBatch === 'ALL' ? 'All Batches' : selectedBatch}
+          </h3>
+          <button
+            type="button"
+            onClick={() => {
+              setIsSelectionMode((prev) => !prev);
+              if (isSelectionMode) setSelectedIds(new Set());
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              isSelectionMode
+                ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                : 'bg-indigo-50 text-indigo-950 border border-indigo-200 hover:bg-indigo-100'
+            }`}
+          >
+            {isSelectionMode ? (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Cancel Selection</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                <span>Select Multiple</span>
+              </>
+            )}
+          </button>
+        </div>
 
         <div className="table-responsive">
           <table className="custom-data-table">
             <thead>
               <tr>
-                <th className="w-10 px-3 text-center">
-                  <input
-                    type="checkbox"
-                    checked={
-                      batchRequests.length > 0 &&
-                      (showAllBatch ? batchRequests : batchRequests.slice(0, 10)).every((item) => isItemSelected(item))
-                    }
-                    onChange={() =>
-                      handleToggleSelectAll(showAllBatch ? batchRequests : batchRequests.slice(0, 10))
-                    }
-                    className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
-                    title="Select all"
-                  />
-                </th>
+                {isSelectionMode && (
+                  <th className="w-10 px-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={
+                        batchRequests.length > 0 &&
+                        (showAllBatch ? batchRequests : batchRequests.slice(0, 10)).every((item) => isItemSelected(item))
+                      }
+                      onChange={() =>
+                        handleToggleSelectAll(showAllBatch ? batchRequests : batchRequests.slice(0, 10))
+                      }
+                      className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                      title="Select all"
+                    />
+                  </th>
+                )}
                 <th>Request ID</th>
                 <th>Student</th>
                 <th>Document Type</th>
@@ -1189,13 +1222,13 @@ export default function RegistrarRequestsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-sm text-slate-400">
+                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
                     Loading requests from server...
                   </td>
                 </tr>
               ) : batchRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-sm text-slate-400">
+                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
                     {requests.length === 0
                       ? 'No student requests have been submitted yet.'
                       : 'No requests found in this batch.'}
@@ -1203,15 +1236,17 @@ export default function RegistrarRequestsPage() {
                 </tr>
               ) : (
                 (showAllBatch ? batchRequests : batchRequests.slice(0, 10)).map((item) => (
-                  <tr key={item.rawId || item.id} className={isItemSelected(item) ? 'bg-indigo-50/50' : ''}>
-                    <td className="w-10 px-3 text-center">
-                      <input
-                        type="checkbox"
-                        checked={isItemSelected(item)}
-                        onChange={() => handleToggleSelect(item.rawId || item.id)}
-                        className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
-                      />
-                    </td>
+                  <tr key={item.rawId || item.id} className={isItemSelected(item) && isSelectionMode ? 'bg-indigo-50/50' : ''}>
+                    {isSelectionMode && (
+                      <td className="w-10 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isItemSelected(item)}
+                          onChange={() => handleToggleSelect(item.rawId || item.id)}
+                          className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                        />
+                      </td>
+                    )}
                     <td className="req-id-text">{item.id}</td>
                     <td>
                       <div className="student-name-text">{item.student_name}</div>
@@ -1372,33 +1407,65 @@ export default function RegistrarRequestsPage() {
       </div>
 
       <div className="requests-list-card">
-        <div className="requests-list-header">
-          <h3 className="requests-list-title">Requests</h3>
-          <p className="requests-list-subtitle">
-            {isStaff
-              ? 'Process approved requests, prepare documents, and update request statuses'
-              : 'Review and approve/reject credential requests from students'}
-          </p>
+        <div className="requests-list-header flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h3 className="requests-list-title">Requests</h3>
+            <p className="requests-list-subtitle">
+              {isStaff
+                ? 'Process approved requests, prepare documents, and update request statuses'
+                : 'Review and approve/reject credential requests from students'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setIsSelectionMode((prev) => !prev);
+              if (isSelectionMode) setSelectedIds(new Set());
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              isSelectionMode
+                ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                : 'bg-indigo-50 text-indigo-950 border border-indigo-200 hover:bg-indigo-100'
+            }`}
+          >
+            {isSelectionMode ? (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Cancel Selection</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                <span>Select Multiple</span>
+              </>
+            )}
+          </button>
         </div>
 
         <div className="table-responsive">
           <table className="custom-data-table">
             <thead>
               <tr>
-                <th className="w-10 px-3 text-center">
-                  <input
-                    type="checkbox"
-                    checked={
-                      activeFilteredRequests.length > 0 &&
-                      (showAllRequests ? activeFilteredRequests : activeFilteredRequests.slice(0, 10)).every((item) => isItemSelected(item))
-                    }
-                    onChange={() =>
-                      handleToggleSelectAll(showAllRequests ? activeFilteredRequests : activeFilteredRequests.slice(0, 10))
-                    }
-                    className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
-                    title="Select all"
-                  />
-                </th>
+                {isSelectionMode && (
+                  <th className="w-10 px-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={
+                        activeFilteredRequests.length > 0 &&
+                        (showAllRequests ? activeFilteredRequests : activeFilteredRequests.slice(0, 10)).every((item) => isItemSelected(item))
+                      }
+                      onChange={() =>
+                        handleToggleSelectAll(showAllRequests ? activeFilteredRequests : activeFilteredRequests.slice(0, 10))
+                      }
+                      className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                      title="Select all"
+                    />
+                  </th>
+                )}
                 <th>Request ID</th>
                 <th>Student</th>
                 <th>Document Type</th>
@@ -1411,19 +1478,19 @@ export default function RegistrarRequestsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-sm text-slate-400">
+                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
                     Loading requests from server...
                   </td>
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-sm text-rose-500">
+                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-rose-500">
                     {error}
                   </td>
                 </tr>
               ) : activeFilteredRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-sm text-slate-400">
+                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
                     {activeTotalCount === 0
                       ? 'No active student requests in queue.'
                       : 'No active requests found matching your filter criteria.'}
@@ -1431,15 +1498,17 @@ export default function RegistrarRequestsPage() {
                 </tr>
               ) : (
                 (showAllRequests ? activeFilteredRequests : activeFilteredRequests.slice(0, 10)).map((item) => (
-                  <tr key={item.rawId || item.id} className={isItemSelected(item) ? 'bg-indigo-50/50' : ''}>
-                    <td className="w-10 px-3 text-center">
-                      <input
-                        type="checkbox"
-                        checked={isItemSelected(item)}
-                        onChange={() => handleToggleSelect(item.rawId || item.id)}
-                        className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
-                      />
-                    </td>
+                  <tr key={item.rawId || item.id} className={isItemSelected(item) && isSelectionMode ? 'bg-indigo-50/50' : ''}>
+                    {isSelectionMode && (
+                      <td className="w-10 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isItemSelected(item)}
+                          onChange={() => handleToggleSelect(item.rawId || item.id)}
+                          className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                        />
+                      </td>
+                    )}
                     <td className="req-id-text">{item.id}</td>
                     <td>
                       <div className="student-name-text">{item.student_name}</div>
@@ -1531,19 +1600,49 @@ export default function RegistrarRequestsPage() {
                   Archived and completed request assignments showing assigned staff members and release details
                 </p>
               </div>
-              <div className="batch-select-row !mt-0">
-                <span className="batch-select-label">Select Batch:</span>
-                <select
-                  value={selectedBatch}
-                  onChange={(e) => setSelectedBatch(e.target.value)}
-                  className="batch-select-input"
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSelectionMode((prev) => !prev);
+                    if (isSelectionMode) setSelectedIds(new Set());
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    isSelectionMode
+                      ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                      : 'bg-indigo-50 text-indigo-950 border border-indigo-200 hover:bg-indigo-100'
+                  }`}
                 >
-                  {batchOptions.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.label}
-                    </option>
-                  ))}
-                </select>
+                  {isSelectionMode ? (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      <span>Cancel Selection</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                      <span>Select Multiple</span>
+                    </>
+                  )}
+                </button>
+                <div className="batch-select-row !mt-0">
+                  <span className="batch-select-label">Select Batch:</span>
+                  <select
+                    value={selectedBatch}
+                    onChange={(e) => setSelectedBatch(e.target.value)}
+                    className="batch-select-input"
+                  >
+                    {batchOptions.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -1585,20 +1684,22 @@ export default function RegistrarRequestsPage() {
               <table className="custom-data-table">
                 <thead>
                   <tr>
-                    <th className="w-10 px-3 text-center">
-                      <input
-                        type="checkbox"
-                        checked={
-                          historyBatchRequests.length > 0 &&
-                          (showAllHistoryBatch ? historyBatchRequests : historyBatchRequests.slice(0, 10)).every((item) => isItemSelected(item))
-                        }
-                        onChange={() =>
-                          handleToggleSelectAll(showAllHistoryBatch ? historyBatchRequests : historyBatchRequests.slice(0, 10))
-                        }
-                        className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
-                        title="Select all"
-                      />
-                    </th>
+                    {isSelectionMode && (
+                      <th className="w-10 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            historyBatchRequests.length > 0 &&
+                            (showAllHistoryBatch ? historyBatchRequests : historyBatchRequests.slice(0, 10)).every((item) => isItemSelected(item))
+                          }
+                          onChange={() =>
+                            handleToggleSelectAll(showAllHistoryBatch ? historyBatchRequests : historyBatchRequests.slice(0, 10))
+                          }
+                          className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                          title="Select all"
+                        />
+                      </th>
+                    )}
                     <th>Request ID</th>
                     <th>Student</th>
                     <th>Document Type</th>
@@ -1611,13 +1712,13 @@ export default function RegistrarRequestsPage() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-sm text-slate-400">
+                      <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
                         Loading requests from server...
                       </td>
                     </tr>
                   ) : historyBatchRequests.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-sm text-slate-400">
+                      <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
                         {assignmentHistorySearch || assignmentHistoryDocType
                           ? 'No matching archived assignments found.'
                           : historyTotalCount === 0
@@ -1627,15 +1728,17 @@ export default function RegistrarRequestsPage() {
                     </tr>
                   ) : (
                     (showAllHistoryBatch ? historyBatchRequests : historyBatchRequests.slice(0, 10)).map((item) => (
-                      <tr key={item.rawId || item.id} className={isItemSelected(item) ? 'bg-indigo-50/50' : ''}>
-                        <td className="w-10 px-3 text-center">
-                          <input
-                            type="checkbox"
-                            checked={isItemSelected(item)}
-                            onChange={() => handleToggleSelect(item.rawId || item.id)}
-                            className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
-                          />
-                        </td>
+                      <tr key={item.rawId || item.id} className={isItemSelected(item) && isSelectionMode ? 'bg-indigo-50/50' : ''}>
+                        {isSelectionMode && (
+                          <td className="w-10 px-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isItemSelected(item)}
+                              onChange={() => handleToggleSelect(item.rawId || item.id)}
+                              className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                            />
+                          </td>
+                        )}
                         <td className="req-id-text">{item.id}</td>
                         <td>
                           <div className="student-name-text">{item.student_name}</div>
@@ -1731,6 +1834,11 @@ export default function RegistrarRequestsPage() {
             showAssignedStaff={true}
             emptyMessage="No claimed document requests in history yet."
             enableSelection={true}
+            isSelectionMode={isSelectionMode}
+            onToggleSelectionMode={() => {
+              setIsSelectionMode((p) => !p);
+              if (isSelectionMode) setSelectedIds(new Set());
+            }}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
             onToggleSelectAll={() => handleToggleSelectAll(historyRequests.slice(0, 10))}

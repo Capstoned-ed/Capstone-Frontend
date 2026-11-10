@@ -19,6 +19,8 @@ export default function StaffRequestsTable({
   showAssignedStaff = false,
   searchControls = null,
   enableSelection = false,
+  isSelectionMode = false,
+  onToggleSelectionMode = null,
   selectedIds = null,
   onToggleSelect = null,
   onToggleSelectAll = null,
@@ -26,10 +28,11 @@ export default function StaffRequestsTable({
   const toast = useToast();
   const [showAll, setShowAll] = useState(false);
   const visibleRequests = showAll ? filteredRequests : filteredRequests.slice(0, 10);
-  const colSpanCount = (showAssignedStaff ? 8 : 7) + (enableSelection ? 1 : 0);
+  const showCheckboxCol = enableSelection && isSelectionMode;
+  const colSpanCount = (showAssignedStaff ? 8 : 7) + (showCheckboxCol ? 1 : 0);
 
   const isAllSelected =
-    enableSelection &&
+    showCheckboxCol &&
     visibleRequests.length > 0 &&
     visibleRequests.every((r) =>
       selectedIds && (selectedIds.has(String(r.id)) || selectedIds.has(String(r.rawId)))
@@ -54,6 +57,34 @@ export default function StaffRequestsTable({
           </div>
           <p className="staff-list-subtitle">{subtitle}</p>
         </div>
+
+        {enableSelection && (
+          <button
+            type="button"
+            onClick={onToggleSelectionMode}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              isSelectionMode
+                ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                : 'bg-indigo-50 text-indigo-950 border border-indigo-200 hover:bg-indigo-100'
+            }`}
+          >
+            {isSelectionMode ? (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Cancel Selection</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                <span>Select Multiple</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       {searchControls && (
@@ -66,7 +97,7 @@ export default function StaffRequestsTable({
         <table className="staff-data-table">
           <thead>
             <tr>
-              {enableSelection && (
+              {showCheckboxCol && (
                 <th className="w-10 px-3 text-center">
                   <input
                     type="checkbox"
@@ -113,8 +144,8 @@ export default function StaffRequestsTable({
               visibleRequests.map((item) => {
                 const isSelected = selectedIds && (selectedIds.has(String(item.id)) || selectedIds.has(String(item.rawId)));
                 return (
-                  <tr key={item.rawId || item.id} className={isSelected ? 'bg-indigo-50/50' : ''}>
-                    {enableSelection && (
+                  <tr key={item.rawId || item.id} className={isSelected && showCheckboxCol ? 'bg-indigo-50/50' : ''}>
+                    {showCheckboxCol && (
                       <td className="w-10 px-3 text-center">
                         <input
                           type="checkbox"
