@@ -174,6 +174,7 @@ export default function StaffRequestsPage() {
   const [updating, setUpdating] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [batchModalOpen, setBatchModalOpen] = useState(false);
 
   const handleToggleSelect = (rawOrId) => {
@@ -810,6 +811,7 @@ export default function StaffRequestsPage() {
     window.dispatchEvent(new Event('regquest_requests_updated'));
     toast.success(`Successfully updated ${selectedRequestsList.length} requests!`);
     setSelectedIds(new Set());
+    setIsSelectionMode(false);
     setBatchModalOpen(false);
   };
 
@@ -1218,6 +1220,11 @@ export default function StaffRequestsPage() {
             onArchive={handleArchiveRequest}
             emptyMessage="No requests currently assigned to you for processing."
             enableSelection={true}
+            isSelectionMode={isSelectionMode}
+            onToggleSelectionMode={() => {
+              setIsSelectionMode((p) => !p);
+              if (isSelectionMode) setSelectedIds(new Set());
+            }}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
             onToggleSelectAll={() => handleToggleSelectAll(assignedRequests.slice(0, 10))}
@@ -1238,6 +1245,11 @@ export default function StaffRequestsPage() {
             onAction={handleClaimAndProcess}
             emptyMessage="No unassigned requests found in queue."
             enableSelection={true}
+            isSelectionMode={isSelectionMode}
+            onToggleSelectionMode={() => {
+              setIsSelectionMode((p) => !p);
+              if (isSelectionMode) setSelectedIds(new Set());
+            }}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
             onToggleSelectAll={() => handleToggleSelectAll(unassignedRequests.slice(0, 10))}
@@ -1258,6 +1270,11 @@ export default function StaffRequestsPage() {
           onRestore={handleRestoreRequest}
           emptyMessage="No claimed document requests in history yet."
           enableSelection={true}
+          isSelectionMode={isSelectionMode}
+          onToggleSelectionMode={() => {
+            setIsSelectionMode((p) => !p);
+            if (isSelectionMode) setSelectedIds(new Set());
+          }}
           selectedIds={selectedIds}
           onToggleSelect={handleToggleSelect}
           onToggleSelectAll={() => handleToggleSelectAll(historyRequests.slice(0, 10))}
