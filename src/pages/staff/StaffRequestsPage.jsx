@@ -1176,13 +1176,6 @@ export default function StaffRequestsPage() {
             }`}
           >
             <span>Active Requests</span>
-            <span
-              className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                activeTab === 'active' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
-              }`}
-            >
-              {assignedRequests.length}
-            </span>
           </button>
 
           <button
@@ -1203,15 +1196,6 @@ export default function StaffRequestsPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <span>Request History</span>
-            {historyRequests.length > 0 && (
-              <span
-                className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                  activeTab === 'history' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
-                }`}
-              >
-                {historyRequests.length}
-              </span>
-            )}
           </button>
         </div>
       </div>
