@@ -424,10 +424,14 @@ export function isValidRequest(item) {
     (!studentName || studentName === 'Student' || studentName === 'N/A') &&
     (!studentId || studentId === 'N/A')
   ) {
-    // If it's a legitimate request with a valid tracking number (e.g. REQ-2026-... or RQ-...), it is legitimate
+    // If it's a legitimate request with a valid tracking number, it is legitimate
     const isRealReq = Boolean(
       item.tracking_number &&
-      (/^REQ-\d{4}-\d+$/i.test(item.tracking_number) || /^RQ-\d+/i.test(item.tracking_number))
+      (
+        /^[A-Z0-9]+-\d{2}-\d{2}-\d{2}-/i.test(item.tracking_number) ||
+        /^REQ-\d{4}-\d+$/i.test(item.tracking_number) ||
+        /^RQ-\d+/i.test(item.tracking_number)
+      )
     );
     if (!isRealReq) {
       return false;
@@ -630,7 +634,11 @@ export function purgeCorruptRequests() {
             const date = item.created_at || item.request_date || item.date;
             if (!date || date === 'N/A') return false;
             if ((!sName || sName === 'Student' || sName === 'N/A') && (!sId || sId === 'N/A')) {
-              const isBackend = item.tracking_number && /^REQ-\d{4}-\d+$/i.test(item.tracking_number);
+              const isBackend = item.tracking_number && (
+                /^[A-Z0-9]+-\d{2}-\d{2}-\d{2}-/i.test(item.tracking_number) ||
+                /^REQ-\d{4}-\d+$/i.test(item.tracking_number) ||
+                /^RQ-\d+/i.test(item.tracking_number)
+              );
               if (!isBackend) return false;
             }
             return true;
@@ -858,14 +866,18 @@ export function updateStoredRequest(idOrTracking, patch, options = {}) {
 
     // If the request originated from the backend API and was not in localStorage yet,
     // upsert it so status, clearance verification, and payment confirmation persist locally!
-    if (!targetMatched && (options.fallbackItem || patch?.tracking_number || String(idOrTracking || '').startsWith('REQ-'))) {
+    const isLikelyTracking = (
+      String(idOrTracking || '').startsWith('REQ-') ||
+      /^[A-Z0-9]+-\d{2}-\d{2}-\d{2}-/i.test(String(idOrTracking || ''))
+    );
+    if (!targetMatched && (options.fallbackItem || patch?.tracking_number || isLikelyTracking)) {
       const base = options.fallbackItem || {};
       previousStatus = base.status || 'Pending';
       const resolvedTracking =
         patch?.tracking_number ||
         base.tracking_number ||
         base.trackingId ||
-        (String(idOrTracking || '').startsWith('REQ-') ? String(idOrTracking) : String(base.id || idOrTracking));
+        (isLikelyTracking ? String(idOrTracking) : String(base.id || idOrTracking));
 
       targetMatched = {
         ...base,
@@ -1334,3 +1346,54 @@ export function setRequestArchived(idOrTracking, isArchived = true, user = null,
     return false;
   }
 }
+
+const DOC_CODE_RULES = [
+  { match: (s) => /transcript|tor/i.test(s), code: '1' },
+  { match: (s) => /honorable|dismissal|hd/i.test(s), code: '2' },
+  { match: (s) => /evaluation|eval/i.test(s), code: '5' },
+  { match: (s) => /car/i.test(s), code: '4F' },
+  { match: (s) => /gpa/i.test(s), code: '4B' },
+  { match: (s) => /officially\s*enrolled|enrolled|coe/i.test(s), code: '4A' },
+  { match: (s) => /earned\s*units|earned|units/i.test(s), code: '4D' },
+  { match: (s) => /grades|subject/i.test(s), code: '4G' },
+  { match: (s) => /cert/i.test(s), code: '4' },
+];
+
+export function resolveDocCodes(docNames = []) {
+  const list = Array.isArray(docNames) ? docNames : [docNames];
+  const codes = [];
+  list.forEach((name) => {
+    if (!name) return;
+    const str = String(name).trim();
+    for (const rule of DOC_CODE_RULES) {
+      if (rule.match(str)) {
+        if (!codes.includes(rule.code)) {
+          codes.push(rule.code);
+        }
+        break;
+      }
+    }
+  });
+  return codes.length > 0 ? codes.join('') : '1';
+}
+
+export function generateTrackingNumberFallback({
+  course = 'IT',
+  studentId = '',
+  docCode = '1',
+  sequence = 1,
+} = {}) {
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const dateStr = `${yy}-${mm}-${dd}`;
+
+  const rawId = String(studentId || 'STUDENT').trim();
+  const trimmedId = rawId.length > 2 ? rawId.slice(2) : rawId;
+  const seqStr = String(sequence || 1).padStart(3, '0');
+  const cleanCourse = String(course || 'IT').trim().toUpperCase();
+
+  return `${cleanCourse}-${dateStr}-${trimmedId}-${docCode}-${seqStr}`;
+}
+

@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import requestsApi, { saveStoredRequest } from '../../api/requests';
+import requestsApi, {
+  saveStoredRequest,
+  getStoredRequests,
+  resolveDocCodes,
+  generateTrackingNumberFallback,
+} from '../../api/requests';
 import { saveStoredNotification } from '../../api/notifications';
 import credentialTypesApi from '../../api/credentialTypes';
 import clearancesApi, { saveClearanceAttachment } from '../../api/clearances';
@@ -174,7 +179,7 @@ export default function RequestDocumentPage() {
   const [purposeInput, setPurposeInput] = useState('For Personal Files');
 
   // Step 3 State
-  const [generatedTrackingId, setGeneratedTrackingId] = useState('RQ-097323');
+  const [generatedTrackingId, setGeneratedTrackingId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Helper to accurately map selected document names to backend database CredentialType IDs
@@ -761,6 +766,7 @@ export default function RequestDocumentPage() {
       const exactDocTitle = currentDocDetails.title || primaryDoc || 'Document Request';
       const cleanPurpose = purposeInput || selectedPurposes.join(', ') || 'Official Academic Credential Request';
       const formattedRemarks = `[${exactDocTitle}] ${cleanPurpose}`;
+      const docCode = resolveDocCodes(selectedDocs);
 
       // Submit directly to backend API so it persists in the database for Admin and Staff
       if (targetCredTypeId) {
@@ -768,21 +774,41 @@ export default function RequestDocumentPage() {
           createdItem = await requestsApi.create({
             credential_type: targetCredTypeId,
             remarks: formattedRemarks,
+            custom_doc_code: docCode,
           });
         } catch (apiErr) {
           console.warn('Backend create request returned validation response:', apiErr);
-          if (apiErr.response?.data) {
-            const msg = Object.values(apiErr.response.data).flat().join(' ');
-            if (msg.toLowerCase().includes('clearance')) {
-              toast.warning(msg || 'Please ensure you have an approved clearance.');
+          if (apiErr.response) {
+            let errorMsg = 'Failed to submit request to server.';
+            const errData = apiErr.response.data;
+            if (typeof errData === 'string') {
+              errorMsg = errData;
+            } else if (Array.isArray(errData)) {
+              errorMsg = errData.join(' ');
+            } else if (typeof errData === 'object' && errData !== null) {
+              errorMsg = Object.entries(errData)
+                .map(([k, v]) => `${k !== 'detail' && k !== 'non_field_errors' ? `${k}: ` : ''}${Array.isArray(v) ? v.join(' ') : v}`)
+                .join(' ');
             }
+            toast.error(errorMsg);
+            setSubmitting(false);
+            return;
           }
         }
       }
 
-      // Generate or use official backend tracking ID (e.g. REQ-2026-000003 or RQ-097323)
-      const randomSuffix = Math.floor(100000 + Math.random() * 900000);
-      const trackingCode = createdItem?.tracking_number || `RQ-${randomSuffix}`;
+      // Resolve tracking number: Prefer official backend tracking ID, fallback to structured formula
+      let trackingCode = createdItem?.tracking_number;
+      if (!trackingCode) {
+        const existingStored = getStoredRequests();
+        const userSeq = existingStored.filter((r) => r.student_id === studentId || r.user === (user?.userId || user?.id)).length + 1;
+        trackingCode = generateTrackingNumberFallback({
+          course: user?.course_code || course || 'IT',
+          studentId: studentId || user?.username || 'STUDENT',
+          docCode: docCode || '1',
+          sequence: userSeq,
+        });
+      }
       setGeneratedTrackingId(trackingCode);
 
       // Build comprehensive request record that is immediately accessible to Admin, Staff, and Student
