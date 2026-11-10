@@ -113,7 +113,7 @@ export default function ProcessRequestModal({
 
   const hasOrNumber = Boolean(activeOrNumber);
 
-  const canConfirmPayment = Boolean(hasReceiptUploaded && hasOrNumber);
+  const canConfirmPayment = Boolean(hasOrNumber || hasReceiptUploaded);
 
   const isAlreadyPastPayment = [
     'FOR PROCESSING',
@@ -569,12 +569,12 @@ export default function ProcessRequestModal({
 
     const isVerified = actionToSet === 'VERIFIED';
 
-    if (isVerified && (!hasReceiptUploaded || !hasOrNumber)) {
-      toast.warning('Cannot confirm payment: Official receipt upload and O.R. Number are required.');
+    if (isVerified && (!hasReceiptUploaded && !hasOrNumber)) {
+      toast.warning('Cannot confirm payment: Official receipt upload or O.R. Number is required.');
       return;
     }
 
-    const finalOrNumber = activeOrNumber;
+    const finalOrNumber = activeOrNumber || 'Paid at USTP Cashier (FTF)';
 
     verifyStoredPaymentProof(
       [requestItem.tracking_number, requestItem.id, requestItem.rawId],
@@ -1509,11 +1509,7 @@ export default function ProcessRequestModal({
                         }`}
                         title={
                           !hasReceiptUploaded && !hasOrNumber
-                            ? 'Cannot confirm payment: No receipt uploaded and no O.R. number yet'
-                            : !hasReceiptUploaded
-                            ? 'Cannot confirm payment: No receipt uploaded yet'
-                            : !hasOrNumber
-                            ? 'Cannot confirm payment: Please enter the O.R. Number'
+                            ? 'Cannot confirm payment: Please enter the O.R. Number or upload receipt'
                             : 'Confirm and verify payment'
                         }
                       >
@@ -1533,11 +1529,7 @@ export default function ProcessRequestModal({
                         }`}
                         title={
                           !hasReceiptUploaded && !hasOrNumber
-                            ? 'Cannot confirm payment: No receipt uploaded and no O.R. number yet'
-                            : !hasReceiptUploaded
-                            ? 'Cannot confirm payment: No receipt uploaded yet'
-                            : !hasOrNumber
-                            ? 'Cannot confirm payment: Please enter the O.R. Number'
+                            ? 'Cannot confirm payment: Please enter the O.R. Number or upload receipt'
                             : 'Confirm and verify payment'
                         }
                       >

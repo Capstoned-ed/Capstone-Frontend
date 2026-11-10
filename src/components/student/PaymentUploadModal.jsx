@@ -3,11 +3,11 @@ import paymentsApi, { getStoredPaymentProof } from '../../api/payments';
 import useToast from '../../hooks/useToast';
 import { useAuth } from '../../hooks/useAuth';
 
-export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess }) {
+export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess, defaultOption = 'ONLINE' }) {
   const { user } = useAuth();
   const toast = useToast();
 
-  const [paymentOption, setPaymentOption] = useState('ONLINE'); // 'ONLINE' or 'PERSONAL'
+  const [paymentOption, setPaymentOption] = useState(defaultOption); // 'ONLINE' or 'PERSONAL'
   const [orNumberInput, setOrNumberInput] = useState('');
   const [receiptFile, setReceiptFile] = useState(null);
   const [receiptPreview, setReceiptPreview] = useState(null);
@@ -44,15 +44,15 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
       if (existing) {
         setOrNumberInput(existing.receiptReferenceNumber || '');
         setReceiptPreview(existing.receiptImage || null);
-        setPaymentOption(existing.submissionType || 'ONLINE');
+        setPaymentOption(existing.submissionType || defaultOption || 'ONLINE');
       } else {
         setOrNumberInput('');
         setReceiptFile(null);
         setReceiptPreview(null);
-        setPaymentOption('ONLINE');
+        setPaymentOption(defaultOption || 'ONLINE');
       }
     }
-  }, [request, isOpen]);
+  }, [request, isOpen, defaultOption]);
 
   if (!isOpen || !request) return null;
 
@@ -93,11 +93,12 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
 
     setSubmitting(true);
     try {
+      const finalOrNumber = orNumberInput.trim() || (paymentOption === 'PERSONAL' ? 'Paid at USTP Cashier (FTF)' : 'Submitted at Window');
       await paymentsApi.submit({
         requestId: request.rawId || request.id,
         amount: assessedFee,
         receiptImage: receiptFile,
-        receiptReferenceNumber: orNumberInput.trim() || 'Submitted at Window',
+        receiptReferenceNumber: finalOrNumber,
         trackingNumber: trackingCode,
         receiptDataUrl: receiptPreview,
         submissionType: paymentOption,
@@ -109,7 +110,7 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
       toast.success(
         paymentOption === 'ONLINE'
           ? 'Official Receipt uploaded! Awaiting Registrar Staff verification.'
-          : 'Payment marked for in-person submission at Registrar window!'
+          : 'Face-to-Face payment confirmed! Awaiting Registrar Staff verification.'
       );
 
       if (onSuccess) onSuccess();
@@ -215,7 +216,7 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Option 2: Submit at Registrar Window
+              Option 2: Face-to-Face (FTF) Payment
             </button>
           </div>
 
@@ -286,16 +287,59 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
               </div>
             </form>
           ) : (
-            /* Option 2 Window submission */
-            <div className="space-y-4 pt-1 text-xs text-slate-600">
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl leading-relaxed">
-                <h5 className="font-bold text-slate-900 mb-1">In-Person Window Instructions:</h5>
-                <ol className="list-decimal list-inside space-y-1 text-slate-600">
-                  <li>Download and print your official request form with the assessed fee.</li>
-                  <li>Pay the assessed amount at the USTP Cashier's Office.</li>
-                  <li>Present your form along with the Cashier Official Receipt directly to the Registrar Window staff.</li>
-                </ol>
+            /* Option 2 Window / FTF submission */
+            <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+              <div className="p-3.5 bg-indigo-50/70 border border-indigo-100 rounded-xl leading-relaxed text-xs text-indigo-950">
+                <h5 className="font-bold text-indigo-950 mb-1 flex items-center gap-1.5">
+                  <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                  <span>Face-to-Face (FTF) / Window Cashier Payment</span>
+                </h5>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Paid at the <strong>USTP Cashier's Office</strong> in person? Enter your Official Receipt (O.R.) number below and click <strong>Confirm Payment</strong> so Registrar Staff will verify and begin processing.
+                </p>
               </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Official Receipt (O.R.) Number <span className="text-slate-400 font-normal">(from cashier receipt)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. OR-2026-004128"
+                  value={orNumberInput}
+                  onChange={(e) => setOrNumberInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:border-[#0B0B36] font-mono shadow-2xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Receipt Picture <span className="text-slate-400 font-normal">(Optional for FTF)</span>
+                </label>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={handleFileChange}
+                  className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#0B0B36] file:text-white hover:file:bg-[#1E1E6B] cursor-pointer"
+                />
+              </div>
+
+              {receiptPreview && (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-3">
+                  <img
+                    src={receiptPreview}
+                    alt="Receipt Preview"
+                    className="w-16 h-16 object-cover rounded-lg border border-slate-300 shadow-2xs"
+                  />
+                  <div>
+                    <span className="text-xs text-emerald-700 font-bold block">
+                      ✓ Receipt photo attached
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
                 <button
@@ -306,16 +350,17 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
                   Cancel
                 </button>
                 <button
-                  type="button"
+                  type="submit"
                   disabled={submitting}
-                  onClick={handleSubmit}
-                  className="px-5 py-2.5 rounded-xl bg-[#0B0B36] hover:bg-[#1E1E6B] active:scale-95 text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2.5 rounded-xl bg-indigo-900 hover:bg-indigo-950 active:scale-95 text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-1.5"
                 >
-                  <span>{submitting ? 'Confirming...' : 'I Will Submit at Registrar Window'}</span>
-                  <span>✓</span>
+                  <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>{submitting ? 'Confirming...' : 'Confirm Payment'}</span>
                 </button>
               </div>
-            </div>
+            </form>
           )}
         </div>
       </div>
