@@ -370,10 +370,16 @@ export default function RegistrarDashboard() {
       loadRequests();
     };
     window.addEventListener('regquest_requests_updated', handleSync);
+    window.addEventListener('regquest_assignments_updated', handleSync);
+    window.addEventListener('regquest_activity_updated', handleSync);
+    window.addEventListener('storage', handleSync);
 
     return () => {
       ignore = true;
       window.removeEventListener('regquest_requests_updated', handleSync);
+      window.removeEventListener('regquest_assignments_updated', handleSync);
+      window.removeEventListener('regquest_activity_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
     };
   }, []);
 
