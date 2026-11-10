@@ -4,6 +4,8 @@ import requestsApi, {
   isValidRequest,
   logProcessedAction,
   getRequestTimestamp,
+  getRequestActivityTimestamps,
+  recordRequestActivityTimestamp,
   sortRequestsNewestFirst,
   resolveRequestDocType,
   getStaffAssignments,
@@ -154,6 +156,7 @@ export default function StaffRequestsPage() {
   const [clearances, setClearances] = useState([]);
   const [assignments, setAssignments] = useState(getStaffAssignments);
   const [assignmentTimestamps, setAssignmentTimestamps] = useState(getStaffAssignmentTimestamps);
+  const [activityTimestamps, setActivityTimestamps] = useState(getRequestActivityTimestamps);
   const [archivedMap, setArchivedMap] = useState(getArchivedRequestsMap);
   const [activeTab, setActiveTab] = useState('active'); // 'active' | 'history'
 
@@ -226,22 +229,29 @@ export default function StaffRequestsPage() {
       setAssignments(getStaffAssignments());
       setAssignmentTimestamps(getStaffAssignmentTimestamps());
     };
+    const handleActivitySync = () => {
+      setActivityTimestamps(getRequestActivityTimestamps());
+    };
     const handleArchivedSync = () => {
       setArchivedMap(getArchivedRequestsMap());
     };
 
     window.addEventListener('regquest_requests_updated', handleSync);
     window.addEventListener('regquest_assignments_updated', handleAssignmentsSync);
+    window.addEventListener('regquest_activity_updated', handleActivitySync);
     window.addEventListener('regquest_archived_updated', handleArchivedSync);
     window.addEventListener('storage', handleAssignmentsSync);
+    window.addEventListener('storage', handleActivitySync);
     window.addEventListener('storage', handleArchivedSync);
 
     return () => {
       ignore = true;
       window.removeEventListener('regquest_requests_updated', handleSync);
       window.removeEventListener('regquest_assignments_updated', handleAssignmentsSync);
+      window.removeEventListener('regquest_activity_updated', handleActivitySync);
       window.removeEventListener('regquest_archived_updated', handleArchivedSync);
       window.removeEventListener('storage', handleAssignmentsSync);
+      window.removeEventListener('storage', handleActivitySync);
       window.removeEventListener('storage', handleArchivedSync);
     };
   }, []);
@@ -598,27 +608,8 @@ export default function StaffRequestsPage() {
   const assignedRequests = useMemo(() => {
     return activeFilteredRequests
       .filter((r) => isRequestAssignedToUser(r, user, assignments, users))
-      .sort((a, b) => {
-        const getAssignTime = (item) => {
-          const keys = [item.tracking_number, item.id, item.rawId].filter(Boolean).map(String);
-          for (const k of keys) {
-            if (assignmentTimestamps[k]) return Number(assignmentTimestamps[k]);
-          }
-          if (item.assigned_at) return Number(item.assigned_at) || new Date(item.assigned_at).getTime() || 0;
-          if (item.accepted_at) return Number(item.accepted_at) || new Date(item.accepted_at).getTime() || 0;
-          return 0;
-        };
-
-        const timeA = Math.max(getAssignTime(a), getRequestTimestamp(a));
-        const timeB = Math.max(getAssignTime(b), getRequestTimestamp(b));
-
-        if (timeA !== timeB) {
-          return timeB - timeA; // Newly updated or assigned ALWAYS AT THE VERY TOP!
-        }
-
-        return sortRequestsNewestFirst(a, b);
-      });
-  }, [activeFilteredRequests, user, assignments, users, assignmentTimestamps]);
+      .sort(sortRequestsNewestFirst);
+  }, [activeFilteredRequests, user, assignments, users, activityTimestamps]);
 
   // Card 2: All unassigned requests (from Active queue)
   const unassignedRequests = useMemo(() => {
@@ -629,7 +620,7 @@ export default function StaffRequestsPage() {
         return !isAssigned && !hasStaff;
       })
       .sort(sortRequestsNewestFirst);
-  }, [activeFilteredRequests, user, assignments, users]);
+  }, [activeFilteredRequests, user, assignments, users, activityTimestamps]);
 
   // Handlers for Archiving (Move to History) and Restoring
   const handleArchiveRequest = (item) => {
@@ -844,6 +835,7 @@ export default function StaffRequestsPage() {
       });
 
       // 8. Safely notify other listeners
+      recordRequestActivityTimestamp(trackingNo || reqId || rawId, now);
       window.dispatchEvent(new Event('regquest_assignments_updated'));
       window.dispatchEvent(new Event('regquest_requests_updated'));
     } catch (err) {
@@ -852,7 +844,10 @@ export default function StaffRequestsPage() {
   };
 
   const handleRequestUpdated = (updatedReq) => {
-    const nowIso = new Date().toISOString();
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+    recordRequestActivityTimestamp(updatedReq, nowTime);
+    setActivityTimestamps(getRequestActivityTimestamps());
     setRawRequests((prev) =>
       prev.map((r) =>
         String(r.id) === String(updatedReq.rawId) ||

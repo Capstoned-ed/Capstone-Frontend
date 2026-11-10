@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, recordStaffAssignmentTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived } from '../../api/requests';
+import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, recordStaffAssignmentTimestamp, getRequestActivityTimestamps, recordRequestActivityTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived } from '../../api/requests';
 import { saveStoredNotification } from '../../api/notifications';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
@@ -107,6 +107,7 @@ export default function RegistrarRequestsPage() {
   const [users, setUsers] = useState([]);
   const [credentialTypes, setCredentialTypes] = useState([]);
   const [assignments, setAssignments] = useState(loadStoredAssignments);
+  const [activityTimestamps, setActivityTimestamps] = useState(getRequestActivityTimestamps);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -226,15 +227,22 @@ export default function RegistrarRequestsPage() {
     const handleAssignmentsSync = () => {
       setAssignments(getStaffAssignments());
     };
+    const handleActivitySync = () => {
+      setActivityTimestamps(getRequestActivityTimestamps());
+    };
     window.addEventListener('regquest_requests_updated', handleSync);
     window.addEventListener('regquest_assignments_updated', handleAssignmentsSync);
+    window.addEventListener('regquest_activity_updated', handleActivitySync);
     window.addEventListener('storage', handleAssignmentsSync);
+    window.addEventListener('storage', handleActivitySync);
 
     return () => {
       ignore = true;
       window.removeEventListener('regquest_requests_updated', handleSync);
       window.removeEventListener('regquest_assignments_updated', handleAssignmentsSync);
+      window.removeEventListener('regquest_activity_updated', handleActivitySync);
       window.removeEventListener('storage', handleAssignmentsSync);
+      window.removeEventListener('storage', handleActivitySync);
     };
   }, []);
 
@@ -572,6 +580,8 @@ export default function RegistrarRequestsPage() {
       if (staffName) {
         recordStaffAssignmentTimestamp(requestId, now);
         if (rawId && rawId !== requestId) recordStaffAssignmentTimestamp(rawId, now);
+        recordRequestActivityTimestamp(requestId, now);
+        if (rawId && rawId !== requestId) recordRequestActivityTimestamp(rawId, now);
       }
     } catch {}
 
@@ -646,7 +656,10 @@ export default function RegistrarRequestsPage() {
   };
 
   const handleRequestUpdated = (updatedReq) => {
-    const nowIso = new Date().toISOString();
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+    recordRequestActivityTimestamp(updatedReq, nowTime);
+    setActivityTimestamps(getRequestActivityTimestamps());
     setRawRequests((prev) =>
       prev.map((r) =>
         String(r.id) === String(updatedReq.rawId) ||

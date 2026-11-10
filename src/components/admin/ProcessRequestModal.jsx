@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useToast from '../../hooks/useToast';
 import { useAuth } from '../../hooks/useAuth';
-import requestsApi, { updateStoredRequest, logProcessedAction, setRequestArchived } from '../../api/requests';
+import requestsApi, { updateStoredRequest, logProcessedAction, setRequestArchived, recordRequestActivityTimestamp } from '../../api/requests';
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import { saveStoredNotification } from '../../api/notifications';
 import { getStoredPaymentProof, verifyStoredPaymentProof } from '../../api/payments';
@@ -288,7 +288,9 @@ export default function ProcessRequestModal({
       }
     }
 
-    const nowIso = new Date().toISOString();
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+    recordRequestActivityTimestamp(requestItem, nowTime);
     updateStoredRequest(
       targetId,
       { clearance_status: statusToSet, updated_at: nowIso },
@@ -336,6 +338,10 @@ export default function ProcessRequestModal({
     const docName = requestItem.document_type || 'Requested Credential';
     const cleanAmount = assessedAmount.trim() || '₱100.00';
 
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+    recordRequestActivityTimestamp(requestItem, nowTime);
+
     const patch = {
       status: 'Pending Payment',
       rawStatus: 'PAYMENT_PENDING',
@@ -350,7 +356,7 @@ export default function ProcessRequestModal({
       payment_date: '',
       is_confirmed: true,
       confirmed_for_payment: true,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
     };
 
     requestItem.status = 'Pending Payment';
@@ -431,14 +437,18 @@ export default function ProcessRequestModal({
         }).catch(() => {});
       }
 
+      const nowTime = Date.now();
+      const nowIso = new Date(nowTime).toISOString();
+      recordRequestActivityTimestamp(requestItem, nowTime);
+
       const rejectPatch = {
         status: 'Rejected',
         rawStatus: 'REJECTED',
         batch_status: 'Rejected',
         remarks: reason,
         rejected_by: user?.full_name || user?.username || 'Staff/Registrar',
-        rejected_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        rejected_at: nowIso,
+        updated_at: nowIso,
       };
 
       updateStoredRequest(targetId, rejectPatch, { fallbackItem: requestItem });
@@ -540,7 +550,10 @@ export default function ProcessRequestModal({
     const updatedStatus = isVerified ? 'For Processing' : 'Pending Payment';
     handleManualStatusChange(updatedStatus);
 
-    const nowIso = new Date().toISOString();
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+    recordRequestActivityTimestamp(requestItem, nowTime);
+
     const paymentPatch = {
       status: updatedStatus,
       rawStatus: isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING',
@@ -693,7 +706,10 @@ export default function ProcessRequestModal({
         }
       }
 
-      const nowIso = new Date().toISOString();
+      const nowTime = Date.now();
+      const nowIso = new Date(nowTime).toISOString();
+      recordRequestActivityTimestamp(requestItem, nowTime);
+
       const finalPatch = {
         status: localStatus,
         remarks: notes.trim() ? notes.trim() : (requestItem.remarks || ''),
