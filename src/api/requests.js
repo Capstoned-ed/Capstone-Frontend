@@ -78,13 +78,26 @@ export function getStaffAssignmentTimestamps() {
   }
 }
 
-export function recordStaffAssignmentTimestamp(requestId, timestamp = Date.now()) {
-  if (typeof window === 'undefined' || !requestId) return;
+export function recordStaffAssignmentTimestamp(idOrItem, timestamp = Date.now()) {
+  if (typeof window === 'undefined' || !idOrItem) return;
   try {
     const map = getStaffAssignmentTimestamps();
     const ts = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime();
-    map[String(requestId)] = ts;
+    if (isNaN(ts) || ts <= 0) return;
+
+    const keys = [];
+    if (typeof idOrItem === 'object') {
+      keys.push(idOrItem.id, idOrItem.rawId, idOrItem.tracking_number, idOrItem.trackingId);
+    } else {
+      keys.push(idOrItem);
+    }
+
+    keys.filter(Boolean).forEach((k) => {
+      map[String(k).trim()] = ts;
+    });
+
     localStorage.setItem(ASSIGNMENT_TIMESTAMPS_KEY, JSON.stringify(map));
+    recordRequestActivityTimestamp(idOrItem, ts);
     window.dispatchEvent(new Event('regquest_assignments_updated'));
   } catch (err) {
     console.warn('Failed to record staff assignment timestamp:', err);

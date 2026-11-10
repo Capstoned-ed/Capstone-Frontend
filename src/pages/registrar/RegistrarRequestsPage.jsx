@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, recordStaffAssignmentTimestamp, getRequestActivityTimestamps, recordRequestActivityTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived } from '../../api/requests';
+import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, getStaffAssignmentTimestamps, recordStaffAssignmentTimestamp, getRequestActivityTimestamps, recordRequestActivityTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived } from '../../api/requests';
 import { saveStoredNotification } from '../../api/notifications';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
@@ -108,6 +108,7 @@ export default function RegistrarRequestsPage() {
   const [credentialTypes, setCredentialTypes] = useState([]);
   const [assignments, setAssignments] = useState(loadStoredAssignments);
   const [activityTimestamps, setActivityTimestamps] = useState(getRequestActivityTimestamps);
+  const [assignmentTimestamps, setAssignmentTimestamps] = useState(getStaffAssignmentTimestamps);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -226,6 +227,7 @@ export default function RegistrarRequestsPage() {
     };
     const handleAssignmentsSync = () => {
       setAssignments(getStaffAssignments());
+      setAssignmentTimestamps(getStaffAssignmentTimestamps());
     };
     const handleActivitySync = () => {
       setActivityTimestamps(getRequestActivityTimestamps());
@@ -451,9 +453,9 @@ export default function RegistrarRequestsPage() {
           batch_status: formatStatusDisplay(effectiveRawStatus),
           assigned_staff: assignedStaff,
           assigned_at:
-            assignments[String(r.id)] ||
-            assignments[String(r.tracking_number)] ||
-            assignments[String(r.rawId)] ||
+            assignmentTimestamps[String(r.id)] ||
+            assignmentTimestamps[String(r.tracking_number)] ||
+            assignmentTimestamps[String(r.rawId)] ||
             r.assigned_at ||
             matchedStored?.assigned_at ||
             null,
@@ -513,7 +515,7 @@ export default function RegistrarRequestsPage() {
         return true;
       })
       .sort(sortRequestsNewestFirst);
-  }, [rawRequests, userMap, credTypeMap, clearanceMap, assignments]);
+  }, [rawRequests, userMap, credTypeMap, clearanceMap, assignments, activityTimestamps, assignmentTimestamps]);
 
   const batchOptions = useMemo(() => {
     const batchesMap = new Map();
@@ -536,7 +538,7 @@ export default function RegistrarRequestsPage() {
       return [...activeReqs].sort(sortRequestsNewestFirst);
     }
     return activeReqs.filter((r) => r.batchId === selectedBatch).sort(sortRequestsNewestFirst);
-  }, [requests, selectedBatch, archivedMap]);
+  }, [requests, selectedBatch, archivedMap, activityTimestamps, assignmentTimestamps, assignments]);
 
   const handleAssignStaff = (requestId, rawId, staffName) => {
     setAssignments((prev) => {
@@ -577,12 +579,12 @@ export default function RegistrarRequestsPage() {
         updated_at: nowIso,
         status: staffName ? 'For Processing' : undefined,
       });
-      if (staffName) {
-        recordStaffAssignmentTimestamp(requestId, now);
-        if (rawId && rawId !== requestId) recordStaffAssignmentTimestamp(rawId, now);
-        recordRequestActivityTimestamp(requestId, now);
-        if (rawId && rawId !== requestId) recordRequestActivityTimestamp(rawId, now);
-      }
+      recordStaffAssignmentTimestamp(requestId, now);
+      if (rawId && rawId !== requestId) recordStaffAssignmentTimestamp(rawId, now);
+      recordRequestActivityTimestamp(requestId, now);
+      if (rawId && rawId !== requestId) recordRequestActivityTimestamp(rawId, now);
+      setActivityTimestamps(getRequestActivityTimestamps());
+      setAssignmentTimestamps(getStaffAssignmentTimestamps());
     } catch {}
 
     // Update in-memory state
@@ -659,7 +661,9 @@ export default function RegistrarRequestsPage() {
     const nowTime = Date.now();
     const nowIso = new Date(nowTime).toISOString();
     recordRequestActivityTimestamp(updatedReq, nowTime);
+    recordStaffAssignmentTimestamp(updatedReq, nowTime);
     setActivityTimestamps(getRequestActivityTimestamps());
+    setAssignmentTimestamps(getStaffAssignmentTimestamps());
     setRawRequests((prev) =>
       prev.map((r) =>
         String(r.id) === String(updatedReq.rawId) ||
@@ -745,7 +749,7 @@ export default function RegistrarRequestsPage() {
     return filteredRequests
       .filter((r) => !isRequestArchived(r, archivedMap))
       .sort(sortRequestsNewestFirst);
-  }, [filteredRequests, archivedMap]);
+  }, [filteredRequests, archivedMap, activityTimestamps, assignmentTimestamps, assignments]);
 
   const historyRequests = useMemo(() => {
     return requests
