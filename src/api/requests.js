@@ -399,19 +399,41 @@ export function isValidRequest(item) {
 
 /**
  * Safely parse a timestamp (milliseconds) from any request object.
+ * Inspects all possible update and activity timestamps so newly updated
+ * or newly created requests sort directly to the very top.
  */
 export function getRequestTimestamp(r) {
   if (!r) return 0;
-  if (r.created_at) {
-    const t = new Date(r.created_at).getTime();
-    if (!isNaN(t) && t > 0) return t;
+
+  const candidates = [
+    r.updated_at,
+    r.updatedAt,
+    r.last_updated,
+    r.assigned_at,
+    r.accepted_at,
+    r.created_at,
+    r.request_date && r.request_date !== 'N/A' ? r.request_date : null,
+    r.date && r.date !== 'N/A' ? r.date : null,
+  ];
+
+  let maxTime = 0;
+  for (const c of candidates) {
+    if (!c) continue;
+    let t = 0;
+    if (typeof c === 'number') {
+      t = c;
+    } else {
+      const parsed = new Date(c).getTime();
+      if (!isNaN(parsed) && parsed > 0) {
+        t = parsed;
+      }
+    }
+    if (t > maxTime) {
+      maxTime = t;
+    }
   }
-  const dStr = r.request_date || r.date;
-  if (dStr && dStr !== 'N/A') {
-    const t = new Date(dStr).getTime();
-    if (!isNaN(t) && t > 0) return t;
-  }
-  return 0;
+
+  return maxTime;
 }
 
 /**
@@ -918,6 +940,7 @@ export const requestsApi = {
           assigned_staff: loc.assigned_staff || backendItem.assigned_staff || null,
           assigned_at: loc.assigned_at || backendItem.assigned_at || null,
           accepted_at: loc.accepted_at || backendItem.accepted_at || null,
+          updated_at: loc.updated_at || backendItem.updated_at || loc.updatedAt || backendItem.updatedAt || null,
           clearance_preview: loc.clearance_preview || backendItem.clearance_preview,
           clearance_id: loc.clearance_id || backendItem.clearance_id || null,
           clearance_is_pdf: loc.clearance_is_pdf ?? backendItem.clearance_is_pdf ?? false,

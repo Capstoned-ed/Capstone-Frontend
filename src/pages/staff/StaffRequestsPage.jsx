@@ -517,6 +517,12 @@ export default function StaffRequestsPage() {
           (r.accepted_at ? new Date(r.accepted_at).getTime() : 0) ||
           (matchedStored?.accepted_at ? new Date(matchedStored.accepted_at).getTime() : 0) ||
           0,
+        updated_at:
+          matchedStored?.updated_at ||
+          matchedStored?.updatedAt ||
+          r.updated_at ||
+          r.updatedAt ||
+          null,
       };
     })
     .filter((r) => {
@@ -587,7 +593,7 @@ export default function StaffRequestsPage() {
   }, [allFilteredRequests, archivedMap]);
 
   // Card 1: Requests assigned to this staff member (from Active queue)
-  // Sorted by: MOST RECENTLY ACCEPTED / ASSIGNED AT THE VERY TOP (REGARDLESS OF REQUEST DATE)!
+  // Sorted by: MOST RECENTLY UPDATED / ACCEPTED / ASSIGNED AT THE VERY TOP!
   const assignedRequests = useMemo(() => {
     return activeFilteredRequests
       .filter((r) => isRequestAssignedToUser(r, user, assignments, users))
@@ -602,11 +608,11 @@ export default function StaffRequestsPage() {
           return 0;
         };
 
-        const timeA = getAssignTime(a);
-        const timeB = getAssignTime(b);
+        const timeA = Math.max(getAssignTime(a), getRequestTimestamp(a));
+        const timeB = Math.max(getAssignTime(b), getRequestTimestamp(b));
 
         if (timeA !== timeB) {
-          return timeB - timeA; // Newly claimed or assigned ALWAYS AT THE VERY TOP!
+          return timeB - timeA; // Newly updated or assigned ALWAYS AT THE VERY TOP!
         }
 
         return sortRequestsNewestFirst(a, b);
@@ -615,11 +621,13 @@ export default function StaffRequestsPage() {
 
   // Card 2: All unassigned requests (from Active queue)
   const unassignedRequests = useMemo(() => {
-    return activeFilteredRequests.filter((r) => {
-      const isAssigned = isRequestAssignedToUser(r, user, assignments, users);
-      const hasStaff = Boolean(r.assigned_staff && r.assigned_staff.trim() !== '' && r.assigned_staff.toLowerCase() !== 'unassigned');
-      return !isAssigned && !hasStaff;
-    });
+    return activeFilteredRequests
+      .filter((r) => {
+        const isAssigned = isRequestAssignedToUser(r, user, assignments, users);
+        const hasStaff = Boolean(r.assigned_staff && r.assigned_staff.trim() !== '' && r.assigned_staff.toLowerCase() !== 'unassigned');
+        return !isAssigned && !hasStaff;
+      })
+      .sort(sortRequestsNewestFirst);
   }, [activeFilteredRequests, user, assignments, users]);
 
   // Handlers for Archiving (Move to History) and Restoring
@@ -779,6 +787,7 @@ export default function StaffRequestsPage() {
         assigned_staff: staffName,
         assigned_at: nowIso,
         accepted_at: nowIso,
+        updated_at: nowIso,
         status: currentStatus,
         rawStatus: currentStatus === 'Pending' ? 'PENDING' : (item.rawStatus || 'PENDING'),
       };
@@ -789,6 +798,7 @@ export default function StaffRequestsPage() {
           assigned_staff: staffName,
           assigned_at: nowIso,
           accepted_at: nowIso,
+          updated_at: nowIso,
           status: currentStatus,
         },
         {
@@ -811,6 +821,7 @@ export default function StaffRequestsPage() {
                 assigned_staff: staffName,
                 assigned_at: now,
                 accepted_at: now,
+                updated_at: nowIso,
                 status: currentStatus,
               }
             : r;
@@ -840,6 +851,7 @@ export default function StaffRequestsPage() {
   };
 
   const handleRequestUpdated = (updatedReq) => {
+    const nowIso = new Date().toISOString();
     setRawRequests((prev) =>
       prev.map((r) =>
         String(r.id) === String(updatedReq.rawId) ||
@@ -850,6 +862,7 @@ export default function StaffRequestsPage() {
           ? {
               ...r,
               ...updatedReq,
+              updated_at: updatedReq.updated_at || nowIso,
               status: updatedReq.status || r.status,
               assigned_staff: updatedReq.assigned_staff || r.assigned_staff,
               assigned_at: updatedReq.assigned_at || r.assigned_at,
@@ -901,11 +914,14 @@ export default function StaffRequestsPage() {
       user?.username ||
       'Staff';
 
+    const nowIso = new Date().toISOString();
+
     const fullPatch = {
       status: effectiveStatus,
       assigned_staff: staffName,
       assigned_at: selectedRequest.assigned_at,
       accepted_at: selectedRequest.accepted_at,
+      updated_at: nowIso,
       remarks: notes || selectedRequest.remarks || '',
       clearance_status: selectedRequest.clearance_status,
       assessed_amount: selectedRequest.assessed_amount,
@@ -948,7 +964,7 @@ export default function StaffRequestsPage() {
       }
 
       updateStoredRequest(trackingNo || selectedRequest.id || targetId, fullPatch, {
-        fallbackItem: { ...selectedRequest, ...fullPatch },
+        fallbackItem: { ...selectedRequest, ...fullPatch, updated_at: nowIso },
       });
 
       logProcessedAction({
@@ -972,7 +988,7 @@ export default function StaffRequestsPage() {
           String(r.rawId) === String(targetId) ||
           String(r.tracking_number) === String(trackingNo) ||
           String(r.id) === String(selectedRequest.id)
-            ? { ...r, ...fullPatch }
+            ? { ...r, ...fullPatch, updated_at: nowIso }
             : r
         )
       );
