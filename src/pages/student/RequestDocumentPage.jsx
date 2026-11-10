@@ -837,23 +837,6 @@ export default function RequestDocumentPage() {
 
       saveStoredRequest(requestRecord);
 
-      // Cache student profile so Staff and Admin can resolve student details
-      try {
-        const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
-        const pObj = {
-          full_name: fullName,
-          first_name: fullName.split(' ')[0] || fullName,
-          last_name: fullName.split(' ').slice(1).join(' ') || '',
-          student_id: studentId,
-          course: course,
-          email: email,
-        };
-        if (studentId) profiles[studentId] = pObj;
-        if (user?.id) profiles[String(user.id)] = pObj;
-        if (user?.username) profiles[user.username] = pObj;
-        localStorage.setItem('regquest_student_profiles', JSON.stringify(profiles));
-      } catch {}
-
       if (clearancePreview) {
         const clMeta = {
           isPdf: clearanceIsPdf,

@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import requestsApi, { resolveRequestDocType, sortRequestsNewestFirst } from '../../api/requests';
+import requestsApi, {
+  resolveRequestDocType,
+  sortRequestsNewestFirst,
+  getArchivedRequestsMap,
+  isRequestArchived,
+  setRequestArchived,
+} from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
@@ -169,6 +175,22 @@ export default function TrackStatusPage() {
     return map;
   }, [credentialTypes]);
 
+  // Archived state synced from localStorage / events
+  const [archivedMap, setArchivedMap] = useState(() => getArchivedRequestsMap());
+  const [activeQueueTab, setActiveQueueTab] = useState('active'); // 'active' | 'history'
+
+  useEffect(() => {
+    const handleSyncArchived = () => {
+      setArchivedMap(getArchivedRequestsMap());
+    };
+    window.addEventListener('regquest_archived_updated', handleSyncArchived);
+    window.addEventListener('storage', handleSyncArchived);
+    return () => {
+      window.removeEventListener('regquest_archived_updated', handleSyncArchived);
+      window.removeEventListener('storage', handleSyncArchived);
+    };
+  }, []);
+
   // Student's Requests List (filtered for this student, sorted strictly from NEWEST to OLDEST)
   const studentRequests = useMemo(() => {
     const currentUserId = user?.userId || user?.id;
@@ -190,19 +212,68 @@ export default function TrackStatusPage() {
     return [...targetList].sort(sortRequestsNewestFirst);
   }, [rawRequests, user]);
 
+  // Split student requests into Active vs History
+  const activeStudentRequests = useMemo(() => {
+    return studentRequests.filter((r) => !isRequestArchived(r, archivedMap));
+  }, [studentRequests, archivedMap]);
+
+  const historyStudentRequests = useMemo(() => {
+    return studentRequests.filter((r) => isRequestArchived(r, archivedMap));
+  }, [studentRequests, archivedMap]);
+
+  // Displayed requests in the selector based on active tab
+  const displayedRequests = useMemo(() => {
+    if (activeQueueTab === 'history') {
+      return historyStudentRequests;
+    }
+    return activeStudentRequests;
+  }, [activeQueueTab, historyStudentRequests, activeStudentRequests]);
+
+  // Mark request as Done (archived to history)
+  const handleMarkDone = (req) => {
+    if (!req) return;
+    const reqId = req.id || req.rawId || req.tracking_number;
+    setRequestArchived(reqId, true, user, { fallbackItem: req });
+    setArchivedMap(getArchivedRequestsMap());
+    toast.success(`Request ${req.tracking_number || req.trackingId || reqId} marked as Done and moved to History!`);
+    setActiveQueueTab('history');
+    setSelectedTrackId(req.tracking_number || req.trackingId || String(reqId));
+  };
+
+  // Restore request from history back to active
+  const handleRestoreRequest = (req) => {
+    if (!req) return;
+    const reqId = req.id || req.rawId || req.tracking_number;
+    setRequestArchived(reqId, false, user, { fallbackItem: req });
+    setArchivedMap(getArchivedRequestsMap());
+    toast.info(`Request ${req.tracking_number || req.trackingId || reqId} restored to Active Requests.`);
+    setActiveQueueTab('active');
+    setSelectedTrackId(req.tracking_number || req.trackingId || String(reqId));
+  };
+
   // Determine active tracking ID:
   // 1. url query if present
-  // 2. Or student selected request
-  // 3. Or default to the student's first request
+  // 2. Or student selected request in current tab
+  // 3. Or default to the current tab's first request
   const activeTrackingId = useMemo(() => {
     if (urlTrackId.trim()) return urlTrackId.trim();
-    if (selectedTrackId.trim()) return selectedTrackId.trim();
+    if (selectedTrackId.trim()) {
+      const inCurrentTab = displayedRequests.some((r) => {
+        const c = (r.tracking_number || r.trackingId || String(r.id)).toUpperCase();
+        return c === selectedTrackId.trim().toUpperCase();
+      });
+      if (inCurrentTab) return selectedTrackId.trim();
+    }
+    if (displayedRequests.length > 0) {
+      const first = displayedRequests[0];
+      return first.tracking_number || first.trackingId || String(first.id);
+    }
     if (studentRequests.length > 0) {
       const first = studentRequests[0];
       return first.tracking_number || first.trackingId || String(first.id);
     }
     return '';
-  }, [urlTrackId, selectedTrackId, studentRequests]);
+  }, [urlTrackId, selectedTrackId, displayedRequests, studentRequests]);
 
   // Match the active request object
   const matchedRequest = useMemo(() => {
@@ -432,7 +503,66 @@ export default function TrackStatusPage() {
           </p>
         </div>
 
-        {/* Submitted Requests Card (Oldest to Newest, Single-Row Items, Max 3 Visible with Scroll) */}
+        {/* Queue View Tabs: Active Requests vs Request History */}
+        {studentRequests.length > 0 && (
+          <div className="flex items-center gap-2 mb-3.5">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveQueueTab('active');
+                if (activeStudentRequests.length > 0) {
+                  const first = activeStudentRequests[0];
+                  setSelectedTrackId(first.tracking_number || first.trackingId || String(first.id));
+                }
+              }}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeQueueTab === 'active'
+                  ? 'bg-[#0B0B36] text-white shadow-md'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              <span>Active Requests</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  activeQueueTab === 'active'
+                    ? 'bg-amber-400 text-slate-900'
+                    : 'bg-slate-200 text-slate-700'
+                }`}
+              >
+                {activeStudentRequests.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveQueueTab('history');
+                if (historyStudentRequests.length > 0) {
+                  const first = historyStudentRequests[0];
+                  setSelectedTrackId(first.tracking_number || first.trackingId || String(first.id));
+                }
+              }}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeQueueTab === 'history'
+                  ? 'bg-[#0B0B36] text-white shadow-md'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              <span>Request History</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  activeQueueTab === 'history'
+                    ? 'bg-amber-400 text-slate-900'
+                    : 'bg-slate-200 text-slate-700'
+                }`}
+              >
+                {historyStudentRequests.length}
+              </span>
+            </button>
+          </div>
+        )}
+
+        {/* Submitted Requests Card */}
         {studentRequests.length > 0 && (
           <div className="track-selector-card">
             <div className="track-selector-card-header">
@@ -444,10 +574,10 @@ export default function TrackStatusPage() {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-800 leading-tight">
-                    Select a Request to Track
+                    {activeQueueTab === 'history' ? 'Completed & Claimed Requests History' : 'Select a Request to Track'}
                   </h3>
                   <p className="text-[11px] text-slate-500 font-medium">
-                    Showing {studentRequests.length} {studentRequests.length === 1 ? 'request' : 'requests'} • Newest to Oldest
+                    Showing {displayedRequests.length} {displayedRequests.length === 1 ? 'request' : 'requests'} • Newest to Oldest
                   </p>
                 </div>
               </div>
@@ -462,52 +592,90 @@ export default function TrackStatusPage() {
               </button>
             </div>
 
-            {/* Single column, 1 item per line (NO DOUBLE LINE), limited to 3 items with vertical scroll */}
-            <div className="track-selector-list-scroll">
-              {studentRequests.map((req) => {
-                const code = req.tracking_number || req.trackingId || String(req.id);
-                const isActive = activeTrackingId.toUpperCase() === code.toUpperCase();
-                const cred = credTypeMap.get(req.credential_type);
-                const docTitle = resolveRequestDocType(req, cred);
-                const status = formatStatusDisplay(req.status);
+            {displayedRequests.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-500">
+                {activeQueueTab === 'history'
+                  ? 'No archived requests in history yet. When a claimed request is marked as Done, it will appear here.'
+                  : 'No active requests at the moment.'}
+              </div>
+            ) : (
+              <div className="track-selector-list-scroll">
+                {displayedRequests.map((req) => {
+                  const code = req.tracking_number || req.trackingId || String(req.id);
+                  const isActive = activeTrackingId.toUpperCase() === code.toUpperCase();
+                  const cred = credTypeMap.get(req.credential_type);
+                  const docTitle = resolveRequestDocType(req, cred);
+                  const status = formatStatusDisplay(req.status);
 
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    onClick={() => handleSelectRequest(req)}
-                    className={`track-selector-row-item ${isActive ? 'active' : ''}`}
-                  >
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2">
-                      <span className="track-row-dot" />
-                      <span className="font-bold text-xs sm:text-sm tracking-tight text-slate-900 shrink-0">
-                        {code}
-                      </span>
-                      <span className="text-xs text-slate-500 truncate max-w-[160px] sm:max-w-[280px]">
-                        ({docTitle})
-                      </span>
+                  return (
+                    <div
+                      key={code}
+                      onClick={() => handleSelectRequest(req)}
+                      className={`track-selector-row-item ${isActive ? 'active' : ''} cursor-pointer`}
+                    >
+                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2">
+                        <span className="track-row-dot" />
+                        <span className="font-bold text-xs sm:text-sm tracking-tight text-slate-900 shrink-0">
+                          {code}
+                        </span>
+                        <span className="text-xs text-slate-500 truncate max-w-[160px] sm:max-w-[280px]">
+                          ({docTitle})
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`status-pill shrink-0 ${
+                          status === 'On Hold'
+                            ? 'on-hold'
+                            : status === 'Claimed'
+                            ? 'claimed'
+                            : status === 'Releasing' || status === 'For release'
+                            ? 'releasing'
+                            : status === 'Processing'
+                            ? 'processing'
+                            : status === 'For Processing'
+                            ? 'for-processing'
+                            : status === 'Pending Payment' || status === 'For Payment'
+                            ? 'payment-pending'
+                            : 'pending'
+                        }`}>
+                          {status}
+                        </span>
+
+                        {/* Done button on Claimed status in Active Requests */}
+                        {status === 'Claimed' && activeQueueTab === 'active' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkDone(req);
+                            }}
+                            className="px-2.5 py-0.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded shadow-xs transition-colors cursor-pointer"
+                            title="Mark as Done and move to Request History"
+                          >
+                            ✓ Done
+                          </button>
+                        )}
+
+                        {/* Restore button if in Request History */}
+                        {activeQueueTab === 'history' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRestoreRequest(req);
+                            }}
+                            className="px-2 py-0.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded transition-colors cursor-pointer"
+                            title="Restore to Active Requests"
+                          >
+                            ↩ Restore
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <span className={`status-pill shrink-0 ${
-                      status === 'On Hold'
-                        ? 'on-hold'
-                        : status === 'Claimed'
-                        ? 'claimed'
-                        : status === 'Releasing' || status === 'For release'
-                        ? 'releasing'
-                        : status === 'Processing'
-                        ? 'processing'
-                        : status === 'For Processing'
-                        ? 'for-processing'
-                        : status === 'Pending Payment' || status === 'For Payment'
-                        ? 'payment-pending'
-                        : 'pending'
-                    }`}>
-                      {status}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -542,6 +710,23 @@ export default function TrackStatusPage() {
         {/* Case 1: Matched Request Display - Tracking Status Only */}
         {matchedRequest ? (
           <>
+            {/* Conditional Archived History Notice Banner */}
+            {activeQueueTab === 'history' && (
+              <div className="mb-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-900">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  <span>This request has been completed and saved in your <strong>Request History</strong>.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRestoreRequest(matchedRequest)}
+                  className="text-xs font-bold text-emerald-700 hover:underline cursor-pointer shrink-0 ml-2"
+                >
+                  ↩ Restore to Active
+                </button>
+              </div>
+            )}
+
             <div className="track-timeline-card">
             {/* Header Row: Tracking ID on left, Estimate Completion on right */}
             <div className="track-card-header">
@@ -576,6 +761,16 @@ export default function TrackStatusPage() {
                   }`}>
                     {displayStatus}
                   </span>
+                  {displayStatus === 'Claimed' && activeQueueTab !== 'history' && (
+                    <button
+                      type="button"
+                      onClick={() => handleMarkDone(matchedRequest)}
+                      className="px-2.5 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-md shadow-xs transition-all flex items-center gap-1 cursor-pointer"
+                      title="Mark as Done and move to Request History"
+                    >
+                      <span>✓ Done</span>
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="text-right">
@@ -745,7 +940,7 @@ export default function TrackStatusPage() {
           </div>
 
           {/* Action button below track status card */}
-          <div className="track-claim-stub-action-wrap">
+          <div className="track-claim-stub-action-wrap flex flex-wrap items-center gap-2.5">
             <button
               type="button"
               onClick={() => setShowClaimStubModal(true)}
@@ -753,6 +948,26 @@ export default function TrackStatusPage() {
             >
               Claim Stub
             </button>
+            {displayStatus === 'Claimed' && activeQueueTab !== 'history' && (
+              <button
+                type="button"
+                onClick={() => handleMarkDone(matchedRequest)}
+                className="px-5 py-2.5 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                title="Mark request as Done and move to Request History"
+              >
+                <span>✓ Done</span>
+              </button>
+            )}
+            {activeQueueTab === 'history' && (
+              <button
+                type="button"
+                onClick={() => handleRestoreRequest(matchedRequest)}
+                className="px-4 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                title="Restore to Active Requests"
+              >
+                <span>↩ Restore to Active</span>
+              </button>
+            )}
           </div>
         </>
         ) : urlTrackId.trim() ? (
