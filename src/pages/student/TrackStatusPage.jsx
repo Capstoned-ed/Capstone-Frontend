@@ -82,6 +82,20 @@ function calculateReleaseDate(createdAt, processingDays = 5) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+export function isClaimedStatus(r) {
+  if (!r) return false;
+  const s = formatStatusDisplay(r.status);
+  if (s === 'Claimed') return true;
+  const raw = String(r.status || '').trim().toLowerCase();
+  return (
+    raw === 'claimed' ||
+    raw === 'released' ||
+    raw === 'completed' ||
+    raw.includes('claim') ||
+    (raw.includes('release') && !raw.includes('ready') && !raw.includes('for'))
+  );
+}
+
 export default function TrackStatusPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -213,12 +227,13 @@ export default function TrackStatusPage() {
   }, [rawRequests, user]);
 
   // Split student requests into Active vs History
+  // Automatically move Claimed / Released requests directly to History!
   const activeStudentRequests = useMemo(() => {
-    return studentRequests.filter((r) => !isRequestArchived(r, archivedMap));
+    return studentRequests.filter((r) => !isClaimedStatus(r) && !isRequestArchived(r, archivedMap));
   }, [studentRequests, archivedMap]);
 
   const historyStudentRequests = useMemo(() => {
-    return studentRequests.filter((r) => isRequestArchived(r, archivedMap));
+    return studentRequests.filter((r) => isClaimedStatus(r) || isRequestArchived(r, archivedMap));
   }, [studentRequests, archivedMap]);
 
   // Displayed requests in the selector based on active tab
@@ -228,6 +243,22 @@ export default function TrackStatusPage() {
     }
     return activeStudentRequests;
   }, [activeQueueTab, historyStudentRequests, activeStudentRequests]);
+
+  // Automatically switch to 'history' tab if selected/URL track ID is a claimed/history request,
+  // or if student only has completed/claimed requests in history
+  useEffect(() => {
+    if (urlTrackId) {
+      const isHist = historyStudentRequests.some((r) => {
+        const c = (r.tracking_number || r.trackingId || String(r.id)).toUpperCase();
+        return c === urlTrackId.trim().toUpperCase();
+      });
+      if (isHist) {
+        setActiveQueueTab('history');
+      }
+    } else if (!loading && activeStudentRequests.length === 0 && historyStudentRequests.length > 0 && activeQueueTab === 'active') {
+      setActiveQueueTab('history');
+    }
+  }, [urlTrackId, historyStudentRequests, activeStudentRequests.length, loading, activeQueueTab]);
 
   // Mark request as Done (archived to history)
   const handleMarkDone = (req) => {
@@ -587,7 +618,7 @@ export default function TrackStatusPage() {
             {displayedRequests.length === 0 ? (
               <div className="p-6 text-center text-xs text-slate-500">
                 {activeQueueTab === 'history'
-                  ? 'No archived requests in history yet. When a claimed request is marked as Done, it will appear here.'
+                  ? 'No completed or claimed requests in history yet.'
                   : 'No active requests at the moment.'}
               </div>
             ) : (
@@ -632,21 +663,6 @@ export default function TrackStatusPage() {
                         }`}>
                           {status}
                         </span>
-
-                        {/* Done button on Claimed status in Active Requests */}
-                        {status === 'Claimed' && activeQueueTab === 'active' && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleMarkDone(req);
-                            }}
-                            className="px-2.5 py-0.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded shadow-xs transition-colors cursor-pointer"
-                            title="Mark as Done and move to Request History"
-                          >
-                            ✓ Done
-                          </button>
-                        )}
 
                         {/* Restore button if in Request History */}
                         {activeQueueTab === 'history' && (
@@ -753,16 +769,6 @@ export default function TrackStatusPage() {
                   }`}>
                     {displayStatus}
                   </span>
-                  {displayStatus === 'Claimed' && activeQueueTab !== 'history' && (
-                    <button
-                      type="button"
-                      onClick={() => handleMarkDone(matchedRequest)}
-                      className="px-2.5 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-md shadow-xs transition-all flex items-center gap-1 cursor-pointer"
-                      title="Mark as Done and move to Request History"
-                    >
-                      <span>✓ Done</span>
-                    </button>
-                  )}
                 </div>
               </div>
               <div className="text-right">
@@ -940,16 +946,6 @@ export default function TrackStatusPage() {
             >
               Claim Stub
             </button>
-            {displayStatus === 'Claimed' && activeQueueTab !== 'history' && (
-              <button
-                type="button"
-                onClick={() => handleMarkDone(matchedRequest)}
-                className="px-5 py-2.5 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-                title="Mark request as Done and move to Request History"
-              >
-                <span>✓ Done</span>
-              </button>
-            )}
             {activeQueueTab === 'history' && (
               <button
                 type="button"

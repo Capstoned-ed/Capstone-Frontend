@@ -83,7 +83,7 @@ export default function RequestDocumentPage() {
   const [selectedCredTypeId, setSelectedCredTypeId] = useState(null);
 
   // Purpose in Part 3 (multiple purposes allowed)
-  const [selectedPurposes, setSelectedPurposes] = useState(['For Personal File']);
+  const [selectedPurposes, setSelectedPurposes] = useState([]);
   const [otherPurpose, setOtherPurpose] = useState('');
 
   // Photo Upload State (Part 3)
@@ -176,7 +176,7 @@ export default function RequestDocumentPage() {
       setEmail(resolvedEmail);
     }
   }, [user]);
-  const [purposeInput, setPurposeInput] = useState('For Personal Files');
+  const [purposeInput, setPurposeInput] = useState('');
 
   // Step 3 State
   const [generatedTrackingId, setGeneratedTrackingId] = useState('');
@@ -710,7 +710,7 @@ export default function RequestDocumentPage() {
       selectedPurposes
         .map((p) => (p === 'Others' ? (otherPurpose.trim() ? `Others (${otherPurpose.trim()})` : 'Others') : p))
         .join(', ') ||
-      'For Personal Files';
+      '';
     setPurposeInput(chosenPurpose);
     setCurrentStep(2);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1396,16 +1396,10 @@ export default function RequestDocumentPage() {
 
                   {/* Column 2: Certification and Sub-items */}
                   <div className="ustp-doc-col">
-                    {/* General Certification - Highlights when parent OR any sub-option is selected */}
-                    <label className={`ustp-doc-label ${isCertActive ? 'selected' : ''}`}>
-                      <input
-                        type="checkbox"
-                        checked={isCertActive}
-                        onChange={handleToggleCertGeneral}
-                        className="ustp-checkbox-input"
-                      />
-                      <span>Certification (P80)</span>
-                    </label>
+                    {/* General Certification - Header without box */}
+                    <div className="ustp-doc-label cursor-default select-none pointer-events-none pl-0">
+                      <span className="font-bold text-slate-800">Certification (P80)</span>
+                    </div>
 
                     {/* Specific Certification Sub-options */}
                     <div className="ustp-cert-subgrid">

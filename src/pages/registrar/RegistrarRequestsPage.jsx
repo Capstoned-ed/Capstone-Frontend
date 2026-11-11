@@ -626,7 +626,60 @@ export default function RegistrarRequestsPage() {
     });
   }, [requests, selectedBatch, archivedMap, assignmentHistorySearch, assignmentHistoryDocType]);
 
+  const canAssignStaff = (item) => {
+    if (!item) return false;
+
+    const rawS = String(item.rawStatus || '').toUpperCase();
+    const statusStr = String(item.batch_status || item.status || '').toUpperCase();
+
+    const isForProcessingOrBeyond =
+      statusStr === 'FOR PROCESSING' ||
+      statusStr === 'PROCESSING' ||
+      statusStr === 'FOR RELEASE' ||
+      statusStr === 'READY_FOR_RELEASE' ||
+      statusStr === 'READY FOR RELEASE' ||
+      statusStr === 'RELEASING' ||
+      statusStr === 'CLAIMED' ||
+      statusStr === 'RELEASED' ||
+      rawS === 'FOR_PROCESSING' ||
+      rawS === 'FOR PROCESSING' ||
+      rawS === 'PAYMENT_VERIFIED' ||
+      rawS === 'PROCESSING' ||
+      rawS === 'READY_FOR_RELEASE' ||
+      rawS === 'FOR_RELEASE' ||
+      rawS === 'CLAIMED' ||
+      rawS === 'RELEASED';
+
+    const isClearanceVerified = Boolean(
+      item.clearance_status === 'VERIFIED' ||
+      item.clearance_status === 'APPROVED' ||
+      isForProcessingOrBeyond
+    );
+
+    const isPaymentVerified = Boolean(
+      item.payment_status === 'VERIFIED' ||
+      item.payment_status === 'APPROVED' ||
+      item.payment_status === 'PAID' ||
+      (item.or_number && String(item.or_number).trim() !== '') ||
+      isForProcessingOrBeyond
+    );
+
+    // Staff can only be assigned once clearance AND payment are verified, and status is "For Processing" or beyond
+    return Boolean(isClearanceVerified && isPaymentVerified && isForProcessingOrBeyond);
+  };
+
   const handleAssignStaff = (requestId, rawId, staffName) => {
+    const targetReq = requests.find(
+      (r) =>
+        String(r.id) === String(requestId) ||
+        String(r.rawId) === String(rawId) ||
+        String(r.tracking_number) === String(requestId)
+    );
+    if (staffName && targetReq && !canAssignStaff(targetReq)) {
+      toast.warning('Cannot assign staff: Clearance and payment must be verified first (status must be For Processing).');
+      return;
+    }
+
     setAssignments((prev) => {
       const updated = { ...prev };
       if (staffName) {
@@ -1258,21 +1311,46 @@ export default function RegistrarRequestsPage() {
                     </td>
                     <td>{getStatusBadge(item.batch_status || item.status)}</td>
                     <td>
-                      <select
-                        value={item.assigned_staff || ''}
-                        onChange={(e) => handleAssignStaff(item.id, item.rawId, e.target.value)}
-                        className="staff-select-dropdown"
-                      >
-                        <option value="">-- Unassigned --</option>
-                        {staffMembers.map((staff) => (
-                          <option key={staff.id || staff.name} value={staff.name}>
-                            {staff.name}
-                          </option>
-                        ))}
-                      </select>
+                      {canAssignStaff(item) ? (
+                        <select
+                          value={item.assigned_staff || ''}
+                          onChange={(e) => handleAssignStaff(item.id, item.rawId, e.target.value)}
+                          className="staff-select-dropdown cursor-pointer"
+                        >
+                          <option value="">-- Unassigned --</option>
+                          {staffMembers.map((staff) => (
+                            <option key={staff.id || staff.name} value={staff.name}>
+                              {staff.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-500 border border-slate-200 text-xs font-semibold select-none"
+                          title="Cannot assign staff: Clearance and payment must be verified first (status must be 'For Processing')."
+                        >
+                          <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                          <span>
+                            {item.clearance_status !== 'VERIFIED' && item.clearance_status !== 'APPROVED'
+                              ? 'Pending Clearance'
+                              : item.payment_status !== 'VERIFIED' && !item.or_number
+                              ? 'Pending Payment'
+                              : 'Awaiting Verification'}
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td>
-                      {item.assigned_staff ? (
+                      {!canAssignStaff(item) ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                          <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                          <span>Locked</span>
+                        </span>
+                      ) : item.assigned_staff ? (
                         <span className="badge-assigned">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />

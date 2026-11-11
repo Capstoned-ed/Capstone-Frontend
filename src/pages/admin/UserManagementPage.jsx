@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { ROLES } from '../../constants/roles';
 import UserTable from '../../components/admin/UserTable';
 import StudentTableCard from '../../components/admin/StudentTableCard';
+import CourseSelectDropdown, { USTP_COURSE_CODE_MAP } from '../../components/admin/CourseSelectDropdown';
 import '../../styles/admin/UserManagementPage.css';
 
 export default function UserManagementPage() {
@@ -346,6 +347,10 @@ export default function UserManagementPage() {
       toast.error('Please enter a valid active email address.');
       return;
     }
+    if (!studentProgram) {
+      toast.error('Please select a course for the student.');
+      return;
+    }
 
     setAddStudentLoading(true);
 
@@ -355,6 +360,7 @@ export default function UserManagementPage() {
       const lastName = nameParts.slice(1).join(' ') || '';
 
       const finalStudentId = studentIdInput.trim();
+      const courseCode = USTP_COURSE_CODE_MAP[studentProgram] || 'IT';
 
       const payload = {
         username: finalStudentId,
@@ -363,6 +369,8 @@ export default function UserManagementPage() {
         role: ROLES.STUDENT,
         first_name: firstName,
         last_name: lastName,
+        course_name: studentProgram.trim(),
+        course_code: courseCode,
       };
 
       const res = await usersApi.create(payload);
@@ -372,18 +380,21 @@ export default function UserManagementPage() {
         last_name: lastName,
         full_name: studentFullName.trim(),
         student_id: finalStudentId,
-        program: studentProgram.trim() || 'B.S in Information Technology',
+        program: studentProgram.trim(),
+        course: studentProgram.trim(),
+        course_name: studentProgram.trim(),
+        course_code: courseCode,
         year_level: studentYearLevel,
       };
 
-      // Patch first_name and last_name via usersApi.update because UserCreateSerializer
-      // in Django backend only validates ['username', 'email', 'password', 'role'],
-      // whereas UserUpdateSerializer accepts ['first_name', 'last_name', 'email', 'role', 'is_active']
-      if (res?.id && (firstName || lastName)) {
+      // Patch profile fields via usersApi.update to ensure course & names are saved in database
+      if (res?.id) {
         try {
           const patched = await usersApi.update(res.id, {
             first_name: firstName,
             last_name: lastName,
+            course_name: studentProgram.trim(),
+            course_code: courseCode,
           });
           newStudent = {
             ...newStudent,
@@ -391,9 +402,12 @@ export default function UserManagementPage() {
             first_name: firstName,
             last_name: lastName,
             full_name: studentFullName.trim(),
+            program: studentProgram.trim(),
+            course_name: studentProgram.trim(),
+            course_code: courseCode,
           };
         } catch (patchErr) {
-          console.warn('Could not patch student name in database:', patchErr);
+          console.warn('Could not patch student name/course in database:', patchErr);
         }
       }
 
@@ -407,7 +421,10 @@ export default function UserManagementPage() {
           first_name: firstName,
           last_name: lastName,
           full_name: studentFullName.trim(),
-          program: studentProgram.trim() || 'B.S in Information Technology',
+          program: studentProgram.trim(),
+          course: studentProgram.trim(),
+          course_name: studentProgram.trim(),
+          course_code: courseCode,
           year_level: studentYearLevel,
           email: studentEmail.trim().toLowerCase(),
         };
@@ -726,13 +743,10 @@ export default function UserManagementPage() {
 
             <div className="add-student-grid-2">
               <div>
-                <input
-                  type="text"
-                  placeholder="Course (e.g. B.S in Information Technology)"
+                <CourseSelectDropdown
                   value={studentProgram}
-                  onChange={(e) => setStudentProgram(e.target.value)}
+                  onChange={setStudentProgram}
                   required
-                  className="add-student-input"
                 />
               </div>
 

@@ -457,7 +457,7 @@ export default function RegistrarDashboard() {
             <span className="admin-banner-title-highlight">Dashboard</span>
           </h1>
           <p className="admin-banner-subtitle">
-            Review and approve/reject credential requests • System Analytics &amp; Operations
+            Manage requests, approvals, and operations
           </p>
         </div>
       </div>

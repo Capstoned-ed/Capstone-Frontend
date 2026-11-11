@@ -205,7 +205,7 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
       : String(rawAmount).startsWith('₱') || String(rawAmount).startsWith('P')
       ? String(rawAmount)
       : `₱${rawAmount}`;
-  const purpose = requestData?.purpose || requestData?.remarks || 'For Personal File';
+  const purpose = requestData?.purpose || requestData?.remarks || '';
   const requestDate =
     requestData?.request_date ||
     (requestData?.created_at ? requestData.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
@@ -477,8 +477,7 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
 
             {/* Column 2: Certification and Sub-items */}
             <div className="ustp-doc-col">
-              <div className={`ustp-doc-label ${isCertSelected ? 'selected' : ''}`}>
-                <span className="ustp-box-check">{isCertSelected ? '✓' : ''}</span>
+              <div className="ustp-doc-label" style={{ paddingLeft: 0 }}>
                 <span style={{ fontWeight: '700' }}>Certification (P80)</span>
               </div>
 
@@ -578,9 +577,7 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
               </span>
               <span className="ustp-checkbox-label">
                 <span className="ustp-purpose-underline">
-                  {isPurpMatch('personal') || (!purpLower && !isPurpMatch('evaluation') && !isPurpMatch('scholarship'))
-                    ? '✓'
-                    : ''}
+                  {isPurpMatch('personal') ? '✓' : ''}
                 </span>
                 <span>For Personal File</span>
               </span>
