@@ -180,7 +180,7 @@ export default function StudentDashboard() {
   return (
     <div className="w-full flex flex-col min-h-screen bg-white">
       {/* 1. Hero Section */}
-      <section className="relative overflow-hidden bg-[#0B0B36] text-white min-h-[380px] sm:min-h-[440px] flex items-center">
+      <section className="relative overflow-hidden bg-[#0B0B36] text-white min-h-[220px] sm:min-h-[260px] flex items-center">
         {/* USTP Building on the right with dark blue atmospheric gradient blend */}
         <div className="absolute right-0 top-0 bottom-0 w-full sm:w-3/5 lg:w-1/2 pointer-events-none overflow-hidden select-none">
           <img
@@ -194,17 +194,17 @@ export default function StudentDashboard() {
         </div>
 
         {/* Hero Content */}
-        <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-12 lg:px-16 py-14 sm:py-20 w-full">
+        <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-12 lg:px-16 py-8 sm:py-11 w-full">
           <div className="max-w-xl">
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-tight">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight leading-tight">
               Your Credentials,<br />
               <span className="text-amber-400">Fast &amp; Secure</span>
             </h1>
-            <p className="text-xs sm:text-sm text-slate-300 mt-4 sm:mt-5 leading-relaxed max-w-lg font-normal">
+            <p className="text-xs sm:text-sm text-slate-300 mt-2.5 sm:mt-3 leading-relaxed max-w-lg font-normal">
               Request your Transcript of Records, Diploma, and other documents online. Skip the lines and track your request in real-time.
             </p>
 
-            <div className="mt-8 flex flex-wrap items-center gap-3.5">
+            <div className="mt-5 sm:mt-6 flex flex-wrap items-center gap-3.5">
               <button
                 type="button"
                 onClick={() => navigate(ROUTES.STUDENT.NEW_REQUEST)}
@@ -311,76 +311,76 @@ export default function StudentDashboard() {
 
 
       {/* 3. Streamlining the Credential Process Section */}
-      <section className="bg-slate-50/70 py-16 sm:py-20 px-4 sm:px-8 border-t border-slate-200/70">
+      <section className="bg-slate-50/70 py-10 sm:py-12 px-4 sm:px-8 border-t border-slate-200/70">
         <div className="max-w-6xl mx-auto">
           {/* Main Showcase Card Container */}
-          <div className="relative rounded-3xl bg-white p-8 sm:p-12 lg:p-14 border border-slate-200/80 shadow-xl overflow-hidden">
+          <div className="relative rounded-2xl sm:rounded-3xl bg-white p-6 sm:p-8 lg:p-10 border border-slate-200/80 shadow-lg overflow-hidden">
             {/* Ambient background decoration */}
             <div className="absolute top-0 right-0 -mr-24 -mt-24 w-96 h-96 rounded-full bg-amber-400/10 blur-3xl pointer-events-none" />
             <div className="absolute bottom-0 left-0 -ml-24 -mb-24 w-96 h-96 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
 
             {/* Header Content */}
             <div className="relative z-10 text-center max-w-2xl mx-auto">
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#0B0B36] tracking-tight">
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-[#0B0B36] tracking-tight">
                 Streamlining the Credential Process
               </h2>
-              <p className="text-xs sm:text-sm text-slate-500 mt-3 leading-relaxed">
+              <p className="text-xs sm:text-sm text-slate-500 mt-2 leading-relaxed">
                 Our mission is to reduce physical queues, modernize authentication, and provide rapid turnaround for all registrar services.
               </p>
             </div>
 
             {/* 3 Value Proposition Cards */}
-            <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-7 mt-12">
+            <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-5 mt-7 sm:mt-8">
               {/* Card 1: Secure & Confidential */}
-              <div className="group rounded-2xl p-7 bg-gradient-to-b from-slate-50/90 to-white border border-slate-200/90 hover:border-indigo-300 shadow-xs hover:shadow-lg transition-all duration-300 hover:-translate-y-1.5 flex flex-col text-left">
-                <div className="w-12 h-12 rounded-xl bg-[#0B0B36] text-white flex items-center justify-center shadow-md mb-5 group-hover:scale-105 transition-transform duration-200">
-                  <svg className="w-6 h-6 text-amber-300" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <div className="group rounded-xl sm:rounded-2xl p-5 sm:p-6 bg-gradient-to-b from-slate-50/90 to-white border border-slate-200/90 hover:border-indigo-300 shadow-xs hover:shadow-md transition-all duration-300 hover:-translate-y-1 flex flex-col text-left">
+                <div className="w-10 h-10 rounded-lg bg-[#0B0B36] text-white flex items-center justify-center shadow-sm mb-3.5 group-hover:scale-105 transition-transform duration-200">
+                  <svg className="w-5 h-5 text-amber-300" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                   </svg>
                 </div>
-                <div className="inline-block px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 w-fit mb-2.5">
+                <div className="inline-block px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 w-fit mb-2">
                   Verified Data
                 </div>
-                <h3 className="text-base sm:text-lg font-bold text-[#0B0B36] mb-2">
+                <h3 className="text-sm sm:text-base font-bold text-[#0B0B36] mb-1.5">
                   Secure &amp; Confidential
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                <p className="text-xs text-slate-500 leading-relaxed">
                   Your academic records are encrypted and protected. Access is strictly audited to ensure your data stays authentic and private.
                 </p>
               </div>
 
               {/* Card 2: Fast Turnaround */}
-              <div className="group rounded-2xl p-7 bg-gradient-to-b from-slate-50/90 to-white border border-slate-200/90 hover:border-amber-300 shadow-xs hover:shadow-lg transition-all duration-300 hover:-translate-y-1.5 flex flex-col text-left">
-                <div className="w-12 h-12 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shadow-md mb-5 group-hover:scale-105 transition-transform duration-200">
-                  <svg className="w-6 h-6 text-slate-950" fill="currentColor" viewBox="0 0 24 24">
+              <div className="group rounded-xl sm:rounded-2xl p-5 sm:p-6 bg-gradient-to-b from-slate-50/90 to-white border border-slate-200/90 hover:border-amber-300 shadow-xs hover:shadow-md transition-all duration-300 hover:-translate-y-1 flex flex-col text-left">
+                <div className="w-10 h-10 rounded-lg bg-amber-400 text-slate-950 flex items-center justify-center shadow-sm mb-3.5 group-hover:scale-105 transition-transform duration-200">
+                  <svg className="w-5 h-5 text-slate-950" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                   </svg>
                 </div>
-                <div className="inline-block px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 w-fit mb-2.5">
+                <div className="inline-block px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 w-fit mb-2">
                   50% Faster Processing
                 </div>
-                <h3 className="text-base sm:text-lg font-bold text-[#0B0B36] mb-2">
+                <h3 className="text-sm sm:text-base font-bold text-[#0B0B36] mb-1.5">
                   Fast Turnaround
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                <p className="text-xs text-slate-500 leading-relaxed">
                   By digitizing the review and clearance flow, requests are queued directly to staff desks, delivering credentials without delays.
                 </p>
               </div>
 
               {/* Card 3: Queue-Free Experience */}
-              <div className="group rounded-2xl p-7 bg-gradient-to-b from-slate-50/90 to-white border border-slate-200/90 hover:border-indigo-300 shadow-xs hover:shadow-lg transition-all duration-300 hover:-translate-y-1.5 flex flex-col text-left">
-                <div className="w-12 h-12 rounded-xl bg-indigo-900 text-white flex items-center justify-center shadow-md mb-5 group-hover:scale-105 transition-transform duration-200">
-                  <svg className="w-6 h-6 text-sky-300" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <div className="group rounded-xl sm:rounded-2xl p-5 sm:p-6 bg-gradient-to-b from-slate-50/90 to-white border border-slate-200/90 hover:border-indigo-300 shadow-xs hover:shadow-md transition-all duration-300 hover:-translate-y-1 flex flex-col text-left">
+                <div className="w-10 h-10 rounded-lg bg-indigo-900 text-white flex items-center justify-center shadow-sm mb-3.5 group-hover:scale-105 transition-transform duration-200">
+                  <svg className="w-5 h-5 text-sky-300" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
                 </div>
-                <div className="inline-block px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-sky-50 text-sky-800 border border-sky-200 w-fit mb-2.5">
+                <div className="inline-block px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-semibold bg-sky-50 text-sky-800 border border-sky-200 w-fit mb-2">
                   100% Digital Flow
                 </div>
-                <h3 className="text-base sm:text-lg font-bold text-[#0B0B36] mb-2">
+                <h3 className="text-sm sm:text-base font-bold text-[#0B0B36] mb-1.5">
                   Queue-Free Experience
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                <p className="text-xs text-slate-500 leading-relaxed">
                   No more standing in long campus lines. Submit requests, verify clearances, upload receipts, and track updates anywhere.
                 </p>
               </div>

@@ -38,13 +38,13 @@ export default function AdminDashboard() {
         {/* Banner Text Content */}
         <div className="admin-banner-content">
           <h1 className="admin-banner-title">
-            {isRegistrar ? 'Registrar' : 'Registrar Admin'}{' '}
+            {isRegistrar ? 'Registrar' : 'Admin'}{' '}
             <span className="admin-banner-title-highlight">Dashboard</span>
           </h1>
           <p className="admin-banner-subtitle">
             {isRegistrar
-              ? 'Review and approve/reject credential requests • System Analytics & Operations'
-              : 'Manage user accounts, assign roles, system settings, reports, and monitor overall system activities'}
+              ? 'Manage requests, approvals, and operations'
+              : 'Manage users, system settings, and operations'}
           </p>
         </div>
       </div>
