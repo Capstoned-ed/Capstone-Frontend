@@ -774,7 +774,7 @@ export default function RequestDocumentPage() {
           if (apiErr.response?.data) {
             const msg = Object.values(apiErr.response.data).flat().join(' ');
             if (msg.toLowerCase().includes('clearance')) {
-              toast.warning(msg || 'Please ensure you have an approved clearance.');
+              toast.warning(msg || 'Please attach or submit a valid clearance document.');
             }
           }
         }
