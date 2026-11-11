@@ -17,7 +17,7 @@ export default function LoginForm({ onSuccess }) {
     setErrorMessage('');
 
     if (!username.trim() || !password) {
-      setErrorMessage('Please enter both your Student ID and password.');
+      setErrorMessage('Please enter both your ID number and password.');
       return;
     }
 
@@ -57,7 +57,7 @@ export default function LoginForm({ onSuccess }) {
     } catch (err) {
       if (err.response?.status === 401) {
         setErrorMessage(
-          err.response?.data?.detail || 'Invalid credentials. Please check your Student ID and password.'
+          err.response?.data?.detail || 'Invalid credentials. Please check your ID number and password.'
         );
       } else if (err.response?.data) {
         const errorData = err.response.data;
@@ -102,7 +102,7 @@ export default function LoginForm({ onSuccess }) {
             htmlFor="username"
             className="block text-xs font-semibold text-slate-700 mb-1.5"
           >
-            Student ID
+            ID number
           </label>
           <div className="relative flex items-center">
             <div className="absolute left-3.5 text-slate-400 pointer-events-none flex items-center justify-center">
@@ -127,7 +127,7 @@ export default function LoginForm({ onSuccess }) {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={isLoading}
-              placeholder="Enter student ID"
+              placeholder="Enter ID number"
               className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg py-2.5 sm:py-3 pl-10 pr-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#fbb643] focus:border-transparent transition-all"
             />
           </div>

@@ -7,19 +7,22 @@
 }
 
 .staff-dash-hero-bg {
-  @apply absolute right-0 top-0 bottom-0 w-2/5 sm:w-1/2 opacity-30 pointer-events-none overflow-hidden;
+  @apply absolute right-0 top-0 bottom-0 w-1/2 sm:w-3/5 lg:w-1/2 pointer-events-none overflow-hidden;
 }
 
 .staff-dash-hero-img {
-  @apply w-full h-full object-cover object-center;
+  @apply w-full h-full object-cover object-left opacity-40 sm:opacity-50;
+  mix-blend-mode: screen;
+  filter: brightness(1.08) contrast(1.08);
+  transform: scale(1.05);
 }
 
 .staff-dash-hero-grad-r {
-  @apply absolute inset-0 bg-gradient-to-r from-[#0B0B36] via-[#0B0B36]/80 to-transparent;
+  @apply absolute inset-0 bg-gradient-to-r from-[#0B0B36] via-[#0B0B36]/70 to-transparent;
 }
 
 .staff-dash-hero-grad-t {
-  @apply absolute inset-0 bg-gradient-to-t from-[#0B0B36] via-transparent to-[#0B0B36]/60;
+  @apply absolute inset-0 bg-gradient-to-t from-[#0B0B36]/60 via-transparent to-[#0B0B36]/30;
 }
 
 .staff-dash-hero-content {

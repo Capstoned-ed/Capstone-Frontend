@@ -746,11 +746,9 @@ export default function StaffDashboard() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="staff-dash-hero-title">
-                Registrar Staff
+                Staff{' '}
+                <span className="text-[#F5B014]">Dashboard</span>
               </h1>
-              <p className="staff-dash-hero-subtitle">
-                Dashboard
-              </p>
               <p className="staff-dash-hero-desc">
                 Manage and process student document requests
               </p>
