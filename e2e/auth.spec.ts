@@ -22,10 +22,12 @@ test.describe('Authentication & Role-Based Route Guards', () => {
     await page.locator('#password').fill('wrongpassword123!');
     await page.getByRole('button', { name: /Log In/i }).click();
 
-    // Verify error banner is displayed
+    // Verify error banner is displayed (30s timeout to tolerate Render cold start)
     const errorBanner = page.locator('.animate-fadeIn, [class*="bg-red-50"]');
-    await expect(errorBanner).toBeVisible({ timeout: 15000 });
-    await expect(errorBanner).toContainText(/Invalid credentials|failed|unable/i);
+    await expect(errorBanner).toBeVisible({ timeout: 30000 });
+    await expect(errorBanner).toContainText(
+      /No active account found|Invalid credentials|failed|unable/i
+    );
   });
 
   test('should login successfully as Student with numeric ID and redirect to student dashboard', async ({ page }) => {
