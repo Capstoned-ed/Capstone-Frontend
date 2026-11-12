@@ -35,13 +35,13 @@ export async function loginAs(
   await passwordInput.fill(creds.password);
   await submitButton.click();
 
-  // Wait for post-login redirect according to role
+  // Wait for post-login redirect according to role (60s to accommodate Render cold start latency)
   const expectedPath = role === 'student' 
     ? '/student' 
     : role === 'admin' 
       ? '/admin' 
       : '/staff';
 
-  await page.waitForURL(new RegExp(expectedPath), { timeout: 30000 });
+  await page.waitForURL(new RegExp(expectedPath), { timeout: 60000 });
 }
 
