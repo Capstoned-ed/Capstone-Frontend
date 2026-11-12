@@ -39,8 +39,8 @@ test.describe('ML Load Forecasting & Analytics Dashboard', () => {
     const docBreakdownCard = page.locator('h2, .analytics-card-title').filter({ hasText: /Document Type Breakdown/i });
     await expect(docBreakdownCard).toBeVisible({ timeout: 15000 });
 
-    // Verify SVG chart elements or graph containers exist
-    const charts = page.locator('svg, .analytics-chart-container, .graph-container');
+    // Verify SVG chart elements and chart containers exist
+    const charts = page.locator('.analytics-chart-wrap, svg.analytics-chart-svg');
     await expect(charts.first()).toBeVisible({ timeout: 15000 });
 
     // Ensure no 500 Internal Server Errors occurred on backend API calls
