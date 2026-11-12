@@ -35,6 +35,16 @@ test.describe('End-to-End Credential Workflow Lifecycle', () => {
     await expect(docOption).toBeVisible({ timeout: 10000 });
     await docOption.check({ force: true });
 
+    // Part 3: Explicitly select Purpose of request (required before proceeding)
+    const purposeLabel = page.locator(
+      'label:has-text("For Evaluation"), label:has-text("For Personal File"), .ustp-purpose-grid label'
+    ).first();
+    await expect(purposeLabel).toBeVisible({ timeout: 15000 });
+    const purposeCheckbox = purposeLabel.locator('input[type="checkbox"]');
+    if (!(await purposeCheckbox.isChecked())) {
+      await purposeLabel.click();
+    }
+
     // Proceed to Step 2 (Review)
     const nextStepBtn = page.getByRole('button', { name: /Next Step/i }).first();
     await nextStepBtn.click();
@@ -47,7 +57,7 @@ test.describe('End-to-End Credential Workflow Lifecycle', () => {
     await finalSubmitBtn.click();
 
     // Step 3: Verify confirmation screen
-    await expect(page.locator('.complete-card, body')).toContainText(/Request Submitted!|successfully submitted/i, {
+    await expect(page.locator('.complete-card')).toContainText(/Request Submitted!|successfully submitted/i, {
       timeout: 25000,
     });
 
@@ -62,7 +72,7 @@ test.describe('End-to-End Credential Workflow Lifecycle', () => {
     await page.waitForLoadState('domcontentloaded');
 
     // Table should render with request rows
-    await expect(page.locator('.staff-data-table, table')).toBeVisible({ timeout: 20000 });
+    await expect(page.locator('.staff-data-table, table').first()).toBeVisible({ timeout: 20000 });
 
     // Click "View" on the latest row to open ProcessRequestModal
     const viewButtons = page.locator('.staff-btn-view, button:has-text("View")');
