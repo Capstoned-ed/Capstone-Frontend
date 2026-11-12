@@ -28,3 +28,8 @@ dist/
 .env
 .env.*
 !.env.example
+.env.test
+
+# Playwright
+playwright-report/
+test-results/
