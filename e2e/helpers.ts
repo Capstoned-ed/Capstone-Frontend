@@ -1,4 +1,4 @@
-import { Page, expect } from '@playwright/test';
+import { Page, APIRequestContext, expect } from '@playwright/test';
 
 export const credentials = {
   admin: {
@@ -15,8 +15,10 @@ export const credentials = {
   },
 };
 
+export const apiBaseUrl = process.env.E2E_API_URL || 'https://regquest-backend-staging.onrender.com';
+
 /**
- * Performs login using numeric user ID and password.
+ * Performs login using numeric user ID and password in the browser.
  */
 export async function loginAs(
   page: Page,
@@ -45,3 +47,25 @@ export async function loginAs(
   await page.waitForURL(new RegExp(expectedPath), { timeout: 60000 });
 }
 
+/**
+ * Obtains JWT access token directly from DRF backend for API-level verification.
+ */
+export async function getAuthToken(
+  request: APIRequestContext,
+  role: 'admin' | 'staff' | 'student'
+): Promise<string> {
+  const creds = credentials[role];
+  const response = await request.post(`${apiBaseUrl}/api/auth/login/`, {
+    data: {
+      username: creds.id,
+      password: creds.password,
+    },
+  });
+
+  if (!response.ok()) {
+    throw new Error(`Failed to authenticate via API for ${role}: ${response.status()} ${await response.text()}`);
+  }
+
+  const data = await response.json();
+  return data.access;
+}
