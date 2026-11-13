@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
 import requestsApi from '../../api/requests';
+import usersApi from '../../api/users';
 import useToast from '../../hooks/useToast';
 
 const getStatusBadge = (statusStr) => {
@@ -58,6 +59,7 @@ export default function StudentProfileModal({ isOpen, onClose }) {
   // Editable fields state (Email, Mobile Number, Year Level)
   const [editableEmail, setEditableEmail] = useState('');
   const [editableMobile, setEditableMobile] = useState('');
+  const [editableBirthDate, setEditableBirthDate] = useState('');
   const [editableYearLevel, setEditableYearLevel] = useState('1st year');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -73,58 +75,107 @@ export default function StudentProfileModal({ isOpen, onClose }) {
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  // Student Identity data matching screenshot with fallbacks to authenticated user
+  // Resolve cached profile & user cache
+  const { cachedProfile, cachedUser } = (() => {
+    try {
+      const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+      const usersCache = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
+      const userKey = user?.id || user?.username || user?.student_id;
+      const p =
+        profiles[userKey] ||
+        profiles[user?.student_id] ||
+        profiles[user?.username] ||
+        profiles[user?.id] ||
+        {};
+      const cu = usersCache.find(
+        (x) =>
+          String(x.id) === String(user?.id || user?.userId) ||
+          (x.username && user?.username && String(x.username).toLowerCase() === String(user.username).toLowerCase())
+      ) || {};
+      return { cachedProfile: p, cachedUser: cu };
+    } catch {
+      return { cachedProfile: {}, cachedUser: {} };
+    }
+  })();
+
+  // Student Identity data matching screenshot with fallbacks to authenticated user & cached profile
   const displayName =
     user?.full_name ||
+    cachedProfile?.full_name ||
     (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : null) ||
+    (cachedProfile?.first_name ? `${cachedProfile.first_name} ${cachedProfile.last_name || ''}`.trim() : null) ||
     (user?.username && !/^\d{6,}$/.test(user.username) ? user.username : null) ||
     'Juan De Letchi';
 
-  const studentId = user?.student_id || user?.username || '2026202666';
-  const academicProgram = user?.program || 'B.S. in Information Technology';
+  const studentId =
+    user?.student_id ||
+    cachedProfile?.student_id ||
+    user?.username ||
+    '2026202666';
 
-  // Initialize editable fields on open / user change
+  const academicProgram =
+    cachedProfile?.program ||
+    cachedProfile?.course_name ||
+    cachedProfile?.course ||
+    user?.program ||
+    user?.course_name ||
+    cachedUser?.program ||
+    cachedUser?.course_name ||
+    'B.S. in Information Technology';
+
+  // Initialize editable fields on open / user change and sync with backend /api/users/me/
   useEffect(() => {
-    if (isOpen) {
-      try {
-        const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
-        const usersCache = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
-        const userKey = user?.id || user?.username || user?.student_id;
-        const p = profiles[userKey] || profiles[user?.username] || {};
-        const cachedUser = usersCache.find(
-          (x) =>
-            String(x.id) === String(user?.id || user?.userId) ||
-            (x.username && user?.username && String(x.username).toLowerCase() === String(user.username).toLowerCase())
-        );
+    if (!isOpen) return;
 
-        const activeEmail =
-          p.email ||
-          user?.email ||
-          cachedUser?.email ||
-          (user?.username === '2023301564' ? 'daisy.traya@ustp.edu.ph' : '');
+    const applyProfile = (me = null) => {
+      const activeEmail =
+        me?.email ||
+        cachedProfile?.email ||
+        user?.email ||
+        cachedUser?.email ||
+        (user?.username === '2023301564' ? 'daisy.traya@ustp.edu.ph' : '');
 
-        setEditableEmail(activeEmail);
-        setEditableMobile(
-          p.mobile_number ||
-          p.phone ||
-          user?.phone ||
-          user?.mobile_number ||
-          cachedUser?.phone ||
-          '09561236549'
-        );
-        setEditableYearLevel(
-          p.year_level ||
-          user?.year_level ||
-          cachedUser?.year_level ||
-          '1st year'
-        );
-      } catch {
-        setEditableEmail(user?.email || '');
-        setEditableMobile('09561236549');
-        setEditableYearLevel(user?.year_level || '1st year');
-      }
-      setSaveSuccess(false);
-    }
+      setEditableEmail(activeEmail);
+      setEditableMobile(
+        me?.contact_number ||
+        cachedProfile?.contact_number ||
+        cachedProfile?.mobile_number ||
+        cachedProfile?.phone ||
+        user?.contact_number ||
+        user?.phone ||
+        user?.mobile_number ||
+        cachedUser?.contact_number ||
+        cachedUser?.phone ||
+        ''
+      );
+      setEditableBirthDate(
+        me?.birth_date ||
+        cachedProfile?.birth_date ||
+        cachedProfile?.birthdate ||
+        user?.birth_date ||
+        user?.birthdate ||
+        cachedUser?.birth_date ||
+        cachedUser?.birthdate ||
+        ''
+      );
+      setEditableYearLevel(
+        me?.year_level ||
+        cachedProfile?.year_level ||
+        user?.year_level ||
+        cachedUser?.year_level ||
+        '1st year'
+      );
+    };
+
+    applyProfile();
+    usersApi
+      .getMe()
+      .then((me) => {
+        if (me) applyProfile(me);
+      })
+      .catch(() => {});
+
+    setSaveSuccess(false);
   }, [isOpen, user]);
 
   // Lock body scroll and close on ESC
@@ -190,8 +241,8 @@ export default function StudentProfileModal({ isOpen, onClose }) {
     navigate(ROUTES.LOGIN);
   };
 
-  // Save changes handler for editable fields (Email, Mobile Number, Year Level)
-  const handleSaveInformation = (e) => {
+  // Save changes handler for editable fields (Email, Mobile Number, Birthdate, Year Level)
+  const handleSaveInformation = async (e) => {
     e?.preventDefault();
 
     if (!editableEmail || !editableEmail.includes('@')) {
@@ -201,6 +252,17 @@ export default function StudentProfileModal({ isOpen, onClose }) {
 
     setIsSaving(true);
     try {
+      try {
+        await usersApi.updateMe({
+          email: editableEmail.trim(),
+          contact_number: editableMobile.trim(),
+          birth_date: editableBirthDate || null,
+          year_level: editableYearLevel,
+        });
+      } catch (apiErr) {
+        console.warn('Backend self-profile update notice:', apiErr);
+      }
+
       const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
       const userKey = user?.id || user?.username || studentId;
       const existing = profiles[userKey] || profiles[user?.username] || {};
@@ -211,8 +273,11 @@ export default function StudentProfileModal({ isOpen, onClose }) {
         student_id: studentId,
         program: academicProgram,
         email: editableEmail.trim(),
+        contact_number: editableMobile.trim(),
         mobile_number: editableMobile.trim(),
         phone: editableMobile.trim(),
+        birth_date: editableBirthDate,
+        birthdate: editableBirthDate,
         year_level: editableYearLevel,
       };
 
@@ -522,6 +587,20 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                         className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2.5 text-sm text-slate-500 outline-none select-text cursor-not-allowed truncate font-medium"
                       />
                     </div>
+
+                    {/* Birthdate */}
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                        Birthdate
+                      </label>
+                      <input
+                        type="date"
+                        value={editableBirthDate}
+                        max={new Date().toISOString().split('T')[0]}
+                        onChange={(e) => setEditableBirthDate(e.target.value)}
+                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm"
+                      />
+                    </div>
                   </div>
 
                   {/* Right Column */}
@@ -568,6 +647,7 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                         <option value="3rd year">3rd year</option>
                         <option value="4th year">4th year</option>
                         <option value="5th year">5th year</option>
+                        <option value="Alumnus">Alumnus</option>
                       </select>
                     </div>
                   </div>

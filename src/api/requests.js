@@ -181,7 +181,7 @@ export function isRequestAssignedToUser(request, currentUser, assignmentsMap = n
     }
   }
 
-  // 2. Check if explicitly claimed by this user in session or local storage
+  // 2. Check if explicitly claimed by this specific user in local storage
   try {
     const claimedRaw = typeof window !== 'undefined' ? localStorage.getItem('regquest_claimed_requests') : null;
     if (claimedRaw) {
@@ -189,7 +189,7 @@ export function isRequestAssignedToUser(request, currentUser, assignmentsMap = n
       for (const k of reqKeys) {
         if (claimedMap[k]) {
           const val = String(claimedMap[k]).trim().toLowerCase();
-          if (candidates.has(val) || val === 'claimed' || val === 'true' || val === '1') {
+          if (candidates.has(val)) {
             return true;
           }
         }
@@ -237,15 +237,6 @@ export function isRequestAssignedToUser(request, currentUser, assignmentsMap = n
 
   for (const candidate of candidates) {
     if (assignedStr === candidate) return true;
-    if (
-      candidate.length >= 4 &&
-      candidate !== 'staff' &&
-      candidate !== 'admin' &&
-      candidate !== 'user' &&
-      (assignedStr.includes(candidate) || candidate.includes(assignedStr))
-    ) {
-      return true;
-    }
   }
 
   return false;
@@ -593,8 +584,8 @@ export function resolveRequestDocType(r, cred = null) {
   if (remLower.includes('earned unit') || remLower.includes('earned units')) return 'Certification - Earned Units';
   if (remLower.includes('endorsement')) return 'Certification - Endorsement';
   if (remLower.includes('subjects w/ grades') || remLower.includes('subject w/ grade')) return 'Certification - Subjects w/ grades';
-  if (remLower.includes('authentication') || remLower.includes('auth')) return 'Authentication';
-  if (remLower.includes('transcript') || remLower.includes('tor')) return 'Transcript of Records (TOR)';
+  if (remLower.includes('authentication') || /\bauth\b/.test(remLower)) return 'Authentication';
+  if (remLower.includes('transcript') || /\btor\b/.test(remLower)) return 'Transcript of Records (TOR)';
   if (remLower.includes('dismissal')) return 'Honorable Dismissal';
   if (remLower.includes('evaluation')) return 'Evaluation';
 

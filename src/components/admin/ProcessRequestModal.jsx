@@ -505,11 +505,16 @@ export default function ProcessRequestModal({
       });
 
       saveStoredNotification({
-        user: requestItem.user || requestItem.student_id,
+        event_type: 'REQUEST_STATUS_CHANGED',
         title: 'Request Rejected',
         message: `Your request ${trackingCode} for ${requestItem.document_type || 'credential'} was rejected. Reason: ${reason}`,
-        type: 'error',
-        tracking_number: trackingCode,
+        related_object_type: 'CredentialRequest',
+        related_object_id: trackingCode,
+        target_role: 'student',
+        target_roles: ['student'],
+        target_user_id: requestItem.user || null,
+        target_username: requestItem.student_id || requestItem.student_name || null,
+        target_student_id: requestItem.student_id || null,
       });
 
       setStatusDirectly('Rejected');

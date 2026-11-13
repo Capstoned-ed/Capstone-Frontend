@@ -564,8 +564,9 @@ export default function RegistrarDashboard() {
                         <tr className="staff-table-head-row">
                           <th className="staff-table-th left">Staff Members</th>
                           <th className="staff-table-th center">Completed</th>
+                          <th className="staff-table-th center">For Processing</th>
+                          <th className="staff-table-th center">Processing</th>
                           <th className="staff-table-th center">Pending</th>
-                          <th className="staff-table-th right">Avg. Time</th>
                         </tr>
                       </thead>
                       <tbody className="staff-table-tbody">
@@ -578,10 +579,13 @@ export default function RegistrarDashboard() {
                               {staff.completed}
                             </td>
                             <td className="staff-table-pending">
-                              {staff.pending}
+                              {staff.forProcessing ?? 0}
                             </td>
-                            <td className="staff-table-avg">
-                              {staff.avgTime || '2.1 days'}
+                            <td className="staff-table-pending">
+                              {staff.processing ?? 0}
+                            </td>
+                            <td className="staff-table-pending">
+                              {staff.pending}
                             </td>
                           </tr>
                         ))}
