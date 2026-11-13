@@ -139,22 +139,36 @@ export default function StudentPaymentsPage() {
     return map;
   }, [credentialTypes]);
 
-  // Filter requests for current student
+  // Filter requests for current student (strictly isolated to this student)
   const studentRequests = useMemo(() => {
     const currentUserId = user?.userId || user?.id;
     const currentStudentId = user?.student_id || user?.username;
+    const fullName =
+      user?.full_name ||
+      [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim();
 
-    const list = rawRequests.filter((r) => {
-      if (!currentUserId && !currentStudentId) return true;
+    if (!currentUserId && !currentStudentId) return [];
+
+    return rawRequests.filter((r) => {
       if (r.user && currentUserId && String(r.user) === String(currentUserId)) return true;
-      if (r.student_id && currentStudentId && String(r.student_id) === String(currentStudentId)) return true;
-      if (r.student_name && user?.username && r.student_name.toLowerCase().includes(user.username.toLowerCase())) return true;
-      if (r.student_name && user?.full_name && r.student_name.toLowerCase().includes(user.full_name.toLowerCase())) return true;
-      if (r.student_name && user?.first_name && r.student_name.toLowerCase().includes(user.first_name.toLowerCase())) return true;
+      if (
+        r.student_id &&
+        currentStudentId &&
+        String(r.student_id).trim().toLowerCase() === String(currentStudentId).trim().toLowerCase()
+      ) {
+        return true;
+      }
+      if (
+        !r.user &&
+        !r.student_id &&
+        r.student_name &&
+        fullName &&
+        r.student_name.trim().toLowerCase() === fullName.toLowerCase()
+      ) {
+        return true;
+      }
       return false;
     });
-
-    return list.length > 0 ? list : rawRequests;
   }, [rawRequests, user]);
 
   // ONLY requests where staff or admin has confirmed the request or the status is "for payment"

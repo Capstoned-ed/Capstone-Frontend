@@ -57,6 +57,29 @@ export default function RequestDocumentPage() {
   const [fullName, setFullName] = useState(() => resolveStudentName(user));
   const [course, setCourse] = useState(user?.program || 'BS in Information Technology');
 
+  const [dateOfRequest, setDateOfRequest] = useState(() => new Date().toISOString().split('T')[0]);
+  const [birthDate, setBirthDate] = useState('2002-05-15');
+  const [userCategory, setUserCategory] = useState('student'); // 'student' or 'alumnus'
+  const [contactNo, setContactNo] = useState('09123456789');
+  const [contactNoError, setContactNoError] = useState('');
+
+  const getContactNoError = (value, { required = false } = {}) => {
+    const raw = String(value ?? '');
+    if (!raw.trim()) {
+      return required ? 'Please enter your contact number.' : '';
+    }
+    if (/\D/.test(raw)) {
+      return 'Contact No. must contain numbers only.';
+    }
+    return '';
+  };
+
+  const handleContactNoChange = (e) => {
+    const val = e.target.value;
+    setContactNo(val);
+    setContactNoError(getContactNoError(val));
+  };
+
   useEffect(() => {
     const resolved = resolveStudentName(user);
     if (resolved && resolved !== 'Juan Dela Cruz') {
@@ -65,11 +88,15 @@ export default function RequestDocumentPage() {
     if (user?.program) {
       setCourse(user.program);
     }
+    try {
+      const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+      const p = profiles[user?.student_id] || profiles[user?.username] || profiles[user?.id] || {};
+      const resolvedBirthDate = user?.birth_date || user?.birthdate || p?.birth_date || p?.birthdate;
+      const resolvedContact = user?.contact_number || p?.contact_number;
+      if (resolvedBirthDate) setBirthDate(resolvedBirthDate);
+      if (resolvedContact) setContactNo(resolvedContact);
+    } catch {}
   }, [user]);
-  const [dateOfRequest, setDateOfRequest] = useState(() => new Date().toISOString().split('T')[0]);
-  const [birthDate, setBirthDate] = useState('2002-05-15');
-  const [userCategory, setUserCategory] = useState('student'); // 'student' or 'alumnus'
-  const [contactNo, setContactNo] = useState('09123456789');
   const [dateOfGraduation, setDateOfGraduation] = useState('');
   const [lastSemAttendance, setLastSemAttendance] = useState('2nd Sem, AY 2025-2026');
   const [alreadyRequested, setAlreadyRequested] = useState('no');
@@ -692,6 +719,18 @@ export default function RequestDocumentPage() {
       return;
     }
 
+    const contactErr = getContactNoError(contactNo, { required: true });
+    if (contactErr) {
+      setContactNoError(contactErr);
+      toast.warning(contactErr);
+      const el = document.getElementById('ustp-contact-input');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.focus();
+      }
+      return;
+    }
+
     if (selectedDocs.length === 0) {
       toast.warning('Please check the document/s you need in Part 2 before proceeding.');
       const el = document.getElementById('ustp-part-2-section');
@@ -723,6 +762,18 @@ export default function RequestDocumentPage() {
     if (isCleared !== 'yes') {
       toast.warning('You must be cleared to proceed with your credential request.');
       setCurrentStep(1);
+      return;
+    }
+
+    const contactErr = getContactNoError(contactNo, { required: true });
+    if (contactErr) {
+      setContactNoError(contactErr);
+      toast.error(contactErr);
+      const el = document.getElementById('review-contact-input');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.focus();
+      }
       return;
     }
 
@@ -1043,12 +1094,22 @@ export default function RequestDocumentPage() {
                   <span className="ustp-section-title">Part 1: Please complete entries below.</span>
                   <div className="ustp-contact-wrap">
                     <span className="ustp-contact-label">CONTACT NO.:</span>
-                    <input
-                      type="text"
-                      value={contactNo}
-                      onChange={(e) => setContactNo(e.target.value)}
-                      className="ustp-underline-field ustp-contact-input"
-                    />
+                    <div className="flex flex-col">
+                      <input
+                        id="ustp-contact-input"
+                        type="text"
+                        inputMode="numeric"
+                        value={contactNo}
+                        onChange={handleContactNoChange}
+                        aria-invalid={Boolean(contactNoError)}
+                        className={`ustp-underline-field ustp-contact-input ${
+                          contactNoError ? '!border-red-500 !text-red-700 bg-red-50/40' : ''
+                        }`}
+                      />
+                      {contactNoError && (
+                        <p className="text-[10px] leading-tight text-red-600 mt-0.5 font-medium">{contactNoError}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -1810,11 +1871,19 @@ export default function RequestDocumentPage() {
                     <div>
                       <label className="review-input-label">Contact No.</label>
                       <input
+                        id="review-contact-input"
                         type="text"
+                        inputMode="numeric"
                         value={contactNo}
-                        onChange={(e) => setContactNo(e.target.value)}
-                        className="review-pill-input"
+                        onChange={handleContactNoChange}
+                        aria-invalid={Boolean(contactNoError)}
+                        className={`review-pill-input ${
+                          contactNoError ? '!border-red-500 !ring-1 !ring-red-500 bg-red-50/40' : ''
+                        }`}
                       />
+                      {contactNoError && (
+                        <p className="text-[11px] leading-tight text-red-600 mt-0.5 font-medium">{contactNoError}</p>
+                      )}
                     </div>
 
                     <div>

@@ -72,10 +72,12 @@ export const USTP_COURSE_CODE_MAP = USTP_COURSE_GROUPS.reduce((acc, group) => {
   return acc;
 }, {});
 
-export default function CourseSelectDropdown({ value, onChange, required = false, disabled = false }) {
+export default function CourseSelectDropdown({ value, onChange, required = false, disabled = false, allowClear = true }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [openUpward, setOpenUpward] = useState(false);
+  const [maxPopoverHeight, setMaxPopoverHeight] = useState(380);
   const dropdownRef = useRef(null);
   const searchInputRef = useRef(null);
 
@@ -92,6 +94,24 @@ export default function CourseSelectDropdown({ value, onChange, required = false
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
+  }, [isOpen]);
+
+  // Keep dropdown within viewport (flip upward when space below is tight)
+  useEffect(() => {
+    if (!isOpen) return;
+    const updatePosition = () => {
+      if (!dropdownRef.current) return;
+      const rect = dropdownRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom - 12;
+      const spaceAbove = rect.top - 12;
+      const shouldOpenUp = spaceBelow < 320 && spaceAbove > spaceBelow;
+      setOpenUpward(shouldOpenUp);
+      const available = shouldOpenUp ? spaceAbove : spaceBelow;
+      setMaxPopoverHeight(Math.max(200, Math.min(390, available)));
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    return () => window.removeEventListener('resize', updatePosition);
   }, [isOpen]);
 
   // Focus search input when dropdown opens
@@ -189,7 +209,7 @@ export default function CourseSelectDropdown({ value, onChange, required = false
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {selectedCourseObj && !disabled && (
+          {allowClear && selectedCourseObj && !disabled && (
             <span
               onClick={handleClear}
               className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
@@ -225,7 +245,12 @@ export default function CourseSelectDropdown({ value, onChange, required = false
 
       {/* Popover Dropdown Card */}
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white rounded-xl border border-slate-200/90 shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+        <div
+          style={{ maxHeight: `${maxPopoverHeight}px` }}
+          className={`absolute left-0 right-0 z-50 bg-white rounded-xl border border-slate-200/90 shadow-2xl overflow-hidden flex flex-col animate-in fade-in duration-150 ${
+            openUpward ? 'bottom-full mb-1.5 slide-in-from-bottom-1' : 'top-full mt-1.5 slide-in-from-top-1'
+          }`}
+        >
           {/* Search Header */}
           <div className="p-3 bg-slate-50 border-b border-slate-200/80 space-y-2.5">
             <div className="relative flex items-center">
@@ -273,7 +298,7 @@ export default function CourseSelectDropdown({ value, onChange, required = false
           </div>
 
           {/* Course Options List */}
-          <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 p-1.5">
+          <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100 p-1.5">
             {filteredGroups.length > 0 ? (
               filteredGroups.map((group) => (
                 <div key={group.category} className="py-1">
