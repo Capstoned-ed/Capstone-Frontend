@@ -380,7 +380,7 @@ export default function UserManagementPage() {
         localStorage.setItem('regquest_account_activity', JSON.stringify(activity.slice(0, 50)));
       } catch {}
 
-      toast.success(`User "${fullName}" (${addUserRole}) provisioned with password: ${finalIdNumber}`);
+      toast.success(`User "${fullName}" (${addUserRole}) account provisioned successfully.`);
       handleUserCreated(newUser);
       handleAddUserReset();
     } catch (err) {
@@ -596,7 +596,7 @@ export default function UserManagementPage() {
         localStorage.setItem('regquest_account_activity', JSON.stringify(activity.slice(0, 50)));
       } catch {}
 
-      toast.success(`Student "${fullName}" provisioned with password: ${finalStudentId}`);
+      toast.success(`Student "${fullName}" account provisioned successfully.`);
       handleUserCreated(newStudent);
       handleAddStudentReset();
     } catch (err) {
