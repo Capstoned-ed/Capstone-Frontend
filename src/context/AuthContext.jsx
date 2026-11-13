@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import { authApi } from '../api/auth';
+import usersApi from '../api/users';
 import { ROLES } from '../constants/roles';
 import { AuthContext } from './AuthContextDefinition';
 
@@ -133,6 +134,30 @@ export function AuthProvider({ children }) {
 
         setUser(decoded);
         setLoading(false);
+        usersApi
+          .getMe()
+          .then((me) => {
+            if (!me) return;
+            const fullName =
+              [me.first_name, me.last_name].filter(Boolean).join(' ').trim() ||
+              decoded.full_name;
+            const merged = {
+              ...decoded,
+              ...me,
+              userId: me.id || decoded.userId,
+              student_id: me.username || decoded.student_id,
+              full_name: fullName,
+              program: me.course_name || decoded.program,
+              course_name: me.course_name || decoded.course_name,
+              course_code: me.course_code || decoded.course_code,
+              birth_date: me.birth_date || decoded.birth_date || '',
+              birthdate: me.birth_date || decoded.birthdate || '',
+              contact_number: me.contact_number || decoded.contact_number || '',
+              year_level: me.year_level || decoded.year_level || '1st year',
+            };
+            setUser(merged);
+          })
+          .catch(() => {});
       } else if (refreshToken) {
         try {
           const data = await authApi.refresh(refreshToken);
@@ -142,6 +167,27 @@ export function AuthProvider({ children }) {
           }
           const freshUser = parseToken(data.access);
           setUser(freshUser);
+          usersApi
+            .getMe()
+            .then((me) => {
+              if (!me) return;
+              const fullName =
+                [me.first_name, me.last_name].filter(Boolean).join(' ').trim() ||
+                freshUser?.full_name;
+              setUser((prev) => ({
+                ...prev,
+                ...me,
+                userId: me.id || prev?.userId,
+                student_id: me.username || prev?.student_id,
+                full_name: fullName,
+                program: me.course_name || prev?.program,
+                birth_date: me.birth_date || prev?.birth_date || '',
+                birthdate: me.birth_date || prev?.birthdate || '',
+                contact_number: me.contact_number || prev?.contact_number || '',
+                year_level: me.year_level || prev?.year_level || '1st year',
+              }));
+            })
+            .catch(() => {});
         } catch {
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
@@ -167,7 +213,30 @@ export function AuthProvider({ children }) {
     localStorage.setItem('access_token', access);
     localStorage.setItem('refresh_token', refresh);
 
-    const decoded = parseToken(access);
+    let decoded = parseToken(access);
+
+    try {
+      const me = await usersApi.getMe();
+      if (me) {
+        const fullName =
+          [me.first_name, me.last_name].filter(Boolean).join(' ').trim() ||
+          decoded?.full_name;
+        decoded = {
+          ...decoded,
+          ...me,
+          userId: me.id || decoded?.userId,
+          student_id: me.username || decoded?.student_id,
+          full_name: fullName,
+          program: me.course_name || decoded?.program,
+          course_name: me.course_name || decoded?.course_name,
+          course_code: me.course_code || decoded?.course_code,
+          birth_date: me.birth_date || decoded?.birth_date || '',
+          birthdate: me.birth_date || decoded?.birthdate || '',
+          contact_number: me.contact_number || decoded?.contact_number || '',
+          year_level: me.year_level || decoded?.year_level || '1st year',
+        };
+      }
+    } catch {}
 
     try {
       const uKey = (decoded?.username || username || '').toLowerCase();

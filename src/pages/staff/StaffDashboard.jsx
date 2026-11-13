@@ -198,7 +198,11 @@ export default function StaffDashboard() {
           .filter((r) => Boolean(String(r.tracking_number || '').trim()))
           .map((r, idx) => {
           const userObj = userMap.get(r.user) || userMap.get(r.student_id);
-          const cred = credMap.get(r.credential_type) || credMap.get(r.credential);
+          const cred =
+            credMap.get(r.credential_type) ||
+            credMap.get(Number(r.credential_type)) ||
+            credMap.get(r.credential) ||
+            credMap.get(Number(r.credential));
           const p = profiles[r.user] || profiles[r.student_id] || (userObj ? profiles[userObj.id] : null) || {};
 
           const fallbackKnownName =
@@ -391,12 +395,12 @@ export default function StaffDashboard() {
   }, [user, toast]);
 
   const targetRequestsForMetrics = useMemo(() => {
-    return user?.role === 'staff' ? assignedRequests : requestsList;
+    return String(user?.role || '').toLowerCase() === 'staff' ? assignedRequests : requestsList;
   }, [user, assignedRequests, requestsList]);
 
   // All requests assigned to this user (or all requests for admin/master) - UNFILTERED by selected calendar date
   const allUserRequests = useMemo(() => {
-    return user?.role === 'staff'
+    return String(user?.role || '').toLowerCase() === 'staff'
       ? requestsList.filter((r) => isRequestAssignedToUser(r, user, assignments, usersList))
       : requestsList;
   }, [user, requestsList, assignments, usersList]);

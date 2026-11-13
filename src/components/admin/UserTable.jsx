@@ -30,6 +30,7 @@ export default function UserTable({
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [showAllUsers, setShowAllUsers] = useState(false);
   const [roleFilter, setRoleFilter] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchUsers = useCallback(async () => {
     if (propOnRetry) {
@@ -131,9 +132,22 @@ export default function UserTable({
   };
 
   // ONLY Admin, Registrar, and Staff accounts (exclude students from Staff & Role Management table)
+  const normalizedQuery = searchQuery.trim().toLowerCase();
   const staffAndAdminUsers = users
     .filter((user) => user.role !== ROLES.STUDENT)
-    .filter((user) => (roleFilter === 'ALL' ? true : user.role === roleFilter));
+    .filter((user) => (roleFilter === 'ALL' ? true : user.role === roleFilter))
+    .filter((user) => {
+      if (!normalizedQuery) return true;
+      const haystacks = [
+        formatDisplayName(user),
+        user.username,
+        user.email,
+        user.role,
+      ]
+        .filter(Boolean)
+        .map((v) => String(v).toLowerCase());
+      return haystacks.some((val) => val.includes(normalizedQuery));
+    });
 
   return (
     <div className="user-table-card">
@@ -153,6 +167,36 @@ export default function UserTable({
             <p className="user-table-card-desc">
               Assign roles and access levels for Registrar, Staff, and Administrator
             </p>
+            <div className="relative mt-2.5 max-w-xs sm:max-w-sm">
+              <svg
+                className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setShowAllUsers(false);
+                }}
+                placeholder="Search staff by name, ID, or email..."
+                className="w-full pl-9 pr-8 py-1.5 text-xs bg-white border border-blue-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                  aria-label="Clear staff search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -307,13 +351,13 @@ export default function UserTable({
                       {/* Actions: [Change Role] & [Deactivate / Activate] */}
                       <td className="user-table-cell">
                         <div className="action-btn-group">
-                          {/* Change Role Button (Solid Blue) */}
+                          {/* Update / Change Role Button (Solid Blue) */}
                           <button
                             type="button"
                             onClick={() => setEditingUser(user)}
                             className="btn-change-role"
                           >
-                            Change Role
+                            Update / Change Role
                           </button>
 
                           {/* Deactivate Button (Red Outline) or Activate */}

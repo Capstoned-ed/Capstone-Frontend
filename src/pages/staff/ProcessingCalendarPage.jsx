@@ -253,7 +253,7 @@ export default function ProcessingCalendarPage() {
         })
         .sort(sortRequestsNewestFirst);
 
-        if (user?.role === 'staff') {
+        if (String(user?.role || '').toLowerCase() === 'staff') {
           const currentAssignments = getStaffAssignments();
           enriched = enriched.filter((r) =>
             isRequestAssignedToUser(r, user, currentAssignments, usersRes)
