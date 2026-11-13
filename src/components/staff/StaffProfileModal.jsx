@@ -18,9 +18,12 @@ export default function StaffProfileModal({ isOpen, onClose }) {
   const [loadingUpdates, setLoadingUpdates] = useState(false);
 
   // Editable fields state for Staff / Admin
+  const [editableFirstName, setEditableFirstName] = useState('');
+  const [editableLastName, setEditableLastName] = useState('');
   const [editableName, setEditableName] = useState('');
   const [editableEmail, setEditableEmail] = useState('');
   const [editablePhone, setEditablePhone] = useState('');
+  const [editableBirthDate, setEditableBirthDate] = useState('');
   const [editableDepartment, setEditableDepartment] = useState('Office of the University Registrar');
   const [editableOfficeLocation, setEditableOfficeLocation] = useState('Registrar Bldg, Room 102');
   const [isSavingInfo, setIsSavingInfo] = useState(false);
@@ -71,14 +74,43 @@ export default function StaffProfileModal({ isOpen, onClose }) {
             (x.username && user?.username && String(x.username).toLowerCase() === String(user.username).toLowerCase())
         );
 
-        setEditableName(profile.full_name || defaultDisplayName);
+        const resolvedFull = profile.full_name || defaultDisplayName;
+        const nameParts = resolvedFull.trim().split(/\s+/);
+        const resolvedFirst =
+          profile.first_name ||
+          user?.first_name ||
+          cachedUser?.first_name ||
+          (nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : nameParts[0] || '');
+        const resolvedLast =
+          profile.last_name ||
+          user?.last_name ||
+          cachedUser?.last_name ||
+          (nameParts.length > 1 ? nameParts[nameParts.length - 1] : '');
+
+        setEditableFirstName(resolvedFirst);
+        setEditableLastName(resolvedLast);
+        setEditableName(resolvedFull);
         setEditableEmail(
           profile.email ||
           user?.email ||
           cachedUser?.email ||
           (isAdmin ? 'admin@ustp.edu.ph' : 'staff@ustp.edu.ph')
         );
-        setEditablePhone(profile.phone || user?.phone || cachedUser?.phone || '0917-555-0199');
+        setEditablePhone(
+          profile.contact_number ||
+          profile.phone ||
+          user?.contact_number ||
+          user?.phone ||
+          cachedUser?.contact_number ||
+          cachedUser?.phone ||
+          '0917-555-0199'
+        );
+        setEditableBirthDate(
+          profile.birth_date ||
+          user?.birth_date ||
+          cachedUser?.birth_date ||
+          ''
+        );
         setEditableDepartment(
           profile.department ||
           (isAdmin ? 'Management Information Systems (MIS)' : 'Office of the University Registrar')
@@ -178,11 +210,15 @@ export default function StaffProfileModal({ isOpen, onClose }) {
   };
 
   // Save changes handler for My Information
-  const handleSaveInfo = (e) => {
+  const handleSaveInfo = async (e) => {
     e?.preventDefault();
 
-    if (!editableName.trim()) {
-      toast.error('Please enter your full name.');
+    const firstName = editableFirstName.trim();
+    const lastName = editableLastName.trim();
+    const fullName = `${firstName} ${lastName}`.trim() || editableName.trim();
+
+    if (!firstName) {
+      toast.error('Please enter your first name.');
       return;
     }
     if (!editableEmail.trim() || !editableEmail.includes('@')) {
@@ -195,10 +231,38 @@ export default function StaffProfileModal({ isOpen, onClose }) {
       const staffProfiles = JSON.parse(localStorage.getItem('regquest_staff_profiles') || '{}');
       const userKey = user?.id || user?.username || employeeId;
 
+      if (isAdmin && user?.id) {
+        try {
+          await usersApi.update(user.id, {
+            first_name: firstName,
+            last_name: lastName,
+            email: editableEmail.trim(),
+            contact_number: editablePhone.trim(),
+            birth_date: editableBirthDate || null,
+          });
+        } catch (apiErr) {
+          console.warn('Could not sync admin profile to backend:', apiErr);
+        }
+      } else {
+        try {
+          await usersApi.updateMe({
+            email: editableEmail.trim(),
+            contact_number: editablePhone.trim(),
+            birth_date: editableBirthDate || null,
+          });
+        } catch (apiErr) {
+          console.warn('Could not sync staff profile to backend:', apiErr);
+        }
+      }
+
       const updated = {
-        full_name: editableName.trim(),
+        first_name: firstName,
+        last_name: lastName,
+        full_name: fullName,
         email: editableEmail.trim(),
         phone: editablePhone.trim(),
+        contact_number: editablePhone.trim(),
+        birth_date: editableBirthDate || '',
         department: editableDepartment.trim(),
         office_location: editableOfficeLocation.trim(),
         employee_id: employeeId,
@@ -591,17 +655,17 @@ export default function StaffProfileModal({ isOpen, onClose }) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
                   {/* Left Column */}
                   <div className="space-y-4">
-                    {/* Full Name */}
+                    {/* First Name */}
                     <div>
                       <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        Full Name
+                        First Name
                       </label>
                       <input
                         type="text"
-                        value={editableName}
-                        onChange={(e) => setEditableName(e.target.value)}
+                        value={editableFirstName}
+                        onChange={(e) => setEditableFirstName(e.target.value)}
                         required
-                        placeholder="Enter full name"
+                        placeholder="Enter first name"
                         className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm font-medium"
                       />
                     </div>
@@ -621,26 +685,38 @@ export default function StaffProfileModal({ isOpen, onClose }) {
                       />
                     </div>
 
-                    {/* Department */}
+                    {/* Birthday */}
                     <div>
                       <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        Department / Office
+                        Birthday
                       </label>
-                      <select
-                        value={editableDepartment}
-                        onChange={(e) => setEditableDepartment(e.target.value)}
-                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm cursor-pointer"
-                      >
-                        <option value="Office of the University Registrar">Office of the University Registrar</option>
-                        <option value="Student Records & Credentials Section">Student Records & Credentials Section</option>
-                        <option value="Admissions, Evaluation & Clearance Section">Admissions, Evaluation & Clearance Section</option>
-                        <option value="Management Information Systems (MIS)">Management Information Systems (MIS)</option>
-                      </select>
+                      <input
+                        type="date"
+                        value={editableBirthDate}
+                        max={new Date().toISOString().split('T')[0]}
+                        onChange={(e) => setEditableBirthDate(e.target.value)}
+                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm"
+                      />
                     </div>
+
                   </div>
 
                   {/* Right Column */}
                   <div className="space-y-4">
+                    {/* Last Name */}
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                        Last Name
+                      </label>
+                      <input
+                        type="text"
+                        value={editableLastName}
+                        onChange={(e) => setEditableLastName(e.target.value)}
+                        placeholder="Enter last name"
+                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm font-medium"
+                      />
+                    </div>
+
                     {/* Employee ID */}
                     <div>
                       <label className="block text-sm font-semibold text-slate-800 mb-1.5">
@@ -668,19 +744,6 @@ export default function StaffProfileModal({ isOpen, onClose }) {
                       />
                     </div>
 
-                    {/* Office Location */}
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        Office / Desk Location
-                      </label>
-                      <input
-                        type="text"
-                        value={editableOfficeLocation}
-                        onChange={(e) => setEditableOfficeLocation(e.target.value)}
-                        placeholder="e.g. Registrar Bldg, Room 102"
-                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm"
-                      />
-                    </div>
                   </div>
                 </div>
 

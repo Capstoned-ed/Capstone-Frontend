@@ -132,6 +132,16 @@ function mergeUsersWithCache(apiUsers = []) {
 }
 
 export const usersApi = {
+  async getMe() {
+    const response = await apiClient.get('/api/users/me/');
+    return response.data;
+  },
+
+  async updateMe(payload) {
+    const response = await apiClient.patch('/api/users/me/', payload);
+    return response.data;
+  },
+
   async list(params = {}) {
     try {
       const response = await apiClient.get('/api/users/', { params });

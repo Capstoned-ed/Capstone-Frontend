@@ -1,23 +1,39 @@
 import React, { useState } from 'react';
 import usersApi from '../../api/users';
 import useToast from '../../hooks/useToast';
+import CourseSelectDropdown, { USTP_COURSE_CODE_MAP } from './CourseSelectDropdown';
 
 function StudentEditForm({ student, onClose, onStudentUpdated }) {
   const toast = useToast();
+  const cachedProfile = (() => {
+    try {
+      const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+      return profiles[student.id] || profiles[student.student_id] || profiles[student.username] || {};
+    } catch {
+      return {};
+    }
+  })();
+
   const [formData, setFormData] = useState({
-    first_name: student.first_name || '',
-    last_name: student.last_name || '',
-    student_id: student.student_id || student.username || '',
-    email: student.email || '',
-    program: student.program || 'B.S in Information Technology',
-    year_level: student.year_level || '1st year',
+    first_name: student.first_name || cachedProfile.first_name || '',
+    last_name: student.last_name || cachedProfile.last_name || '',
+    student_id: student.student_id || student.username || cachedProfile.student_id || '',
+    email: student.email || cachedProfile.email || '',
+    birth_date: student.birth_date || student.birthdate || cachedProfile.birth_date || cachedProfile.birthdate || '',
+    contact_number: student.contact_number || cachedProfile.contact_number || '',
+    program: student.course_name || student.program || cachedProfile.course_name || cachedProfile.program || 'BS in Information Technology (BSIT)',
+    year_level: student.year_level || cachedProfile.year_level || '1st year',
     is_active: student.is_active ?? true,
   });
 
+  const [contactError, setContactError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    if (name === 'contact_number') {
+      setContactError(value && /\D/.test(value) ? 'Contact Number must contain numbers only.' : '');
+    }
     setFormData((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
@@ -26,18 +42,31 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (formData.contact_number.trim() && /\D/.test(formData.contact_number.trim())) {
+      const msg = 'Contact Number must contain numbers only.';
+      setContactError(msg);
+      toast.error(msg);
+      return;
+    }
     setLoading(true);
 
     try {
+      const courseName = formData.program.trim();
+      const courseCode = USTP_COURSE_CODE_MAP[courseName] || student.course_code || '';
       const payload = {
         first_name: formData.first_name.trim(),
         last_name: formData.last_name.trim(),
         email: formData.email.trim(),
+        course_name: courseName,
+        ...(courseCode ? { course_code: courseCode } : {}),
+        birth_date: formData.birth_date || null,
+        contact_number: formData.contact_number.trim(),
+        year_level: formData.year_level,
         is_active: formData.is_active,
       };
 
       const updated = await usersApi.update(student.id, payload);
-      // Merge local extended profile info including edited student ID
+      // Merge local extended profile info including edited student ID, birthdate, and contact number
       const fullName = `${formData.first_name.trim()} ${formData.last_name.trim()}`.trim();
       const merged = {
         ...updated,
@@ -46,7 +75,12 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
         first_name: formData.first_name.trim(),
         last_name: formData.last_name.trim(),
         full_name: fullName || formData.first_name.trim() || student.username,
-        program: formData.program,
+        birth_date: formData.birth_date,
+        birthdate: formData.birth_date,
+        contact_number: formData.contact_number.trim(),
+        program: courseName,
+        course_name: courseName,
+        ...(courseCode ? { course_code: courseCode } : {}),
         year_level: formData.year_level,
       };
 
@@ -81,11 +115,11 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
       <div
-        className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 transform transition-all"
+        className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full overflow-visible border border-slate-200 transform transition-all"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="bg-[#E6F8EE] border-b border-emerald-100 px-6 py-4 flex items-center justify-between">
+        <div className="bg-[#E6F8EE] border-b border-emerald-100 px-6 py-4 rounded-t-2xl flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white text-emerald-600 flex items-center justify-center shadow-xs">
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -170,19 +204,57 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
             </div>
           </div>
 
-          {/* Row 3: Course & Year Level */}
+          {/* Row 3: Birthdate & Contact Number */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Birthdate
+              </label>
+              <input
+                type="date"
+                name="birth_date"
+                value={formData.birth_date}
+                max={new Date().toISOString().split('T')[0]}
+                onChange={handleChange}
+                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Contact Number
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                name="contact_number"
+                value={formData.contact_number}
+                onChange={handleChange}
+                placeholder="e.g. 09123456789"
+                className={`w-full px-3 py-2 text-xs bg-white border rounded-lg text-slate-800 focus:outline-hidden focus:ring-2 ${
+                  contactError
+                    ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500'
+                    : 'border-slate-200 focus:ring-blue-500/20 focus:border-blue-500'
+                }`}
+              />
+              {contactError && (
+                <p className="text-[11px] text-red-600 mt-1 font-medium">{contactError}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Row 4: Course & Year Level */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Course
               </label>
-              <input
-                type="text"
-                name="program"
+              <CourseSelectDropdown
                 value={formData.program}
-                onChange={handleChange}
-                placeholder="Course (e.g. B.S in Information Technology)"
-                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                onChange={(selectedCourse) =>
+                  setFormData((prev) => ({ ...prev, program: selectedCourse }))
+                }
+                allowClear={false}
+                required
               />
             </div>
             <div>
