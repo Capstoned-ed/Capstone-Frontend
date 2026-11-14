@@ -31,7 +31,14 @@ function calculateReleaseDate(createdAt, processingDays = 5) {
   if (!createdAt) return 'N/A';
   const d = new Date(createdAt);
   if (isNaN(d.getTime())) return 'N/A';
-  d.setDate(d.getDate() + (Number(processingDays) || 5));
+  const targetDays = Number(processingDays) || 5;
+  let added = 0;
+  while (added < targetDays) {
+    d.setDate(d.getDate() + 1);
+    if (d.getDay() !== 0) {
+      added += 1;
+    }
+  }
   return d.toISOString().split('T')[0];
 }
 
@@ -192,6 +199,11 @@ export default function StaffDashboard() {
         profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
       } catch {}
 
+      let claimedMap = {};
+      try {
+        claimedMap = JSON.parse(localStorage.getItem('regquest_claimed_requests') || '{}');
+      } catch {}
+
       if (combinedRaw.length > 0) {
         let enriched = combinedRaw
           .filter(isValidRequest)
@@ -239,10 +251,18 @@ export default function StaffDashboard() {
           const reqDate = r.created_at ? r.created_at.split('T')[0] : r.request_date || new Date().toISOString().split('T')[0];
           const relDate = r.release_date || calculateReleaseDate(r.created_at, cred?.processing_days);
 
+          const trackingNo = r.tracking_number || r.id || `REQ-${String(r.id || idx + 1).padStart(6, '0')}`;
+          const rawIdVal = r.rawId || r.id || idx + 1;
+          const resolvedClaimedStaff =
+            claimedMap[String(r.id)] ||
+            claimedMap[String(rawIdVal)] ||
+            claimedMap[String(trackingNo)] ||
+            null;
+
           return {
-            id: r.id || idx + 1,
-            rawId: r.id || r.rawId || idx + 1,
-            tracking_number: r.tracking_number || `REQ-${String(r.id || idx + 1).padStart(6, '0')}`,
+            id: trackingNo,
+            rawId: rawIdVal,
+            tracking_number: trackingNo,
             student_name: studentName,
             student_id: studentId,
             document_type: docType,
@@ -267,7 +287,7 @@ export default function StaffDashboard() {
             purpose: r.purpose || r.remarks || '',
             remarks: r.remarks || '',
             user: r.user,
-            assigned_staff: r.assigned_staff || null,
+            assigned_staff: r.assigned_staff || (resolvedClaimedStaff && resolvedClaimedStaff !== 'claimed' ? resolvedClaimedStaff : null),
             assigned_at: r.assigned_at || null,
             accepted_at: r.accepted_at || null,
             photo_preview: r.photo_preview || null,
@@ -469,18 +489,38 @@ export default function StaffDashboard() {
       const totalInBatch = reqs.length;
       newRequestsCountMap[reqDate] = (newRequestsCountMap[reqDate] || 0) + totalInBatch;
 
+      const isSunday = (dateStr) => {
+        const [y, m, dt] = dateStr.split('-').map(Number);
+        return new Date(y, m - 1, dt).getDay() === 0;
+      };
+
       const firstWithRelDate = reqs.find((r) => r.release_date && r.release_date > reqDate);
-      const releaseDate = firstWithRelDate ? firstWithRelDate.release_date : addDays(reqDate, 5);
+      let releaseDate = firstWithRelDate ? firstWithRelDate.release_date : addDays(reqDate, 5);
+      if (isSunday(releaseDate)) {
+        releaseDate = addDays(releaseDate, 1);
+      }
 
       const diffDays = daysBetween(reqDate, releaseDate);
-      const numProcessingDays = Math.max(1, diffDays - 1);
+      const validProcessingDates = [];
+      for (let i = 1; i < diffDays; i++) {
+        const candidate = addDays(reqDate, i);
+        if (!isSunday(candidate)) {
+          validProcessingDates.push(candidate);
+        }
+      }
+      if (validProcessingDates.length === 0) {
+        let fallbackDate = addDays(reqDate, 1);
+        if (isSunday(fallbackDate)) fallbackDate = addDays(fallbackDate, 1);
+        validProcessingDates.push(fallbackDate);
+      }
 
+      const numProcessingDays = validProcessingDates.length;
       const baseQuota = Math.floor(totalInBatch / numProcessingDays);
       const remainder = totalInBatch % numProcessingDays;
 
       let assignedIndex = 0;
       for (let i = 0; i < numProcessingDays; i++) {
-        const procDate = addDays(reqDate, i + 1);
+        const procDate = validProcessingDates[i];
         const dailyQuota = baseQuota + (i < remainder ? 1 : 0);
 
         const dayReqs = reqs.slice(assignedIndex, assignedIndex + dailyQuota);

@@ -247,12 +247,19 @@ export default function StudentPaymentsPage() {
   };
 
   // Split confirmed requests into Active Payments vs Payment History
+  // Automatically move verified/approved payments (or manually archived ones) to History!
+  const isHistoryPaymentItem = (req) => {
+    if (isPaymentArchived(req, archivedPaymentsMap)) return true;
+    const { isPaymentVerified } = categorizeRequest(req);
+    return isPaymentVerified;
+  };
+
   const activeConfirmedRequests = useMemo(() => {
-    return confirmedRequests.filter((req) => !isPaymentArchived(req, archivedPaymentsMap));
+    return confirmedRequests.filter((req) => !isHistoryPaymentItem(req));
   }, [confirmedRequests, archivedPaymentsMap]);
 
   const historyConfirmedRequests = useMemo(() => {
-    return confirmedRequests.filter((req) => isPaymentArchived(req, archivedPaymentsMap));
+    return confirmedRequests.filter((req) => isHistoryPaymentItem(req));
   }, [confirmedRequests, archivedPaymentsMap]);
 
   // Counts for filter tabs (calculated strictly on active confirmed requests)

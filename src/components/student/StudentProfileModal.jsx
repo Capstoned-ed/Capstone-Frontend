@@ -308,8 +308,7 @@ export default function StudentProfileModal({ isOpen, onClose }) {
       onClick={onClose}
     >
       <div
-        className="relative bg-[#F8F9FA] border border-slate-200/90 rounded-2xl w-full max-w-5xl shadow-2xl flex flex-col md:flex-row overflow-hidden text-slate-800"
-        style={{ minHeight: '520px' }}
+        className="relative bg-[#F8F9FA] border border-slate-200/90 rounded-2xl w-full max-w-6xl shadow-2xl flex flex-col md:flex-row overflow-hidden text-slate-800 max-h-[90vh] h-[660px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Left Navigation Panel */}
@@ -748,7 +747,7 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                       setIsChangingPassword(false);
                     }
                   }}
-                  className="space-y-4 max-w-lg"
+                  className="space-y-4 max-w-2xl"
                 >
                   {/* Current Password */}
                   <div>
