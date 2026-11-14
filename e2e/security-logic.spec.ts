@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAs, credentials, apiBaseUrl, getAuthToken } from './helpers';
+import { loginAs, performLogout, credentials, apiBaseUrl, getAuthToken } from './helpers';
 
 test.describe('Security & Business Logic Hardening', () => {
 
@@ -434,6 +434,76 @@ test.describe('Security & Business Logic Hardening', () => {
         // Hardened permission class blocks non-safe methods (403 or 405)
         expect([403, 405]).toContain(deleteResp.status());
       }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 5. Same-Browser Session Switch & Zero Cache Leakage
+  // ---------------------------------------------------------------------------
+  test.describe('5. Same-Browser Session Switch & Cache Isolation', () => {
+    test('Browser: User A logs out, storage is completely wiped, User B logs in without data leakage', async ({ page }) => {
+      // Step 1: Login as User A (Student) on browser page
+      await loginAs(page, 'student');
+      await expect(page).toHaveURL(/\/student/);
+
+      // Student navigates to requests / tracking page
+      await page.goto('/student/requests');
+      await page.waitForLoadState('domcontentloaded');
+      await expect(page.locator('body')).toContainText(/Track|Request|Status/i);
+
+      // Student views notifications page
+      await page.goto('/notifications');
+      await page.waitForLoadState('domcontentloaded');
+      await expect(page.locator('body')).toContainText(/Notification/i);
+
+      // Step 2: User A logs out using UI logout flow
+      await performLogout(page);
+
+      // Verify that full reload took user to /login and purged all auth tokens and User A cache
+      await expect(page).toHaveURL(/\/login/);
+      const storageState = await page.evaluate((studentId) => {
+        return {
+          token: localStorage.getItem('access_token'),
+          refresh: localStorage.getItem('refresh_token'),
+          userRequests: localStorage.getItem(`requests_${studentId}`),
+          studentRequests: localStorage.getItem('student_my_requests'),
+        };
+      }, credentials.student.id);
+
+      expect(storageState.token).toBeNull();
+      expect(storageState.refresh).toBeNull();
+      expect(storageState.userRequests).toBeNull();
+      expect(storageState.studentRequests).toBeNull();
+
+      // Step 3: Within the EXACT SAME page/context, User B (Staff) logs in
+      const idInput = page.locator('#username');
+      const passwordInput = page.locator('#password');
+      const submitButton = page.getByRole('button', { name: /Log In/i });
+
+      await idInput.fill(credentials.staff.id);
+      await passwordInput.fill(credentials.staff.password);
+      await submitButton.click();
+
+      // Verify User B is redirected to /staff dashboard
+      await page.waitForURL(/\/staff/, { timeout: 60000 });
+      await expect(page.locator('body')).toContainText(/Staff|Dashboard|Overview|Requests/i);
+
+      // Step 4: Verify User B's storage does not contain any User A data or keys
+      await page.goto('/notifications');
+      await page.waitForLoadState('domcontentloaded');
+
+      const leakedKeys = await page.evaluate((studentId) => {
+        const leaked = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i) || '';
+          if (k.includes(studentId) || k.includes('student_my_requests')) {
+            leaked.push(k);
+          }
+        }
+        return leaked;
+      }, credentials.student.id);
+
+      expect(leakedKeys).toEqual([]);
     });
   });
 });
