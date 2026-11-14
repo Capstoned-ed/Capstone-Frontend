@@ -1,5 +1,6 @@
 import apiClient from './client';
 import { saveStoredNotification } from './notifications';
+import { getStaffAssignments } from './requests';
 
 // Clean up legacy keys that were mistakenly saved by student ID or user ID
 if (typeof window !== 'undefined' && window.localStorage) {
@@ -71,7 +72,7 @@ export const paymentsApi = {
 
         const response = await apiClient.post('/api/payments/', formData, {
           headers: {
-            'Content-Type': 'multipart/form-data',
+            'Content-Type': undefined,
           },
         });
         backendResult = response.data;
@@ -108,7 +109,7 @@ export const paymentsApi = {
 
     // Immediately persist payment proof into the exact request in local storage
     try {
-      ['regquest_submitted_requests', 'student_my_requests'].forEach((storageKey) => {
+      ['regquest_stored_requests', 'regquest_submitted_requests', 'student_my_requests'].forEach((storageKey) => {
         const raw = localStorage.getItem(storageKey);
         if (raw) {
           const list = JSON.parse(raw);
@@ -139,14 +140,20 @@ export const paymentsApi = {
       console.warn('Failed to update local requests with payment proof:', err);
     }
 
-    // Notify Staff & Admin that student has submitted proof of payment
+    // Notify assigned Staff & Registrar that student has submitted proof of payment
+    const assignmentsMap = getStaffAssignments();
+    const assignedStaff =
+      assignmentsMap[String(trackingNumber)] ||
+      assignmentsMap[String(requestId)] ||
+      null;
     saveStoredNotification({
       event_type: 'PAYMENT_SUBMITTED',
       message: `Proof of Payment: ${studentName} (${studentId || trackingNumber}) submitted Official Receipt ${receiptReferenceNumber || ''} (₱${numericAmount.toFixed(2)}) for request ${trackingNumber}.`,
       related_object_type: 'Payment',
       related_object_id: trackingNumber || requestId,
-      target_roles: ['staff', 'admin', 'registrar'],
+      target_roles: ['staff', 'registrar'],
       target_role: 'staff',
+      target_name: assignedStaff || undefined,
     });
 
     // Notify Student confirming submission

@@ -146,6 +146,8 @@ export function AuthProvider({ children }) {
               ...me,
               userId: me.id || decoded.userId,
               student_id: me.username || decoded.student_id,
+              first_name: me.first_name || decoded.first_name || '',
+              last_name: me.last_name || decoded.last_name || '',
               full_name: fullName,
               program: me.course_name || decoded.program,
               course_name: me.course_name || decoded.course_name,
@@ -266,9 +268,10 @@ export function AuthProvider({ children }) {
     } catch {
     } finally {
       try {
-        localStorage.clear();
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
       } catch (e) {
-        console.warn('Failed to clear localStorage on logout:', e);
+        console.warn('Failed to clear auth tokens on logout:', e);
       }
       try {
         sessionStorage.clear();
@@ -276,9 +279,6 @@ export function AuthProvider({ children }) {
         console.warn('Failed to clear sessionStorage on logout:', e);
       }
       setUser(null);
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login';
-      }
     }
   }, []);
 

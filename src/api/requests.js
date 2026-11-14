@@ -573,17 +573,8 @@ export function resolveRequestDocType(r, cred = null) {
     return r.document_type;
   }
 
-  // 2. Credential type details object
-  if (!isInvalidDocName(r.credential_type_details?.name)) {
-    return r.credential_type_details.name;
-  }
-
-  // 3. Matched CredentialType model from database
-  if (!isInvalidDocName(cred?.name)) {
-    return cred.name;
-  }
-
-  // 4. Check if remarks contain an explicit document tag, e.g. "[Certification - GPA]" (ignoring non-document tags like [Walk-in FTF])
+  // 2. Check if remarks contain an explicit document tag, e.g. "[Evaluation & TOR]" or "[Certification - GPA]"
+  // (prioritize before credential_type_details.name so multi-document or sub-document requests aren't masked by primary cred type)
   const remarks = String(r.remarks || r.purpose || '').trim();
   const bracketMatch = remarks.match(/\[(.*?)\]/);
   if (bracketMatch && bracketMatch[1] && bracketMatch[1].trim()) {
@@ -596,6 +587,16 @@ export function resolveRequestDocType(r, cred = null) {
     ) {
       return candidate;
     }
+  }
+
+  // 3. Credential type details object
+  if (!isInvalidDocName(r.credential_type_details?.name)) {
+    return r.credential_type_details.name;
+  }
+
+  // 4. Matched CredentialType model from database
+  if (!isInvalidDocName(cred?.name)) {
+    return cred.name;
   }
 
   // 5. Check for specific keywords in remarks that indicate exact certification sub-document
@@ -1014,13 +1015,18 @@ export const requestsApi = {
       } else {
         const backendItem = combined[index];
         const locStatusUpper = String(loc.status || '').trim().toUpperCase();
-        // Always prefer local status if locally updated (or non-pending), since backend transitions may lag or fail
-        const preferredStatus =
-          (loc.updated_at && loc.status) || (loc.status && locStatusUpper !== 'PENDING')
-            ? loc.status
-            : (backendItem.status && String(backendItem.status).toUpperCase() !== 'PENDING'
-                ? backendItem.status
-                : (loc.status || backendItem.status));
+        const backendStatusUpper = String(backendItem.status || '').trim().toUpperCase();
+        const locTime = loc.updated_at ? new Date(loc.updated_at).getTime() : 0;
+        const backendTime = backendItem.updated_at ? new Date(backendItem.updated_at).getTime() : 0;
+
+        let preferredStatus = backendItem.status || loc.status;
+        if (loc.status && locStatusUpper !== 'PENDING' && backendStatusUpper === 'PENDING') {
+          preferredStatus = loc.status;
+        } else if (backendItem.status && backendStatusUpper !== 'PENDING' && locStatusUpper === 'PENDING') {
+          preferredStatus = backendItem.status;
+        } else if (loc.status && locTime > backendTime) {
+          preferredStatus = loc.status;
+        }
 
         combined[index] = {
           ...backendItem,
@@ -1066,6 +1072,19 @@ export const requestsApi = {
       .filter(isValidRequest)
       .map((item) => {
         let enriched = { ...item };
+        if (Array.isArray(enriched.payments) && enriched.payments.length > 0) {
+          const latestPay = enriched.payments[0];
+          if (!enriched.payment_status && latestPay?.status) {
+            enriched.payment_status =
+              latestPay.status === 'PENDING' ? 'PAYMENT_SUBMITTED' : latestPay.status;
+          }
+          if (!enriched.or_number && latestPay?.receipt_reference_number) {
+            enriched.or_number = latestPay.receipt_reference_number;
+          }
+          if (!enriched.assessed_amount && latestPay?.amount) {
+            enriched.assessed_amount = latestPay.amount;
+          }
+        }
         if (!enriched.clearance_preview || (!enriched.clearance_preview.startsWith('data:') && !enriched.clearance_preview.startsWith('blob:'))) {
           const clRec = getClearanceAttachment([
             enriched.tracking_number,
@@ -1149,13 +1168,16 @@ export const requestsApi = {
   /**
    * Transition request status (e.g. PAYMENT_VERIFIED -> PROCESSING -> READY_FOR_RELEASE)
    */
-  transition: async (id, payload) => {
+  transition: async (id, payload, { throwOnError = false } = {}) => {
     let resData = null;
     try {
       const response = await apiClient.patch(`/api/requests/${id}/transition/`, payload);
       resData = response.data;
     } catch (apiErr) {
       console.warn('Backend transition notice:', apiErr);
+      if (throwOnError) {
+        throw apiErr;
+      }
     }
     return resData || { id, ...payload };
   },
@@ -1255,6 +1277,7 @@ export function isConfirmedForPayment(req) {
   if (
     paymentStatus === 'VERIFIED' ||
     paymentStatus === 'PAYMENT_SUBMITTED' ||
+    (Array.isArray(req.payments) && req.payments.some((p) => p?.status === 'VERIFIED' || p?.status === 'PENDING')) ||
     s === 'FOR PROCESSING' ||
     s === 'FOR_PROCESSING' ||
     s === 'PROCESSING' ||

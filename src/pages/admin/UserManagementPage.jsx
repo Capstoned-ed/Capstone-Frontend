@@ -8,6 +8,8 @@ import StudentTableCard from '../../components/admin/StudentTableCard';
 import CourseSelectDropdown, { USTP_COURSE_CODE_MAP } from '../../components/admin/CourseSelectDropdown';
 import '../../styles/admin/UserManagementPage.css';
 
+const capitalizeNameWords = (val) =>
+  String(val ?? '').replace(/(^|\s)([a-z\u00e0-\u024f\u1e00-\u1eff])/g, (_, sep, ch) => sep + ch.toUpperCase());
 const isValidName = (val) => /^[a-zA-Z\u00C0-\u024F\u1E00-\u1EFF\s]+$/.test(val.trim());
 const getNameError = (val, label = 'Name') => {
   if (!val) return '';
@@ -247,8 +249,8 @@ export default function UserManagementPage() {
     setAddUserLoading(true);
 
     try {
-      const firstName = addUserFirstName.trim();
-      const lastName = addUserLastName.trim();
+      const firstName = capitalizeNameWords(addUserFirstName.trim());
+      const lastName = capitalizeNameWords(addUserLastName.trim());
       const fullName = `${firstName} ${lastName}`.trim();
 
       const finalIdNumber = addUserIdInput.trim();
@@ -477,8 +479,8 @@ export default function UserManagementPage() {
     setAddStudentLoading(true);
 
     try {
-      const firstName = studentFirstName.trim();
-      const lastName = studentLastName.trim();
+      const firstName = capitalizeNameWords(studentFirstName.trim());
+      const lastName = capitalizeNameWords(studentLastName.trim());
       const fullName = `${firstName} ${lastName}`.trim();
 
       const finalStudentId = studentIdInput.trim();
@@ -727,7 +729,7 @@ export default function UserManagementPage() {
                   placeholder="First Name"
                   value={addUserFirstName}
                   onChange={(e) => {
-                    const val = e.target.value;
+                    const val = capitalizeNameWords(e.target.value);
                     setAddUserFirstName(val);
                     setAddUserFirstNameError(getNameError(val, 'First Name'));
                   }}
@@ -745,7 +747,7 @@ export default function UserManagementPage() {
                   placeholder="Last Name"
                   value={addUserLastName}
                   onChange={(e) => {
-                    const val = e.target.value;
+                    const val = capitalizeNameWords(e.target.value);
                     setAddUserLastName(val);
                     setAddUserLastNameError(getNameError(val, 'Last Name'));
                   }}
@@ -902,7 +904,7 @@ export default function UserManagementPage() {
                   placeholder="First Name"
                   value={studentFirstName}
                   onChange={(e) => {
-                    const val = e.target.value;
+                    const val = capitalizeNameWords(e.target.value);
                     setStudentFirstName(val);
                     setStudentFirstNameError(getNameError(val, 'First Name'));
                   }}
@@ -920,7 +922,7 @@ export default function UserManagementPage() {
                   placeholder="Last Name"
                   value={studentLastName}
                   onChange={(e) => {
-                    const val = e.target.value;
+                    const val = capitalizeNameWords(e.target.value);
                     setStudentLastName(val);
                     setStudentLastNameError(getNameError(val, 'Last Name'));
                   }}

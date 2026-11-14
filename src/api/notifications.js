@@ -302,7 +302,7 @@ export function isNotificationForUser(notification, user) {
       return false;
     }
 
-    if (hasSpecificTarget) {
+    if (hasSpecificTarget && !(role === 'registrar' && notification.event_type === 'PAYMENT_SUBMITTED')) {
       const candidates = new Set();
       const addCandidate = (val) => {
         if (val !== undefined && val !== null) {
