@@ -89,10 +89,12 @@ export function NotificationProvider({ children }) {
 
   // Initial load and on user authentication change
   useEffect(() => {
-    if (isAuthenticated) {
+    // Immediately reset notifications to prevent stale cross-user leakage
+    setNotifications([]);
+    setError(null);
+
+    if (isAuthenticated && user) {
       fetchNotifications();
-    } else {
-      setNotifications([]);
     }
   }, [isAuthenticated, user?.id, user?.username, user?.role, fetchNotifications]);
 
