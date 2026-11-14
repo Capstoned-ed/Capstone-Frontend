@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import useToast from '../../hooks/useToast';
 import { useAuth } from '../../hooks/useAuth';
 import apiClient from '../../api/client';
-import requestsApi, { updateStoredRequest, logProcessedAction, setRequestArchived, recordRequestActivityTimestamp } from '../../api/requests';
+import requestsApi, { updateStoredRequest, logProcessedAction, setRequestArchived, recordRequestActivityTimestamp, preserveDocTagInRemarks } from '../../api/requests';
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import { saveStoredNotification } from '../../api/notifications';
 import { getStoredPaymentProof, verifyStoredPaymentProof } from '../../api/payments';
@@ -471,7 +471,10 @@ export default function ProcessRequestModal({
 
     const isBackendId = Boolean(requestItem.rawId) && !String(requestItem.rawId).startsWith('TRK-') && !String(requestItem.rawId).startsWith('REQ-');
     if (isBackendId) {
-      const opRemarks = `Clearance verified by ${verifiedByName}. Assessed amount: ${cleanAmount}. Date of release: ${dateOfRelease}.`;
+      const opRemarks = preserveDocTagInRemarks(
+        requestItem,
+        `Clearance verified by ${verifiedByName}. Assessed amount: ${cleanAmount}. Date of release: ${dateOfRelease}.`
+      );
       try {
         await requestsApi.transition(
           requestItem.rawId,
@@ -703,9 +706,12 @@ export default function ProcessRequestModal({
 
     const isBackendId = Boolean(requestItem.rawId) && !String(requestItem.rawId).startsWith('TRK-') && !String(requestItem.rawId).startsWith('REQ-');
     if (isBackendId) {
-      const payRemarks = isVerified
-        ? `Official Receipt verified (OR: ${finalOrNumber}). Verified by ${user?.username || 'Admin'}.`
-        : 'Payment proof rejected.';
+      const payRemarks = preserveDocTagInRemarks(
+        requestItem,
+        isVerified
+          ? `Official Receipt verified (OR: ${finalOrNumber}). Verified by ${user?.username || 'Admin'}.`
+          : 'Payment proof rejected.'
+      );
       const targetPayStatus = isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING';
       try {
         await requestsApi.transition(
@@ -855,7 +861,7 @@ export default function ProcessRequestModal({
       const isBackendId = Boolean(requestItem.rawId) && !String(requestItem.rawId).startsWith('TRK-') && !String(requestItem.rawId).startsWith('REQ-');
       if (isBackendId) {
         const backendStatus = BACKEND_STATUS_MAP[localStatus] || localStatus;
-        const transitionRemarks = notes || requestItem.remarks || '';
+        const transitionRemarks = preserveDocTagInRemarks(requestItem, notes || requestItem.remarks || '');
         try {
           await requestsApi.transition(
             requestItem.rawId,
@@ -983,7 +989,7 @@ export default function ProcessRequestModal({
       if (typeof targetId === 'number') {
         await requestsApi.transition(targetId, {
           status: 'RELEASED',
-          remarks: notes || 'Document claimed by student at registrar window.',
+          remarks: preserveDocTagInRemarks(requestItem, notes || 'Document claimed by student at registrar window.'),
         }).catch(() => {});
       }
 

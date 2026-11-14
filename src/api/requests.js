@@ -1369,10 +1369,45 @@ export function setRequestArchived(idOrTracking, isArchived = true, user = null,
   }
 }
 
+export function preserveDocTagInRemarks(requestOrRemarks, newRemarks = '') {
+  const rawNew = String(newRemarks || '').trim();
+  if (rawNew.startsWith('[')) return rawNew;
+
+  let docTag = '';
+  const existingRemarks =
+    typeof requestOrRemarks === 'string'
+      ? requestOrRemarks
+      : String(requestOrRemarks?.remarks || requestOrRemarks?.purpose || '');
+
+  const match = existingRemarks.trim().match(/^(\[[^\]]+\])/);
+  if (match && match[1]) {
+    const tagLower = match[1].toLowerCase();
+    if (!tagLower.includes('staff') && !tagLower.includes('walk-in') && !tagLower.includes('ftf')) {
+      docTag = match[1];
+    }
+  }
+
+  if (!docTag && requestOrRemarks && typeof requestOrRemarks === 'object') {
+    const docName = String(requestOrRemarks.document_type || '').trim();
+    if (
+      docName &&
+      !/^(document|document request|walk-in|walkin|ftf)$/i.test(docName)
+    ) {
+      docTag = `[${docName}]`;
+    }
+  }
+
+  if (docTag) {
+    return rawNew ? `${docTag} ${rawNew}` : docTag;
+  }
+  return rawNew;
+}
+
 const DOC_CODE_RULES = [
   { match: (s) => /transcript|tor/i.test(s), code: '1' },
   { match: (s) => /honorable|dismissal|hd/i.test(s), code: '2' },
   { match: (s) => /evaluation|eval/i.test(s), code: '5' },
+  { match: (s) => /authentication|auth/i.test(s), code: '6' },
   { match: (s) => /car/i.test(s), code: '4F' },
   { match: (s) => /gpa/i.test(s), code: '4B' },
   { match: (s) => /officially\s*enrolled|enrolled|coe/i.test(s), code: '4A' },
