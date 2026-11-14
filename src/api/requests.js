@@ -1,8 +1,28 @@
+import { jwtDecode } from 'jwt-decode';
 import apiClient from './client';
 import credentialTypesApi from './credentialTypes';
 import { saveStoredNotification } from './notifications';
 import { saveClearanceAttachment, getClearanceAttachment } from './clearances';
 import { getStoredPaymentProof } from './payments';
+
+export function getActiveUserId(user = null) {
+  if (user?.id) return String(user.id);
+  if (user?.user_id) return String(user.user_id);
+  if (typeof window === 'undefined') return 'anon';
+  try {
+    const token = localStorage.getItem('access_token');
+    if (!token) return 'anon';
+    const decoded = jwtDecode(token);
+    return String(decoded.user_id || decoded.id || 'anon');
+  } catch {
+    return 'anon';
+  }
+}
+
+export function getRequestsStorageKey(user = null) {
+  const uid = getActiveUserId(user);
+  return uid !== 'anon' ? `requests_${uid}` : 'regquest_submitted_requests';
+}
 
 export const STORAGE_KEY = 'regquest_submitted_requests';
 export const STUDENT_REQUESTS_KEY = 'student_my_requests';
@@ -669,17 +689,25 @@ if (typeof window !== 'undefined') {
 /**
  * Retrieve stored/submitted requests across student, staff, and admin.
  */
-export function getStoredRequests() {
+export function getStoredRequests(user = null) {
   try {
     purgeCorruptRequests();
+    const uid = getActiveUserId(user);
+    const userKey = getRequestsStorageKey(user);
 
-    const primary = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    const student = JSON.parse(localStorage.getItem(STUDENT_REQUESTS_KEY) || '[]');
-    const legacy = JSON.parse(localStorage.getItem('regquest_stored_requests') || '[]');
+    const primary = JSON.parse(localStorage.getItem(userKey) || '[]');
+    const fallback = uid === 'anon' ? JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') : [];
 
     const map = new Map();
-    [...primary, ...student, ...legacy].forEach((item) => {
+    [...primary, ...fallback].forEach((item) => {
       if (!isValidRequest(item)) return;
+      // If user ID is known, ensure item belongs to this user
+      if (uid !== 'anon') {
+        const itemUid = item.user ? String(item.user) : (item.student_id ? String(item.student_id) : null);
+        if (itemUid && itemUid !== uid) {
+          return;
+        }
+      }
       const dt = String(item.document_type || '').trim().toLowerCase();
       if (dt === 'walk-in ftf' || dt === 'walk-in' || dt === 'walkin' || dt === 'ftf') {
         item.document_type = item.credential_type_details?.name || resolveRequestDocType(item);
@@ -689,20 +717,6 @@ export function getStoredRequests() {
         map.set(key, item);
       }
     });
-
-    // Clean up any corrupt, dummy, or invalid items from localStorage permanently
-    const cleanPrimary = primary.filter(isValidRequest);
-    if (cleanPrimary.length !== primary.length) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanPrimary));
-    }
-    const cleanStudent = student.filter(isValidRequest);
-    if (cleanStudent.length !== student.length) {
-      localStorage.setItem(STUDENT_REQUESTS_KEY, JSON.stringify(cleanStudent));
-    }
-    const cleanLegacy = legacy.filter(isValidRequest);
-    if (cleanLegacy.length !== legacy.length) {
-      localStorage.setItem('regquest_stored_requests', JSON.stringify(cleanLegacy));
-    }
 
     return Array.from(map.values()).sort(sortRequestsNewestFirst);
   } catch (err) {
@@ -715,9 +729,9 @@ export function getStoredRequests() {
  * Save a newly submitted request into localStorage so it is instantly visible to Admin and Staff,
  * and dynamically trigger notifications for both student and staff/admin.
  */
-export function saveStoredRequest(requestItem) {
+export function saveStoredRequest(requestItem, user = null) {
   try {
-    const existing = getStoredRequests();
+    const existing = getStoredRequests(user);
     const key = requestItem.tracking_number || requestItem.trackingId || requestItem.id;
     const filtered = existing.filter((item) => {
       const itemKey = item.tracking_number || item.trackingId || item.id;
@@ -739,10 +753,9 @@ export function saveStoredRequest(requestItem) {
       }
     }
 
+    const storageKey = getRequestsStorageKey(user || requestItem.user);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      localStorage.setItem(STUDENT_REQUESTS_KEY, JSON.stringify(updated));
-      localStorage.setItem('regquest_stored_requests', JSON.stringify(updated));
+      localStorage.setItem(storageKey, JSON.stringify(updated));
     } catch (quotaErr) {
       console.warn('LocalStorage quota reached, saving trimmed request without bulky base64:', quotaErr);
       const trimmed = updated.map((item) => ({
@@ -751,9 +764,7 @@ export function saveStoredRequest(requestItem) {
         photo_preview: item.photo_preview?.length > 10000 ? null : item.photo_preview,
       }));
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
-        localStorage.setItem(STUDENT_REQUESTS_KEY, JSON.stringify(trimmed));
-        localStorage.setItem('regquest_stored_requests', JSON.stringify(trimmed));
+        localStorage.setItem(storageKey, JSON.stringify(trimmed));
       } catch {}
     }
 
@@ -884,10 +895,9 @@ export function updateStoredRequest(idOrTracking, patch, options = {}) {
       updated.unshift(targetMatched);
     }
 
+    const storageKey = getRequestsStorageKey(options?.user);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      localStorage.setItem(STUDENT_REQUESTS_KEY, JSON.stringify(updated));
-      localStorage.setItem('regquest_stored_requests', JSON.stringify(updated));
+      localStorage.setItem(storageKey, JSON.stringify(updated));
     } catch (quotaErr) {
       console.warn('LocalStorage quota reached on update, saving trimmed request:', quotaErr);
       const trimmed = updated.map((item) => ({
@@ -897,9 +907,7 @@ export function updateStoredRequest(idOrTracking, patch, options = {}) {
         receipt_image: item.receipt_image?.length > 10000 ? null : item.receipt_image,
       }));
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
-        localStorage.setItem(STUDENT_REQUESTS_KEY, JSON.stringify(trimmed));
-        localStorage.setItem('regquest_stored_requests', JSON.stringify(trimmed));
+        localStorage.setItem(storageKey, JSON.stringify(trimmed));
       } catch {}
     }
 
@@ -954,7 +962,7 @@ export const requestsApi = {
    * Fetch list of all credential requests (for Admin / Staff / Student).
    * Combines backend database requests with submitted frontend requests.
    */
-  list: async (params = {}) => {
+  list: async (params = {}, user = null) => {
     let backendResults = [];
     try {
       const response = await apiClient.get('/api/requests/', { params });
@@ -983,7 +991,7 @@ export const requestsApi = {
       console.warn('requestsApi.list backend returned error, using local requests:', err);
     }
 
-    const localRequests = getStoredRequests();
+    const localRequests = getStoredRequests(user);
     if (!localRequests.length) {
       return backendResults.filter(isValidRequest).sort(sortRequestsNewestFirst);
     }

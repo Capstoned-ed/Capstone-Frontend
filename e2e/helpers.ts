@@ -69,3 +69,41 @@ export async function getAuthToken(
   const data = await response.json();
   return data.access;
 }
+
+/**
+ * Performs logout in the browser and waits for full page reload back to /login.
+ */
+export async function performLogout(page: Page): Promise<void> {
+  const visibleLogoutBtn = page.locator('button:has-text("Logout"), button[title="Logout"]').filter({ visible: true }).first();
+
+  if (!(await visibleLogoutBtn.isVisible())) {
+    // If mobile hamburger menu exists and is visible, ensure drawer is open
+    const mobileToggle = page.locator('header button[title="Toggle Navigation Menu"]').filter({ visible: true });
+    if (await mobileToggle.isVisible()) {
+      const visibleAside = page.locator('aside').filter({ visible: true });
+      if (!(await visibleAside.isVisible())) {
+        await mobileToggle.click();
+        await page.waitForTimeout(300);
+      }
+    }
+
+    // Now look for the visible profile button in the visible aside
+    const profileBtn = page.locator('aside')
+      .filter({ visible: true })
+      .locator('button')
+      .filter({ has: page.locator('svg path[d*="M12 12c2.21"]') })
+      .first();
+
+    if (await profileBtn.isVisible()) {
+      await profileBtn.click();
+      await page.waitForTimeout(300);
+    }
+  }
+
+  const finalLogoutBtn = page.locator('button:has-text("Logout"), button[title="Logout"]').filter({ visible: true }).first();
+  await expect(finalLogoutBtn).toBeVisible({ timeout: 15000 });
+  await finalLogoutBtn.click();
+
+  await page.waitForURL(/\/login/, { timeout: 20000 });
+  await page.waitForLoadState('domcontentloaded');
+}

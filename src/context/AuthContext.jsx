@@ -265,9 +265,20 @@ export function AuthProvider({ children }) {
       }
     } catch {
     } finally {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
+      try {
+        localStorage.clear();
+      } catch (e) {
+        console.warn('Failed to clear localStorage on logout:', e);
+      }
+      try {
+        sessionStorage.clear();
+      } catch (e) {
+        console.warn('Failed to clear sessionStorage on logout:', e);
+      }
       setUser(null);
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
     }
   }, []);
 
