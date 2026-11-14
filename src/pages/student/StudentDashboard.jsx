@@ -70,17 +70,16 @@ export default function StudentDashboard() {
       ),
     },
     {
-      id: 'cert',
-      code: 'CERTIFICATION',
-      docName: 'Certification (P80)',
-      title: 'Certification',
-      description: 'Official certificates for various academic achievements.',
+      id: 'gpa',
+      code: 'GPA',
+      docName: 'Certification - GPA',
+      title: 'GPA',
+      description: 'Official certification of your overall Grade Point Average and academic standing.',
       fee: '₱ 50.00',
-      bannerBg: 'bg-[#FECDD3]',
+      bannerBg: 'bg-[#A7F3D0]',
       icon: (
         <svg className="w-9 h-9 text-slate-700" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <circle cx="12" cy="8" r="5" strokeLinecap="round" strokeLinejoin="round" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M8.21 13.89L7 22l5-3 5 3-1.21-8.11" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
         </svg>
       ),
     },
@@ -101,20 +100,6 @@ export default function StudentDashboard() {
   ];
 
   const EXPANDED_CREDENTIALS = [
-    {
-      id: 'gpa',
-      code: 'GPA',
-      docName: 'Certification - GPA',
-      title: 'GPA',
-      description: 'Official certification of your overall Grade Point Average and academic standing.',
-      fee: '₱ 50.00',
-      bannerBg: 'bg-[#A7F3D0]',
-      icon: (
-        <svg className="w-9 h-9 text-slate-700" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
-        </svg>
-      ),
-    },
     {
       id: 'endorsement',
       code: 'ENDORSEMENT',

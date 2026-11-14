@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import requestsApi, {
@@ -19,10 +19,23 @@ export default function RequestDocumentPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const docQuery = searchParams.get('doc') || searchParams.get('type') || searchParams.get('credential');
 
-  const [currentStep, setCurrentStep] = useState(1);
+  const draftKey = `regquest_request_draft_${user?.id || user?.username || 'guest'}`;
+  const readDraft = () => {
+    try {
+      const raw = sessionStorage.getItem(draftKey);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+  const initialDraft = useMemo(() => readDraft(), [draftKey]);
+
+  const [currentStep, setCurrentStep] = useState(() =>
+    initialDraft?.currentStep === 2 ? 2 : 1
+  );
   const [credentialTypes, setCredentialTypes] = useState([]);
 
   const resolveStudentName = (u) => {
@@ -106,12 +119,16 @@ export default function RequestDocumentPage() {
   const [clearanceError, setClearanceError] = useState(false);
 
   // Selected Documents in Part 2 (multiple documents allowed)
-  const [selectedDocs, setSelectedDocs] = useState([]);
+  const [selectedDocs, setSelectedDocs] = useState(() =>
+    Array.isArray(initialDraft?.selectedDocs) ? initialDraft.selectedDocs : []
+  );
   const [selectedCredTypeId, setSelectedCredTypeId] = useState(null);
 
   // Purpose in Part 3 (multiple purposes allowed)
-  const [selectedPurposes, setSelectedPurposes] = useState([]);
-  const [otherPurpose, setOtherPurpose] = useState('');
+  const [selectedPurposes, setSelectedPurposes] = useState(() =>
+    Array.isArray(initialDraft?.selectedPurposes) ? initialDraft.selectedPurposes : []
+  );
+  const [otherPurpose, setOtherPurpose] = useState(() => initialDraft?.otherPurpose || '');
 
   // Photo Upload State (Part 3)
   const [photoFile, setPhotoFile] = useState(null);
@@ -191,7 +208,10 @@ export default function RequestDocumentPage() {
   };
 
   // Step 2 State: Per-document copies map { [docTitle]: number }
-  const [docCopies, setDocCopies] = useState({});
+  const [docCopies, setDocCopies] = useState(() =>
+    initialDraft?.docCopies && typeof initialDraft.docCopies === 'object' ? initialDraft.docCopies : {}
+  );
+  const [docPendingRemoval, setDocPendingRemoval] = useState(null);
   const [copies, setCopies] = useState(1);
   const [yearLevel, setYearLevel] = useState(user?.year_level || '4th year');
   const [studentId, setStudentId] = useState(user?.student_id || user?.username || '2026202666');
@@ -334,10 +354,6 @@ export default function RequestDocumentPage() {
         const types = await credentialTypesApi.list();
         if (!ignore && Array.isArray(types) && types.length > 0) {
           setCredentialTypes(types);
-          if (selectedDocs.length > 0) {
-            const resolvedId = resolveCredentialTypeId(selectedDocs[0], types);
-            setSelectedCredTypeId(resolvedId);
-          }
         }
       } catch {
         // Fallback gracefully
@@ -347,7 +363,16 @@ export default function RequestDocumentPage() {
     return () => {
       ignore = true;
     };
-  }, [selectedDocs]);
+  }, []);
+
+  useEffect(() => {
+    if (selectedDocs.length > 0 && credentialTypes.length > 0) {
+      const resolvedId = resolveCredentialTypeId(selectedDocs[0], credentialTypes);
+      setSelectedCredTypeId(resolvedId);
+    } else if (selectedDocs.length === 0) {
+      setSelectedCredTypeId(null);
+    }
+  }, [selectedDocs, credentialTypes]);
 
   // Helper to get number of copies for a specific document
   const getCopiesForDoc = (docTitle) => {
@@ -356,14 +381,41 @@ export default function RequestDocumentPage() {
   };
 
   // Helper to update number of copies for a specific document
-  const handleUpdateDocCopies = (docTitle, count) => {
+  const handleUpdateDocCopies = (docTitle, count, rawName = null) => {
     if (!docTitle) return;
+    if (count < 1) {
+      setDocPendingRemoval({
+        rawName: rawName || docTitle,
+        title: docTitle,
+      });
+      return;
+    }
     const safeCount = Math.max(1, Math.min(10, count));
     setDocCopies((prev) => ({
       ...prev,
       [docTitle]: safeCount,
     }));
     setCopies(safeCount);
+  };
+
+  const handleConfirmRemoveDoc = () => {
+    if (!docPendingRemoval) return;
+    const { rawName, title } = docPendingRemoval;
+    const nextDocs = selectedDocs.filter((d) => d !== rawName && d !== title);
+    setSelectedDocs(nextDocs);
+    setDocCopies((prev) => {
+      const next = { ...prev };
+      delete next[rawName];
+      delete next[title];
+      return next;
+    });
+    setDocPendingRemoval(null);
+    if (nextDocs.length === 0) {
+      toast.info('Document removed. Please select a document to request.');
+      setCurrentStep(1);
+    } else {
+      toast.info(`${title} removed from your request.`);
+    }
   };
 
   // Compute dynamic document info, description, and pricing for Review Data
@@ -385,6 +437,7 @@ export default function RequestDocumentPage() {
       const itemTotal = info.unitPrice * itemCopies;
       return {
         ...info,
+        rawName: name,
         copies: itemCopies,
         itemTotal,
       };
@@ -593,8 +646,48 @@ export default function RequestDocumentPage() {
     }
   };
 
-  // Automatically select document in Part 2 when navigated from Available Credentials
   useEffect(() => {
+    try {
+      if (currentStep === 3) {
+        sessionStorage.removeItem(draftKey);
+      } else {
+        sessionStorage.setItem(
+          draftKey,
+          JSON.stringify({
+            currentStep,
+            selectedDocs,
+            docCopies,
+            selectedPurposes,
+            otherPurpose,
+          })
+        );
+      }
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [draftKey, currentStep, selectedDocs, docCopies, selectedPurposes, otherPurpose]);
+
+  const draftKeyRef = useRef(draftKey);
+  draftKeyRef.current = draftKey;
+
+  useEffect(() => {
+    return () => {
+      try {
+        sessionStorage.removeItem(draftKeyRef.current);
+      } catch {
+        // Ignore storage errors
+      }
+    };
+  }, []);
+
+  const appliedDocQueryRef = useRef(null);
+
+  // Automatically select document in Part 2 once when navigated from Available Credentials
+  useEffect(() => {
+    if (!docQuery || appliedDocQueryRef.current === docQuery) {
+      return;
+    }
+
     if (docQuery) {
       const lower = docQuery.toLowerCase().trim();
       let matchedDoc = null;
@@ -623,6 +716,9 @@ export default function RequestDocumentPage() {
       } else if (lower.startsWith('cert')) {
         matchedDoc = 'Certification (P80)';
       } else {
+        if (credentialTypes.length === 0) {
+          return;
+        }
         const dyn = credentialTypes.find(
           (c) => String(c.id) === lower || c.name.toLowerCase().includes(lower) || c.code?.toLowerCase() === lower
         );
@@ -635,8 +731,14 @@ export default function RequestDocumentPage() {
       }
 
       if (matchedDoc) {
-        handleDocumentSelect(matchedDoc, matchedTypeId);
+        appliedDocQueryRef.current = docQuery;
+        setSelectedDocs([matchedDoc]);
+        setDocCopies({});
+        if (matchedTypeId) {
+          setSelectedCredTypeId(matchedTypeId);
+        }
         setCurrentStep(1);
+        setSearchParams({}, { replace: true });
 
         // Smoothly scroll down to Part 2 so the student sees their chosen document
         const scrollPart2 = () => {
@@ -759,6 +861,12 @@ export default function RequestDocumentPage() {
   const handleSubmitRequest = async (e) => {
     e.preventDefault();
 
+    if (selectedDocs.length === 0) {
+      toast.warning('Please select at least one document to request.');
+      setCurrentStep(1);
+      return;
+    }
+
     if (isCleared !== 'yes') {
       toast.warning('You must be cleared to proceed with your credential request.');
       setCurrentStep(1);
@@ -778,8 +886,12 @@ export default function RequestDocumentPage() {
     }
 
     if (!clearanceFile && !clearancePreview) {
-      toast.warning('Please attach your clearance document before submitting your request.');
-      setCurrentStep(1);
+      setClearanceError(true);
+      toast.error('Please attach your clearance document before submitting your request.');
+      const el = document.getElementById('review-clearance-card');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       return;
     }
 
@@ -1712,34 +1824,47 @@ export default function RequestDocumentPage() {
                               </div>
                             </div>
 
-                            <div className="review-copies-control shrink-0 self-end sm:self-center">
-                              <span className="review-copies-label">Number of copies</span>
-                              <div className="review-copies-stepper">
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdateDocCopies(it.title, itemCopies - 1)}
-                                  className="review-stepper-btn"
-                                  title="Decrease copies"
-                                >
-                                  -
-                                </button>
-                                <input
-                                  type="number"
-                                  value={itemCopies}
-                                  min={1}
-                                  max={10}
-                                  readOnly
-                                  className="select-none pointer-events-none"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdateDocCopies(it.title, itemCopies + 1)}
-                                  className="review-stepper-btn"
-                                  title="Increase copies"
-                                >
-                                  +
-                                </button>
+                            <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+                              <div className="review-copies-control">
+                                <span className="review-copies-label">Number of copies</span>
+                                <div className="review-copies-stepper">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateDocCopies(it.title, itemCopies - 1, it.rawName)}
+                                    className="review-stepper-btn"
+                                    title={itemCopies <= 1 ? 'Remove document' : 'Decrease copies'}
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    value={itemCopies}
+                                    min={1}
+                                    max={10}
+                                    readOnly
+                                    className="select-none pointer-events-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateDocCopies(it.title, itemCopies + 1, it.rawName)}
+                                    className="review-stepper-btn"
+                                    title="Increase copies"
+                                  >
+                                    +
+                                  </button>
+                                </div>
                               </div>
+                              <button
+                                type="button"
+                                onClick={() => setDocPendingRemoval({ rawName: it.rawName, title: it.title })}
+                                className="p-2 rounded-lg text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors cursor-pointer"
+                                title="Remove document"
+                                aria-label={`Remove ${it.title}`}
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
                             </div>
                           </div>
                         );
@@ -1768,44 +1893,66 @@ export default function RequestDocumentPage() {
                         )}
                       </div>
 
-                      <div className="review-copies-control">
-                        <span className="review-copies-label">Number of copies</span>
-                        <div className="review-copies-stepper">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleUpdateDocCopies(
-                                currentDocDetails.title,
-                                getCopiesForDoc(currentDocDetails.title) - 1
-                              )
-                            }
-                            className="review-stepper-btn"
-                            title="Decrease copies"
-                          >
-                            -
-                          </button>
-                          <input
-                            type="number"
-                            value={getCopiesForDoc(currentDocDetails.title)}
-                            min={1}
-                            max={10}
-                            readOnly
-                            className="select-none pointer-events-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleUpdateDocCopies(
-                                currentDocDetails.title,
-                                getCopiesForDoc(currentDocDetails.title) + 1
-                              )
-                            }
-                            className="review-stepper-btn"
-                            title="Increase copies"
-                          >
-                            +
-                          </button>
+                      <div className="flex items-center gap-2.5">
+                        <div className="review-copies-control">
+                          <span className="review-copies-label">Number of copies</span>
+                          <div className="review-copies-stepper">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleUpdateDocCopies(
+                                  currentDocDetails.title,
+                                  getCopiesForDoc(currentDocDetails.title) - 1,
+                                  currentDocDetails.items[0]?.rawName
+                                )
+                              }
+                              className="review-stepper-btn"
+                              title={getCopiesForDoc(currentDocDetails.title) <= 1 ? 'Remove document' : 'Decrease copies'}
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              value={getCopiesForDoc(currentDocDetails.title)}
+                              min={1}
+                              max={10}
+                              readOnly
+                              className="select-none pointer-events-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleUpdateDocCopies(
+                                  currentDocDetails.title,
+                                  getCopiesForDoc(currentDocDetails.title) + 1,
+                                  currentDocDetails.items[0]?.rawName
+                                )
+                              }
+                              className="review-stepper-btn"
+                              title="Increase copies"
+                            >
+                              +
+                            </button>
+                          </div>
                         </div>
+                        {currentDocDetails.items.length === 1 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDocPendingRemoval({
+                                rawName: currentDocDetails.items[0]?.rawName || currentDocDetails.title,
+                                title: currentDocDetails.title,
+                              })
+                            }
+                            className="p-2 rounded-lg text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors cursor-pointer"
+                            title="Remove document"
+                            aria-label={`Remove ${currentDocDetails.title}`}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1940,115 +2087,197 @@ export default function RequestDocumentPage() {
                   </div>
                 </div>
 
-                {/* Attached Clearance & Passport Photo Section (Only shown if student attached photos) */}
-                {(clearancePreview || photoPreview) && (
-                  <>
-                    <div className="review-divider" />
-                    <div className="review-attached-section">
-                      <h3 className="review-sub-title">
-                        {clearancePreview && photoPreview
-                          ? 'Attached Clearance & Photo:'
-                          : clearancePreview
-                          ? 'Attached Clearance Photo:'
-                          : 'Attached Passport 2x2 Photo:'}
-                      </h3>
-                      <div
-                        className={`review-attached-grid ${
-                          clearancePreview && photoPreview ? 'dual' : 'single'
-                        }`}
-                      >
-                        {/* Clearance Form Card - Only shown if clearance document is attached */}
-                        {clearancePreview && (
-                          <div className="review-attached-card">
-                            <div className="review-attached-media">
-                              {clearanceIsPdf || clearanceFile?.name?.toLowerCase().endsWith('.pdf') ? (
-                                <div className="review-pdf-badge">
-                                  <span className="review-pdf-icon">📄</span>
-                                  <span>PDF</span>
+                {/* Attached Clearance & Passport Photo Section */}
+                {(() => {
+                  const isBoardExamPurpose =
+                    selectedPurposes.some((p) => p.toLowerCase().includes('board exam')) ||
+                    purposeInput.toLowerCase().includes('board exam');
+                  const showPassportCard = isBoardExamPurpose || Boolean(photoPreview);
+
+                  return (
+                    <>
+                      <div className="review-divider" />
+                      <div className="review-attached-section">
+                        <h3 className="review-sub-title">
+                          {showPassportCard ? 'Attached Clearance & Photo:' : 'Attached Clearance:'}
+                        </h3>
+                        <div className={`review-attached-grid ${showPassportCard ? 'dual' : 'single'}`}>
+                          {/* Clearance Form Card */}
+                          <div
+                            id="review-clearance-card"
+                            className={`review-attached-card ${
+                              clearanceError && !clearancePreview ? '!border-red-500 !ring-1 !ring-red-500 bg-red-50/30' : ''
+                            }`}
+                          >
+                            {clearancePreview ? (
+                              <>
+                                <div className="review-attached-media">
+                                  {clearanceIsPdf || clearanceFile?.name?.toLowerCase().endsWith('.pdf') ? (
+                                    <div className="review-pdf-badge">
+                                      <span className="review-pdf-icon">📄</span>
+                                      <span>PDF</span>
+                                    </div>
+                                  ) : (
+                                    <img
+                                      src={clearancePreview}
+                                      alt="Clearance Form"
+                                      className="review-attached-thumb"
+                                    />
+                                  )}
+                                  <div className="review-attached-info">
+                                    <span className="review-attached-title">Clearance Document</span>
+                                    <span className="review-attached-filename">
+                                      {clearanceFile ? clearanceFile.name : 'Attached Clearance'}
+                                    </span>
+                                    <span className="review-attached-badge">
+                                      ✓ Attached
+                                    </span>
+                                  </div>
                                 </div>
+
+                                <div className="review-attached-actions">
+                                  <label className="review-attached-btn-change">
+                                    Change
+                                    <input
+                                      type="file"
+                                      accept="application/pdf,image/png,image/jpeg,image/jpg"
+                                      onChange={handleClearanceUpload}
+                                      className="ustp-file-input-hidden"
+                                    />
+                                  </label>
+                                  <button
+                                    type="button"
+                                    onClick={handleRemoveClearance}
+                                    className="review-attached-btn-remove"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="review-attached-media">
+                                  <div
+                                    className={`w-12 h-12 rounded-lg border flex items-center justify-center shrink-0 ${
+                                      clearanceError
+                                        ? 'bg-red-50 border-red-200 text-red-600'
+                                        : 'bg-amber-50 border-amber-200 text-amber-600'
+                                    }`}
+                                  >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                    </svg>
+                                  </div>
+                                  <div className="review-attached-info">
+                                    <span className="review-attached-title">
+                                      Clearance Document <span className="text-red-500">*</span>
+                                    </span>
+                                    <span
+                                      className={`review-attached-filename ${
+                                        clearanceError ? 'text-red-600 font-semibold' : 'text-amber-700'
+                                      }`}
+                                    >
+                                      {clearanceError
+                                        ? 'Please attach your clearance document before submitting.'
+                                        : 'No clearance attached'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="review-attached-actions">
+                                  <label className="review-attached-btn-change">
+                                    Add Clearance
+                                    <input
+                                      type="file"
+                                      accept="application/pdf,image/png,image/jpeg,image/jpg"
+                                      onChange={handleClearanceUpload}
+                                      className="ustp-file-input-hidden"
+                                    />
+                                  </label>
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Passport / 2x2 Picture Card (only shown when Board Exam purpose or photo attached) */}
+                          {showPassportCard && (
+                            <div className="review-attached-card">
+                              {photoPreview ? (
+                                <>
+                                  <div className="review-attached-media">
+                                    <img
+                                      src={photoPreview}
+                                      alt="Passport Photo"
+                                      className="review-attached-thumb"
+                                    />
+                                    <div className="review-attached-info">
+                                      <span className="review-attached-title">Passport / 2x2 Photo</span>
+                                      <span className="review-attached-filename">
+                                        {photoFile ? photoFile.name : 'Passport Photo'}
+                                      </span>
+                                      <span className="review-attached-badge">
+                                        ✓ Attached
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="review-attached-actions">
+                                    <label className="review-attached-btn-change">
+                                      Change
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handlePhotoUpload}
+                                        className="ustp-file-input-hidden"
+                                      />
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={handleRemovePhoto}
+                                      className="review-attached-btn-remove"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                </>
                               ) : (
-                                <img
-                                  src={clearancePreview}
-                                  alt="Clearance Form"
-                                  className="review-attached-thumb"
-                                />
+                                <>
+                                  <div className="review-attached-media">
+                                    <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center shrink-0">
+                                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                      </svg>
+                                    </div>
+                                    <div className="review-attached-info">
+                                      <span className="review-attached-title">
+                                        Passport / 2x2 Photo
+                                      </span>
+                                      <span className="review-attached-filename">
+                                        Required for Board Exam requests
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="review-attached-actions">
+                                    <label className="review-attached-btn-change">
+                                      Add Photo
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handlePhotoUpload}
+                                        className="ustp-file-input-hidden"
+                                      />
+                                    </label>
+                                  </div>
+                                </>
                               )}
-                              <div className="review-attached-info">
-                                <span className="review-attached-title">Clearance Document</span>
-                                <span className="review-attached-filename">
-                                  {clearanceFile ? clearanceFile.name : 'Attached Clearance'}
-                                </span>
-                                <span className="review-attached-badge">
-                                  ✓ Attached
-                                </span>
-                              </div>
                             </div>
-
-                            <div className="review-attached-actions">
-                              <label className="review-attached-btn-change">
-                                Change
-                                <input
-                                  type="file"
-                                  accept="application/pdf,image/png,image/jpeg,image/jpg"
-                                  onChange={handleClearanceUpload}
-                                  className="ustp-file-input-hidden"
-                                />
-                              </label>
-                              <button
-                                type="button"
-                                onClick={handleRemoveClearance}
-                                className="review-attached-btn-remove"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Passport / 2x2 Picture Card - Only shown if passport photo is attached */}
-                        {photoPreview && (
-                          <div className="review-attached-card">
-                            <div className="review-attached-media">
-                              <img
-                                src={photoPreview}
-                                alt="Passport Photo"
-                                className="review-attached-thumb"
-                              />
-                              <div className="review-attached-info">
-                                <span className="review-attached-title">Passport / 2x2 Photo</span>
-                                <span className="review-attached-filename">
-                                  {photoFile ? photoFile.name : 'Passport Photo'}
-                                </span>
-                                <span className="review-attached-badge">
-                                  ✓ Attached
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="review-attached-actions">
-                              <label className="review-attached-btn-change">
-                                Change
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={handlePhotoUpload}
-                                  className="ustp-file-input-hidden"
-                                />
-                              </label>
-                              <button
-                                type="button"
-                                onClick={handleRemovePhoto}
-                                className="review-attached-btn-remove"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </>
-                )}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Footer Note */}
@@ -2122,6 +2351,52 @@ export default function RequestDocumentPage() {
           </div>
         )}
       </div>
+
+      {/* Confirm Remove Document Modal */}
+      {docPendingRemoval && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-remove-doc-title"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 id="confirm-remove-doc-title" className="text-sm font-extrabold text-slate-900 tracking-wide">
+                  ARE YOU SURE TO REMOVE/DELETE DOCUMENT?
+                </h3>
+                <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                  You are about to remove{' '}
+                  <span className="font-bold text-slate-900">{docPendingRemoval.title}</span> from your request.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDocPendingRemoval(null)}
+                className="px-4 py-2 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRemoveDoc}
+                className="px-4 py-2 rounded-lg text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors cursor-pointer"
+              >
+                Remove / Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

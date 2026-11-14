@@ -246,6 +246,8 @@ export default function StaffProfileModal({ isOpen, onClose }) {
       } else {
         try {
           await usersApi.updateMe({
+            first_name: firstName,
+            last_name: lastName,
             email: editableEmail.trim(),
             contact_number: editablePhone.trim(),
             birth_date: editableBirthDate || null,
@@ -349,7 +351,7 @@ export default function StaffProfileModal({ isOpen, onClose }) {
       onClick={onClose}
     >
       <div
-        className="relative bg-[#F8F9FA] border border-slate-200/90 rounded-2xl w-full max-w-5xl shadow-2xl flex flex-col md:flex-row overflow-hidden text-slate-800 max-h-[90vh] h-[640px]"
+        className="relative bg-[#F8F9FA] border border-slate-200/90 rounded-2xl w-full max-w-6xl shadow-2xl flex flex-col md:flex-row overflow-hidden text-slate-800 max-h-[90vh] h-[660px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Left Navigation Panel */}
@@ -791,7 +793,7 @@ export default function StaffProfileModal({ isOpen, onClose }) {
                   </div>
                 )}
 
-                <form onSubmit={handleChangePassword} className="space-y-4 max-w-lg">
+                <form onSubmit={handleChangePassword} className="space-y-4 max-w-2xl">
                   {/* Current Password */}
                   <div>
                     <label className="block text-sm font-semibold text-slate-800 mb-1.5">

@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import usersApi from '../../api/users';
 import { ROLES } from '../../constants/roles';
 import useToast from '../../hooks/useToast';
 import UserEditModal from './UserEditModal';
 import UserDeleteDialog from './UserDeleteDialog';
+import TablePagination from '../common/TablePagination';
 import '../../styles/admin/UserTable.css';
+
+const PAGE_SIZE = 10;
 
 export default function UserTable({
   users: propUsers,
@@ -28,7 +31,9 @@ export default function UserTable({
   const [editingUser, setEditingUser] = useState(null);
   const [deactivatingUser, setDeactivatingUser] = useState(null);
   const [actionLoadingId, setActionLoadingId] = useState(null);
-  const [showAllUsers, setShowAllUsers] = useState(false);
+  const tableScrollRef = useRef(null);
+  const [lockedMinHeight, setLockedMinHeight] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -149,8 +154,18 @@ export default function UserTable({
       return haystacks.some((val) => val.includes(normalizedQuery));
     });
 
+  const totalPages = Math.max(1, Math.ceil(staffAndAdminUsers.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedUsers = staffAndAdminUsers.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  useEffect(() => {
+    if (totalPages > 1 && paginatedUsers.length === PAGE_SIZE && tableScrollRef.current) {
+      setLockedMinHeight(tableScrollRef.current.offsetHeight);
+    }
+  }, [totalPages, paginatedUsers.length]);
+
   return (
-    <div className="user-table-card">
+    <div className="user-table-card" style={{ overflowAnchor: 'none' }}>
       {/* Card Header Bar (Light Blue/Periwinkle matching the photo) */}
       <div className="user-table-header-bar flex flex-wrap items-center justify-between gap-3">
         {/* Left Title & Shield Icon */}
@@ -181,7 +196,7 @@ export default function UserTable({
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
-                  setShowAllUsers(false);
+                  setCurrentPage(1);
                 }}
                 placeholder="Search staff by name, ID, or email..."
                 className="w-full pl-9 pr-8 py-1.5 text-xs bg-white border border-blue-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
@@ -189,7 +204,10 @@ export default function UserTable({
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCurrentPage(1);
+                  }}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
                   aria-label="Clear staff search"
                 >
@@ -213,7 +231,7 @@ export default function UserTable({
               type="button"
               onClick={() => {
                 setRoleFilter(tab.key);
-                setShowAllUsers(false);
+                setCurrentPage(1);
               }}
               className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
                 roleFilter === tab.key
@@ -261,7 +279,11 @@ export default function UserTable({
 
       {/* Staff & Admin Data Table */}
       {!loading && !error && (
-        <div className="user-table-scroll">
+        <div
+          ref={tableScrollRef}
+          className="user-table-scroll"
+          style={totalPages > 1 && lockedMinHeight ? { minHeight: `${lockedMinHeight}px` } : undefined}
+        >
           <table className="user-table-element">
             <thead>
               <tr className="user-table-thead-tr">
@@ -280,7 +302,7 @@ export default function UserTable({
                   </td>
                 </tr>
               ) : (
-                (showAllUsers ? staffAndAdminUsers : staffAndAdminUsers.slice(0, 10)).map((user) => {
+                paginatedUsers.map((user) => {
                   const displayName = formatDisplayName(user);
 
                   return (
@@ -390,29 +412,17 @@ export default function UserTable({
               )}
             </tbody>
           </table>
-          {staffAndAdminUsers.length > 10 && (
-            <div className="table-see-more-wrap">
-              <button
-                type="button"
-                onClick={() => setShowAllUsers((prev) => !prev)}
-                className="table-see-more-btn"
-              >
-                <span>
-                  {showAllUsers ? 'See Less' : 'See More'}
-                </span>
-                <svg
-                  className={`w-4 h-4 transition-transform ${showAllUsers ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            </div>
-          )}
         </div>
+      )}
+
+      {!loading && !error && (
+        <TablePagination
+          currentPage={safePage}
+          totalItems={staffAndAdminUsers.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+          accentColor="blue"
+        />
       )}
 
       {/* Modals */}

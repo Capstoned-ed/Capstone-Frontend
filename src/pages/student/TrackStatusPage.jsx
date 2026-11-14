@@ -30,6 +30,7 @@ function formatStatusDisplay(rawStatus) {
     case 'PENDONG':
     case 'RECEIVED':
     case 'REQUEST SUBMITTED':
+    case 'REQUIREMENTS_VERIFICATION':
       return 'Pending';
     case 'FOR_PAYMENT':
     case 'FOR PAYMENT':
