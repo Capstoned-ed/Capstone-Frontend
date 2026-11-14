@@ -1,4 +1,24 @@
+import { jwtDecode } from 'jwt-decode';
 import apiClient from './client';
+
+export function getActiveUserId(user = null) {
+  if (user?.id) return String(user.id);
+  if (user?.user_id) return String(user.user_id);
+  if (typeof window === 'undefined') return 'anon';
+  try {
+    const token = localStorage.getItem('access_token');
+    if (!token) return 'anon';
+    const decoded = jwtDecode(token);
+    return String(decoded.user_id || decoded.id || 'anon');
+  } catch {
+    return 'anon';
+  }
+}
+
+export function getNotificationsStorageKey(user = null) {
+  const uid = getActiveUserId(user);
+  return uid !== 'anon' ? `notifications_${uid}` : 'notifications_anon';
+}
 
 export const NOTIFICATIONS_STORAGE_KEY = 'regquest_stored_notifications';
 
@@ -418,7 +438,8 @@ export function getStoredNotifications(user = null) {
 
     if (!user) return [];
 
-    const rawSaved = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    const key = getNotificationsStorageKey(user);
+    const rawSaved = localStorage.getItem(key);
     const savedNotifications = rawSaved ? JSON.parse(rawSaved) : [];
 
     const readIds = getReadNotificationIds(user);
@@ -451,12 +472,14 @@ export function getStoredNotifications(user = null) {
  * Save a genuine real-time notification into local storage and notify active listeners.
  * Explicitly infers and sets target_role and target_roles to prevent cross-role leaks.
  */
-export function saveStoredNotification(notification) {
+export function saveStoredNotification(notification, user = null) {
   if (!notification || !notification.message) return null;
   if (isHallucinatedNotification(notification)) return null;
 
   try {
-    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    const targetUser = user || (notification.target_user_id ? { id: notification.target_user_id } : null);
+    const key = getNotificationsStorageKey(targetUser);
+    const raw = localStorage.getItem(key);
     const existing = raw ? JSON.parse(raw) : [];
 
     const msg = String(notification.message || '').trim();
@@ -506,7 +529,7 @@ export function saveStoredNotification(notification) {
     };
 
     const updated = [item, ...existing];
-    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
+    localStorage.setItem(key, JSON.stringify(updated));
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('regquest_notification_created', { detail: item }));
@@ -526,10 +549,11 @@ export function saveStoredNotification(notification) {
 export function markStoredNotificationRead(id, user = null) {
   try {
     markNotificationIdAsRead(id, user);
-    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    const key = getNotificationsStorageKey(user);
+    const raw = localStorage.getItem(key);
     const existing = raw ? JSON.parse(raw) : [];
     const updated = existing.map((n) => (String(n.id) === String(id) ? { ...n, is_read: true } : n));
-    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
+    localStorage.setItem(key, JSON.stringify(updated));
     notifyRealtimeUpdate({ reason: 'marked_read', id });
   } catch (err) {
     console.warn('Failed to mark stored notification as read:', err);
@@ -544,7 +568,8 @@ export function markAllStoredNotificationsRead(user = null, currentNotifications
     const idsToMark = currentNotifications.map((n) => n.id);
     markAllNotificationIdsAsRead(idsToMark, user);
 
-    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    const key = getNotificationsStorageKey(user);
+    const raw = localStorage.getItem(key);
     const existing = raw ? JSON.parse(raw) : [];
 
     const updated = existing.map((n) => {
@@ -553,7 +578,7 @@ export function markAllStoredNotificationsRead(user = null, currentNotifications
       }
       return n;
     });
-    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
+    localStorage.setItem(key, JSON.stringify(updated));
     notifyRealtimeUpdate({ reason: 'marked_all_read' });
   } catch (err) {
     console.warn('Failed to mark all stored notifications as read:', err);
