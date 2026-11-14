@@ -316,13 +316,19 @@ export default function RegistrarRequestsPage() {
 
   const staffMembers = useMemo(() => {
     return users
-      .filter((u) => u.role === 'staff' || u.role === 'registrar')
-      .map((u) => ({
-        id: u.id,
-        name: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.username,
-        role: u.role === 'registrar' ? 'Registrar' : 'Registrar staff',
-        username: u.username,
-      }));
+      .filter((u) => {
+        const r = String(u.role || '').toLowerCase();
+        return (r === 'staff' || r === 'registrar') && u.is_active !== false;
+      })
+      .map((u) => {
+        const r = String(u.role || '').toLowerCase();
+        return {
+          id: u.id,
+          name: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.username,
+          role: r === 'registrar' ? 'Registrar' : 'Registrar staff',
+          username: u.username,
+        };
+      });
   }, [users]);
 
   const clearanceMap = useMemo(() => {
@@ -482,6 +488,19 @@ export default function RegistrarRequestsPage() {
           }
         }
 
+        let claimedStaff = '';
+        try {
+          const claimedMap = JSON.parse(localStorage.getItem('regquest_claimed_requests') || '{}');
+          const cVal =
+            claimedMap[String(r.id)] ||
+            claimedMap[String(r.tracking_number)] ||
+            claimedMap[String(r.rawId)] ||
+            '';
+          if (cVal && cVal !== 'claimed' && cVal !== 'true' && cVal !== '1') {
+            claimedStaff = cVal;
+          }
+        } catch {}
+
         const assignedStaff =
           assignments[r.id] ||
           assignments[String(r.id)] ||
@@ -491,6 +510,7 @@ export default function RegistrarRequestsPage() {
           assignments[String(r.rawId)] ||
           r.assigned_staff ||
           matchedStored?.assigned_staff ||
+          claimedStaff ||
           '';
 
         return {
@@ -632,8 +652,7 @@ export default function RegistrarRequestsPage() {
     const rawS = String(item.rawStatus || '').toUpperCase();
     const statusStr = String(item.batch_status || item.status || '').toUpperCase();
 
-    const isForProcessingOrBeyond =
-      statusStr === 'FOR PROCESSING' ||
+    const isBeyondForProcessing =
       statusStr === 'PROCESSING' ||
       statusStr === 'FOR RELEASE' ||
       statusStr === 'READY_FOR_RELEASE' ||
@@ -641,14 +660,23 @@ export default function RegistrarRequestsPage() {
       statusStr === 'RELEASING' ||
       statusStr === 'CLAIMED' ||
       statusStr === 'RELEASED' ||
-      rawS === 'FOR_PROCESSING' ||
-      rawS === 'FOR PROCESSING' ||
-      rawS === 'PAYMENT_VERIFIED' ||
       rawS === 'PROCESSING' ||
       rawS === 'READY_FOR_RELEASE' ||
       rawS === 'FOR_RELEASE' ||
       rawS === 'CLAIMED' ||
       rawS === 'RELEASED';
+
+    if (isBeyondForProcessing) {
+      return false;
+    }
+
+    const isForProcessingOrBeyond =
+      statusStr === 'FOR PROCESSING' ||
+      statusStr === 'FOR_PROCESSING' ||
+      statusStr === 'PAYMENT_VERIFIED' ||
+      rawS === 'FOR_PROCESSING' ||
+      rawS === 'FOR PROCESSING' ||
+      rawS === 'PAYMENT_VERIFIED';
 
     const isClearanceVerified = Boolean(
       item.clearance_status === 'VERIFIED' ||
@@ -676,7 +704,7 @@ export default function RegistrarRequestsPage() {
         String(r.tracking_number) === String(requestId)
     );
     if (staffName && targetReq && !canAssignStaff(targetReq)) {
-      toast.warning('Cannot assign staff: Clearance and payment must be verified first (status must be For Processing).');
+      toast.warning('Cannot change staff: Request must be For Processing (and not yet Processing).');
       return;
     }
 
@@ -689,9 +717,8 @@ export default function RegistrarRequestsPage() {
           updated[requestId] = staffName;
           updated[String(requestId)] = staffName;
         }
-        // Registrar verifies all, so assigned request moves to 'For Processing'
         updated[`status_${rawId}`] = 'For Processing';
-        updated[`status_${String(rawId)}` ] = 'For Processing';
+        updated[`status_${String(rawId)}`] = 'For Processing';
         updated[`status_${requestId}`] = 'For Processing';
         updated[`status_${String(requestId)}`] = 'For Processing';
       } else {
@@ -740,9 +767,10 @@ export default function RegistrarRequestsPage() {
       );
 
       // Backend API transition if applicable
-      if (rawId && !isNaN(Number(rawId))) {
+      const isBackendId = Boolean(rawId) && !String(rawId).startsWith('TRK-') && !String(rawId).startsWith('REQ-');
+      if (isBackendId) {
         requestsApi
-          .transition(Number(rawId), {
+          .transition(rawId, {
             status: 'PAYMENT_VERIFIED',
             remarks: `Assigned to ${staffName} for processing by registrar`,
           })
@@ -885,9 +913,23 @@ export default function RegistrarRequestsPage() {
   }, [requests, searchQuery, docTypeFilter, statusFilter]);
 
   const activeFilteredRequests = useMemo(() => {
+    const getPriorityRank = (r) => {
+      const s = String(r.batch_status || r.status || '').toUpperCase();
+      const raw = String(r.rawStatus || '').toUpperCase();
+      const isForProc = s === 'FOR PROCESSING' || raw === 'FOR PROCESSING' || raw === 'FOR_PROCESSING' || raw === 'PAYMENT_VERIFIED';
+      const isInProgress = s === 'PROCESSING' || s === 'FOR RELEASE' || s === 'READY FOR RELEASE' || s === 'RELEASING' || raw === 'PROCESSING' || raw === 'READY_FOR_RELEASE';
+      if (isForProc && !r.assigned_staff) return 0; // Needs assignment right now
+      if (isForProc) return 1;
+      if (isInProgress) return 2;
+      return 3; // Pending / Pending Payment / On Hold
+    };
     return filteredRequests
       .filter((r) => !isRequestArchived(r, archivedMap))
-      .sort(sortRequestsNewestFirst);
+      .sort((a, b) => {
+        const rankDiff = getPriorityRank(a) - getPriorityRank(b);
+        if (rankDiff !== 0) return rankDiff;
+        return sortRequestsNewestFirst(a, b);
+      });
   }, [filteredRequests, archivedMap, activityTimestamps, assignmentTimestamps, assignments]);
 
   const historyRequests = useMemo(() => {
@@ -1263,13 +1305,13 @@ export default function RegistrarRequestsPage() {
                     />
                   </th>
                 )}
-                <th>Request ID</th>
-                <th>Student</th>
-                <th>Document Type</th>
-                <th>Status</th>
-                <th>Assigned Staff</th>
-                <th>Assignment Status</th>
-                <th className="text-right whitespace-nowrap min-w-[170px]">Actions</th>
+                <th className="whitespace-nowrap">Request ID</th>
+                <th className="min-w-[140px]">Student</th>
+                <th className="min-w-[190px] max-w-[260px]">Document Type</th>
+                <th className="whitespace-nowrap">Status</th>
+                <th className="w-[195px] whitespace-nowrap">Assigned Staff</th>
+                <th className="whitespace-nowrap">Assignment Status</th>
+                <th className="text-right whitespace-nowrap min-w-[140px]">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1311,51 +1353,49 @@ export default function RegistrarRequestsPage() {
                     </td>
                     <td>{getStatusBadge(item.batch_status || item.status)}</td>
                     <td>
-                      {canAssignStaff(item) ? (
-                        <select
-                          value={item.assigned_staff || ''}
-                          onChange={(e) => handleAssignStaff(item.id, item.rawId, e.target.value)}
-                          className="staff-select-dropdown cursor-pointer"
-                        >
-                          <option value="">-- Unassigned --</option>
-                          {staffMembers.map((staff) => (
-                            <option key={staff.id || staff.name} value={staff.name}>
-                              {staff.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <div
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-500 border border-slate-200 text-xs font-semibold select-none"
-                          title="Cannot assign staff: Clearance and payment must be verified first (status must be 'For Processing')."
-                        >
-                          <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                          <span>
-                            {item.clearance_status !== 'VERIFIED' && item.clearance_status !== 'APPROVED'
-                              ? 'Pending Clearance'
-                              : item.payment_status !== 'VERIFIED' && !item.or_number
-                              ? 'Pending Payment'
-                              : 'Awaiting Verification'}
-                          </span>
-                        </div>
-                      )}
+                      <select
+                        value={item.assigned_staff || ''}
+                        disabled={!canAssignStaff(item)}
+                        onChange={(e) => handleAssignStaff(item.id, item.rawId, e.target.value)}
+                        title={
+                          canAssignStaff(item)
+                            ? 'Assign or reassign staff'
+                            : item.assigned_staff
+                            ? 'Locked: Assigned staff cannot be changed once Processing.'
+                            : 'Locked: Request must be For Processing before Registrar can assign staff.'
+                        }
+                        className={`staff-select-dropdown w-[180px] truncate ${
+                          canAssignStaff(item)
+                            ? 'cursor-pointer'
+                            : 'opacity-65 cursor-not-allowed bg-slate-100 text-slate-500'
+                        }`}
+                      >
+                        <option value="">-- Unassigned --</option>
+                        {item.assigned_staff &&
+                          !staffMembers.some((s) => s.name === item.assigned_staff) && (
+                            <option value={item.assigned_staff}>{item.assigned_staff}</option>
+                          )}
+                        {staffMembers.map((staff) => (
+                          <option key={staff.id || staff.name} value={staff.name}>
+                            {staff.name}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td>
-                      {!canAssignStaff(item) ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                          <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                          <span>Locked</span>
-                        </span>
-                      ) : item.assigned_staff ? (
+                      {item.assigned_staff ? (
                         <span className="badge-assigned">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                           </svg>
                           <span>Assigned</span>
+                        </span>
+                      ) : !canAssignStaff(item) ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                          <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                          <span>Locked</span>
                         </span>
                       ) : (
                         <span className="badge-unassigned">
@@ -1474,7 +1514,7 @@ export default function RegistrarRequestsPage() {
               className="req-dropdown-field"
             >
               <option value="">All Statuses</option>
-              {REQUEST_STATUSES.map((st) => (
+              {REQUEST_STATUSES.filter((st) => st !== 'Claimed').map((st) => (
                 <option key={st} value={st}>
                   {st}
                 </option>
