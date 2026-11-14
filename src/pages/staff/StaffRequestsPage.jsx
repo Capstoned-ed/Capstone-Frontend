@@ -18,6 +18,7 @@ import requestsApi, {
   isRequestArchived,
   ASSIGNMENTS_KEY,
   ASSIGNMENT_TIMESTAMPS_KEY,
+  preserveDocTagInRemarks,
 } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
@@ -791,7 +792,7 @@ export default function StaffRequestsPage() {
       if (statusToSet && targetId && !isNaN(Number(targetId))) {
         requestsApi.transition(Number(targetId), {
           status: statusToSet,
-          remarks: note || `Batch updated by staff`,
+          remarks: preserveDocTagInRemarks(item, note || 'Batch updated by staff'),
         }).catch(() => {});
       }
     }
@@ -1240,7 +1241,7 @@ export default function StaffRequestsPage() {
         try {
           await requestsApi.transition(selectedRequest.rawId, {
             status: backendStatus,
-            remarks: notes || selectedRequest.remarks || '',
+            remarks: preserveDocTagInRemarks(selectedRequest, notes || selectedRequest.remarks || ''),
           });
         } catch (apiErr) {
           console.warn('Backend transition notice:', apiErr);
