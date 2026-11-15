@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
 import { StaffProcessModal } from '../../components/staff';
+import PredictedInsightCard from '../../components/admin/PredictedInsightCard';
 import useToast from '../../hooks/useToast';
 import '../../styles/staff/StaffDashboard.css';
 import '../../styles/staff/StaffRequestsPage.css';
@@ -697,6 +698,9 @@ export default function StaffDashboard() {
       </section>
 
       <div className="staff-dash-main">
+        {/* ML AI Forecast & Workload Insights */}
+        <PredictedInsightCard />
+
         <div className="staff-dash-targeted-card">
           <div className="staff-dash-targeted-header">
             <div className="staff-dash-targeted-icon">
