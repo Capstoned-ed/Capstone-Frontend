@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ustpBuilding from '../../assets/USTP.png';
 import PredictedInsightCard from '../../components/admin/PredictedInsightCard';
 import RequestVolumeCard from '../../components/admin/RequestVolumeCard';
 import UserTable from '../../components/admin/UserTable';
+import TablePagination from '../../components/common/TablePagination';
 import useDashboardData from '../../hooks/useDashboardData';
 import { useAuth } from '../../hooks/useAuth';
 import { ROLES } from '../../constants/roles';
@@ -19,6 +20,28 @@ export default function AdminDashboard() {
     dailyVolume,
     monthlyVolume,
   } = useDashboardData();
+
+  const [staffMetricsPage, setStaffMetricsPage] = useState(1);
+  const STAFF_METRICS_PAGE_SIZE = 5;
+  const staffMetricsTableRef = useRef(null);
+  const [lockedStaffMetricsHeight, setLockedStaffMetricsHeight] = useState(null);
+
+  const totalStaffMetricsPages = Math.max(1, Math.ceil(staffMetrics.length / STAFF_METRICS_PAGE_SIZE));
+  const safeStaffMetricsPage = Math.min(staffMetricsPage, totalStaffMetricsPages);
+  const paginatedStaffMetrics = staffMetrics.slice(
+    (safeStaffMetricsPage - 1) * STAFF_METRICS_PAGE_SIZE,
+    safeStaffMetricsPage * STAFF_METRICS_PAGE_SIZE
+  );
+
+  useEffect(() => {
+    if (
+      totalStaffMetricsPages > 1 &&
+      paginatedStaffMetrics.length === STAFF_METRICS_PAGE_SIZE &&
+      staffMetricsTableRef.current
+    ) {
+      setLockedStaffMetricsHeight(staffMetricsTableRef.current.offsetHeight);
+    }
+  }, [totalStaffMetricsPages, paginatedStaffMetrics.length]);
 
   return (
     <div className="admin-dashboard-wrapper">
@@ -121,7 +144,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Staff Performance Metrics Card directly inlined */}
-            <div className="admin-card">
+            <div className="admin-card" style={{ overflowAnchor: 'none' }}>
               <div>
                 {/* Header */}
                 <div className="admin-card-header-stacked">
@@ -151,7 +174,15 @@ export default function AdminDashboard() {
                   </div>
                 ) : (
                   /* Dynamic Metrics Table */
-                  <div className="staff-table-scroll">
+                  <div
+                    ref={staffMetricsTableRef}
+                    className="staff-table-scroll"
+                    style={
+                      totalStaffMetricsPages > 1 && lockedStaffMetricsHeight
+                        ? { minHeight: `${lockedStaffMetricsHeight}px` }
+                        : undefined
+                    }
+                  >
                     <table className="staff-table">
                       <thead>
                         <tr className="staff-table-head-row">
@@ -163,7 +194,7 @@ export default function AdminDashboard() {
                         </tr>
                       </thead>
                       <tbody className="staff-table-tbody">
-                        {staffMetrics.map((staff) => (
+                        {paginatedStaffMetrics.map((staff) => (
                           <tr key={staff.name} className="staff-table-row">
                             <td className="staff-table-name">
                               {staff.name}
@@ -187,6 +218,15 @@ export default function AdminDashboard() {
                   </div>
                 )}
               </div>
+              {!loading && staffMetrics.length > 0 && (
+                <TablePagination
+                  currentPage={safeStaffMetricsPage}
+                  totalItems={staffMetrics.length}
+                  pageSize={STAFF_METRICS_PAGE_SIZE}
+                  onPageChange={setStaffMetricsPage}
+                  accentColor="blue"
+                />
+              )}
             </div>
           </div>
         </section>

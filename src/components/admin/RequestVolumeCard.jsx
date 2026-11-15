@@ -297,7 +297,7 @@ export default function RequestVolumeCard({
                   fill="#000000"
                   stroke="#FFFFFF"
                   strokeWidth="2"
-                  className="cursor-pointer hover:scale-125 transition-transform"
+                  className="cursor-pointer"
                 />
               );
             })}
@@ -305,18 +305,22 @@ export default function RequestVolumeCard({
         </div>
       )}
 
-      {/* Hover Info Tooltip */}
-      {hoveredItem && (
-        <div className="mt-3 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between text-xs text-slate-700 animate-fadeIn">
-          <span className="font-bold text-slate-900">{hoveredItem.label} Breakdown:</span>
-          <span>Transcript: <strong>{hoveredItem.transcript || 0}</strong></span>
-          <span>Dismissal: <strong>{hoveredItem.dismissal || 0}</strong></span>
-          <span>Evaluation: <strong>{hoveredItem.evaluation || 0}</strong></span>
-          <span>CAR: <strong>{hoveredItem.car || 0}</strong></span>
-          <span>Enrolled: <strong>{hoveredItem.enrolled || 0}</strong></span>
-          <span className="text-[#0B0B36] font-bold">Total Requests: {hoveredItem.totalLine || 0}</span>
-        </div>
-      )}
+      {/* Hover Info Tooltip (always rendered to prevent layout shift on hover) */}
+      <div className="mt-3 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-700 min-h-[42px]">
+        {hoveredItem ? (
+          <>
+            <span className="font-bold text-slate-900">{hoveredItem.label} Breakdown:</span>
+            <span>Transcript: <strong>{hoveredItem.transcript || 0}</strong></span>
+            <span>Dismissal: <strong>{hoveredItem.dismissal || 0}</strong></span>
+            <span>Evaluation: <strong>{hoveredItem.evaluation || 0}</strong></span>
+            <span>CAR: <strong>{hoveredItem.car || 0}</strong></span>
+            <span>Enrolled: <strong>{hoveredItem.enrolled || 0}</strong></span>
+            <span className="text-[#0B0B36] font-bold">Total Requests: {hoveredItem.totalLine || 0}</span>
+          </>
+        ) : (
+          <span className="text-slate-400">Hover over a bar to view request breakdown.</span>
+        )}
+      </div>
 
       {/* "View More" button directed to Analytics & Graphs */}
       <div className="mt-5 text-center">

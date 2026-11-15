@@ -651,16 +651,16 @@ export default function TrackStatusPage() {
                       onClick={() => handleSelectRequest(req)}
                       className={`track-selector-row-item ${isActive ? 'active' : ''} cursor-pointer`}
                     >
-                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2">
+                      <div className="flex items-center flex-wrap gap-2 sm:gap-3 min-w-0 w-full sm:w-auto sm:pr-2">
                         <span className="track-row-dot" />
-                        <span className="font-bold text-xs sm:text-sm tracking-tight text-slate-900 shrink-0">
+                        <span className="font-bold text-xs sm:text-sm tracking-tight text-slate-900 break-all sm:break-normal sm:shrink-0">
                           {code}
                         </span>
-                        <span className="text-xs text-slate-500 truncate max-w-[160px] sm:max-w-[280px]">
+                        <span className="text-xs text-slate-500 truncate max-w-full sm:max-w-[280px]">
                           ({docTitle})
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0 pl-4 sm:pl-0">
                         <span className={`status-pill shrink-0 ${
                           status === 'On Hold'
                             ? 'on-hold'
@@ -753,10 +753,10 @@ export default function TrackStatusPage() {
             <div className="track-timeline-card">
             {/* Header Row: Tracking ID on left, Estimate Completion on right */}
             <div className="track-card-header">
-              <div>
+              <div className="min-w-0 w-full sm:w-auto">
                 <span className="track-card-lbl">Official Tracking ID</span>
-                <div className="flex items-center gap-2.5 mt-1">
-                  <span className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 mt-1">
+                  <span className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight break-all sm:break-normal">
                     {matchedRequest.tracking_number || matchedRequest.trackingId || matchedRequest.id}
                   </span>
                   <button
@@ -786,7 +786,7 @@ export default function TrackStatusPage() {
                   </span>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-left sm:text-right w-full sm:w-auto pt-2 sm:pt-0 border-t border-slate-200/70 sm:border-t-0">
                 <div className="track-card-est-title">Estimated Release</div>
                 <div className="track-card-est-date">{estimatedCompletion}</div>
               </div>
