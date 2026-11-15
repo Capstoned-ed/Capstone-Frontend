@@ -1190,7 +1190,7 @@
   transition: all 0.2s ease;
 }
 
-.ustp-part2-grid {
+.student-page-wrapper .ustp-part2-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
@@ -1200,8 +1200,8 @@
   padding-top: 0.25rem;
 }
 
-@media (min-width: 640px) {
-  .ustp-part2-grid {
+@media (min-width: 768px) {
+  .student-page-wrapper .ustp-part2-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
