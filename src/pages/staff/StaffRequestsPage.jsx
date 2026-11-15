@@ -25,30 +25,15 @@ import useToast from '../../hooks/useToast';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
 import BatchUpdateModal from '../../components/common/BatchUpdateModal';
 import { StaffRequestsTable, StaffSearchFilter } from '../../components/staff';
+import {
+  REQUEST_STATUS,
+  REQUEST_STATUSES,
+  BACKEND_STATUS_MAP,
+  normalizeToBackendStatus,
+  formatStatusDisplay,
+  isClaimedStatus,
+} from '../../constants/workflowStatuses';
 import '../../styles/staff/StaffRequestsPage.css';
-
-const REQUEST_STATUSES = [
-  'Pending',
-  'Pending Payment',
-  'For Processing',
-  'Processing',
-  'Releasing',
-  'Claimed',
-  'On Hold',
-];
-
-const BACKEND_STATUS_MAP = {
-  'Pending': 'PENDING',
-  'Pending Payment': 'PAYMENT_PENDING',
-  'For Payment': 'PAYMENT_PENDING',
-  'Payment Pending': 'PAYMENT_PENDING',
-  'For Processing': 'PAYMENT_VERIFIED',
-  'Processing': 'PROCESSING',
-  'Releasing': 'READY_FOR_RELEASE',
-  'For release': 'READY_FOR_RELEASE',
-  'Claimed': 'RELEASED',
-  'On Hold': 'REQUIREMENTS_VERIFICATION',
-};
 
 function calculateReleaseDate(createdAt, processingDays = 5) {
   if (!createdAt) return 'N/A';
@@ -58,92 +43,28 @@ function calculateReleaseDate(createdAt, processingDays = 5) {
   return d.toISOString().split('T')[0];
 }
 
-function formatStatusDisplay(rawStatus) {
-  if (!rawStatus) return 'Pending';
-  const s = rawStatus.trim();
-  if (s === 'For Payment' || s === 'FOR PAYMENT' || s === 'FOR_PAYMENT') return 'Pending Payment';
-  if (REQUEST_STATUSES.includes(s)) return s;
-
-  const upper = s.toUpperCase();
-  switch (upper) {
-    case 'PENDING':
-    case 'PENDONG':
-    case 'RECEIVED':
-    case 'REQUEST SUBMITTED':
-      return 'Pending';
-    case 'FOR_PAYMENT':
-    case 'FOR PAYMENT':
-    case 'PAYMENT_PENDING':
-    case 'PAYMENT PENDING':
-    case 'PENDING_PAYMENT':
-    case 'PENDING PAYMENT':
-    case 'CLEARED FOR PAYMENT':
-      return 'Pending Payment';
-    case 'PAYMENT_VERIFIED':
-    case 'PAYMENT VERIFIED':
-    case 'FOR_PROCESSING':
-    case 'FOR PROCESSING':
-      return 'For Processing';
-    case 'PROCESSING':
-    case 'DOCUMENT_PREPARATION':
-    case 'DOCUMENT PREPARATION':
-      return 'Processing';
-    case 'READY_FOR_RELEASE':
-    case 'READY FOR RELEASE':
-    case 'READY_FOR_PICKUP':
-    case 'READY FOR PICKUP':
-    case 'FOR_RELEASE':
-    case 'FOR RELEASE':
-    case 'RELEASING':
-      return 'Releasing';
-    case 'RELEASED':
-    case 'CLAIMED':
-    case 'CLAIMED / RELEASED':
-    case 'CLAIMED/RELEASED':
-      return 'Claimed';
-    case 'ON HOLD':
-    case 'ON_HOLD':
-    case 'HOLD':
-    case 'REQUIREMENTS_VERIFICATION':
-    case 'CLEARANCE_VERIFIED':
-    case 'CANCELLED':
-    case 'REJECTED':
-      return 'On Hold';
-    default:
-      return s;
-  }
-}
-
 function getStatusBadge(status) {
-  const norm = String(status || '').trim();
+  const norm = normalizeToBackendStatus(status);
   switch (norm) {
-    case 'Pending':
-    case 'PENDING':
+    case REQUEST_STATUS.PENDING:
       return <span className="status-badge pending">Pending</span>;
-    case 'For Payment':
-    case 'FOR PAYMENT':
-    case 'FOR_PAYMENT':
-    case 'Pending Payment':
-    case 'PAYMENT_PENDING':
-    case 'Payment Pending':
+    case REQUEST_STATUS.PAYMENT_PENDING:
       return <span className="status-badge payment-pending">Pending Payment</span>;
-    case 'For Processing':
-    case 'FOR_PROCESSING':
-    case 'PAYMENT_VERIFIED':
+    case REQUEST_STATUS.PAYMENT_VERIFIED:
       return <span className="status-badge for-processing">For Processing</span>;
-    case 'Processing':
-    case 'PROCESSING':
+    case REQUEST_STATUS.PROCESSING:
       return <span className="status-badge processing">Processing</span>;
-    case 'Releasing':
-    case 'RELEASING':
-    case 'For release':
-    case 'READY_FOR_RELEASE':
+    case REQUEST_STATUS.READY_FOR_RELEASE:
       return <span className="status-badge releasing">Releasing</span>;
-    case 'Claimed':
-    case 'RELEASED':
+    case REQUEST_STATUS.RELEASED:
       return <span className="status-badge claimed">Claimed</span>;
+    case REQUEST_STATUS.REJECTED:
+      return <span className="status-badge bg-rose-100 text-rose-700 border border-rose-200">Rejected</span>;
+    case REQUEST_STATUS.CANCELLED:
+      return <span className="status-badge bg-slate-100 text-slate-700 border border-slate-200">Cancelled</span>;
+    case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
     default:
-      return <span className="status-badge on-hold">{norm || 'On Hold'}</span>;
+      return <span className="status-badge on-hold">{formatStatusDisplay(norm) || 'On Hold'}</span>;
   }
 }
 
@@ -772,10 +693,11 @@ export default function StaffRequestsPage() {
         status: statusToSet || item.status,
       });
 
-      // Backend API transition if applicable and numeric
-      if (statusToSet && targetId && !isNaN(Number(targetId))) {
-        requestsApi.transition(Number(targetId), {
-          status: statusToSet,
+      // Backend API transition if applicable
+      if (statusToSet && targetId && !String(targetId).startsWith('fallback_')) {
+        const backendStatus = BACKEND_STATUS_MAP[statusToSet] || statusToSet;
+        requestsApi.transition(targetId, {
+          status: backendStatus,
           remarks: note || `Batch updated by staff`,
         }).catch(() => {});
       }
@@ -1110,6 +1032,11 @@ export default function StaffRequestsPage() {
       recordRequestActivityTimestamp(trackingNo || reqId || rawId, now);
       window.dispatchEvent(new Event('regquest_assignments_updated'));
       window.dispatchEvent(new Event('regquest_requests_updated'));
+
+      // 9. Immediately open the process modal for the claimed request
+      setSelectedRequest(updatedItem);
+      setNewStatus(formatStatusDisplay(currentStatus) || 'Pending');
+      setNotes('');
     } catch (err) {
       console.warn('Error during claim processing:', err);
     }
@@ -1204,15 +1131,17 @@ export default function StaffRequestsPage() {
     };
 
     try {
-      if (selectedRequest.rawId && typeof selectedRequest.rawId === 'number') {
+      const targetRawId = selectedRequest.rawId || selectedRequest.id;
+      if (targetRawId && !String(targetRawId).startsWith('fallback_')) {
         const backendStatus = BACKEND_STATUS_MAP[effectiveStatus] || effectiveStatus;
         try {
-          await requestsApi.transition(selectedRequest.rawId, {
+          await requestsApi.transition(targetRawId, {
             status: backendStatus,
             remarks: notes || selectedRequest.remarks || '',
           });
         } catch (apiErr) {
           console.warn('Backend transition notice:', apiErr);
+          throw apiErr;
         }
       }
 
@@ -1410,6 +1339,7 @@ export default function StaffRequestsPage() {
           onOpenProcess={handleOpenProcess}
           actionType="history"
           onRestore={handleRestoreRequest}
+          showAssignedStaff={true}
           emptyMessage="No claimed document requests in history yet."
           enableSelection={true}
           isSelectionMode={selectionModeTable === 'history'}

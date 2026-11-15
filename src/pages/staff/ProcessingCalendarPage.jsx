@@ -5,6 +5,12 @@ import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
 import ProcessCalendarCard, { isForProcessingStatus } from '../../components/calendar/ProcessCalendarCard';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
+import {
+  REQUEST_STATUS,
+  normalizeToBackendStatus,
+  formatStatusDisplay,
+  isClaimedStatus,
+} from '../../constants/workflowStatuses';
 import '../../styles/staff/ProcessingCalendar.css';
 
 function toLocalDateStr(val) {
@@ -50,71 +56,30 @@ function formatDateStrReadable(dateStr) {
   });
 }
 
-function formatStatusDisplay(rawStatus) {
-  if (!rawStatus) return 'Pending';
-  const s = rawStatus.trim().toUpperCase();
-  switch (s) {
-    case 'PENDING':
-    case 'RECEIVED':
-    case 'REQUEST SUBMITTED':
-      return 'Pending';
-    case 'PROCESSING':
-    case 'DOCUMENT PREPARATION':
-    case 'RELEASE SCHEDULE CONFIRMED':
-      return 'Processing';
-    case 'READY_FOR_RELEASE':
-    case 'READY FOR RELEASE':
-    case 'READY_FOR_PICKUP':
-    case 'READY FOR PICKUP':
-    case 'FOR_RELEASE':
-    case 'FOR RELEASE':
-      return 'For Release';
-    case 'RELEASED':
-    case 'CLAIMED':
-    case 'CLAIMED / RELEASED':
-      return 'Claimed';
-    case 'ON HOLD':
-    case 'REQUIREMENTS_VERIFICATION':
-      return 'On Hold';
-    default:
-      if (s === 'FOR RELEASE' || s === 'FOR_RELEASE') return 'For Release';
-      return rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
-  }
-}
-
 function getStatusBadge(status) {
-  const s = String(status || '').trim();
-  switch (s) {
-    case 'Pending':
-    case 'PENDING':
+  const norm = normalizeToBackendStatus(status);
+  switch (norm) {
+    case REQUEST_STATUS.PENDING:
       return <span className="status-pill pending">Pending</span>;
-    case 'Pending Payment':
-    case 'For Payment':
-    case 'FOR PAYMENT':
-    case 'FOR_PAYMENT':
-    case 'PAYMENT_PENDING':
+    case REQUEST_STATUS.PAYMENT_PENDING:
       return <span className="status-pill for-payment">Pending Payment</span>;
-    case 'For Processing':
-    case 'FOR_PROCESSING':
-    case 'PAYMENT_VERIFIED':
+    case REQUEST_STATUS.PAYMENT_VERIFIED:
       return <span className="status-pill for-processing">For Processing</span>;
-    case 'Processing':
-    case 'PROCESSING':
+    case REQUEST_STATUS.PROCESSING:
       return <span className="status-pill processing">Processing</span>;
-    case 'For Release':
-    case 'For release':
-    case 'Releasing':
-    case 'RELEASING':
-    case 'READY_FOR_RELEASE':
+    case REQUEST_STATUS.READY_FOR_RELEASE:
       return <span className="status-pill for-release">For Release</span>;
-    case 'Claimed':
-    case 'RELEASED':
+    case REQUEST_STATUS.RELEASED:
       return <span className="status-pill claimed">Claimed</span>;
-    case 'On Hold':
-    case 'ON_HOLD':
+    case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
       return <span className="status-pill on-hold">On Hold</span>;
+    case REQUEST_STATUS.REQUIREMENTS_REJECTED:
+    case REQUEST_STATUS.REJECTED:
+      return <span className="status-pill rejected">Rejected</span>;
+    case REQUEST_STATUS.CANCELLED:
+      return <span className="status-pill cancelled">Cancelled</span>;
     default:
-      return <span className="status-pill pending">{s || 'Pending'}</span>;
+      return <span className="status-pill pending">{formatStatusDisplay(norm) || 'Pending'}</span>;
   }
 }
 

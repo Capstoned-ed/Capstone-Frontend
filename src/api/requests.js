@@ -4,6 +4,21 @@ import credentialTypesApi from './credentialTypes';
 import { saveStoredNotification } from './notifications';
 import { saveClearanceAttachment, getClearanceAttachment } from './clearances';
 import { getStoredPaymentProof } from './payments';
+import {
+  REQUEST_STATUS,
+  normalizeToBackendStatus,
+  BACKEND_STATUS_MAP,
+  formatStatusDisplay,
+  isClaimedStatus,
+} from '../constants/workflowStatuses';
+
+export {
+  REQUEST_STATUS,
+  normalizeToBackendStatus,
+  BACKEND_STATUS_MAP,
+  formatStatusDisplay,
+  isClaimedStatus,
+};
 
 export function getActiveUserId(user = null) {
   if (user?.id) return String(user.id);
@@ -1159,14 +1174,19 @@ export const requestsApi = {
    * Transition request status (e.g. PAYMENT_VERIFIED -> PROCESSING -> READY_FOR_RELEASE)
    */
   transition: async (id, payload) => {
-    let resData = null;
     try {
-      const response = await apiClient.patch(`/api/requests/${id}/transition/`, payload);
-      resData = response.data;
+      const cleanPayload = payload
+        ? {
+            ...payload,
+            status: payload.status ? normalizeToBackendStatus(payload.status) : payload.status,
+          }
+        : payload;
+      const response = await apiClient.patch(`/api/requests/${id}/transition/`, cleanPayload);
+      return response.data;
     } catch (apiErr) {
       console.warn('Backend transition notice:', apiErr);
+      throw apiErr;
     }
-    return resData || { id, ...payload };
   },
 
   /**
@@ -1302,6 +1322,7 @@ export function getArchivedRequestsMap() {
 export function isRequestArchived(req, archivedMap = null) {
   if (!req) return false;
   if (req.is_archived || req.archived_to_history) return true;
+  if (normalizeToBackendStatus(req.status) === REQUEST_STATUS.RELEASED) return true;
   const map = archivedMap || getArchivedRequestsMap();
   const keys = [req.id, req.rawId, req.tracking_number, req.trackingId]
     .filter((k) => k !== undefined && k !== null && String(k).trim() !== '')
