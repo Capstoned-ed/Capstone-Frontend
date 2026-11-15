@@ -57,25 +57,37 @@
 .ustp-form-sheet {
   width: 100%;
   background-color: #ffffff;
-  border-radius: 1.5rem;
+  border-radius: 1.25rem;
   border: 1px solid #e2e8f0;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
-  padding: 2.5rem 2rem;
+  padding: 1.25rem 1rem;
   color: #0f172a;
 }
 
 @media (min-width: 640px) {
   .ustp-form-sheet {
+    border-radius: 1.5rem;
     padding: 3rem 2.5rem;
   }
 }
 
 .ustp-form-header {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1.5rem;
-  margin-bottom: 1.75rem;
+  text-align: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .ustp-form-header {
+    flex-direction: row;
+    text-align: left;
+    gap: 1.5rem;
+    margin-bottom: 1.75rem;
+  }
 }
 
 .ustp-logo-wrap {
@@ -1180,19 +1192,44 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .ustp-doc-label {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
   cursor: pointer;
   user-select: none;
-  font-size: 0.75rem;
-  padding: 0.25rem 0.375rem;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  padding: 0.375rem 0.5rem;
   border-radius: 0.375rem;
   border: 1px solid transparent;
   transition: all 0.15s ease;
+  min-width: 0;
+  word-break: break-word;
+}
+
+@media (min-width: 640px) {
+  .ustp-doc-label {
+    align-items: center;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.375rem;
+  }
+}
+
+.ustp-doc-label input[type="checkbox"],
+.ustp-cert-subitem input[type="checkbox"] {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+@media (min-width: 640px) {
+  .ustp-doc-label input[type="checkbox"],
+  .ustp-cert-subitem input[type="checkbox"] {
+    margin-top: 0;
+  }
 }
 
 .ustp-doc-label:hover {
@@ -1214,11 +1251,19 @@
 
 .ustp-cert-subgrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 0.5rem;
-  padding-left: 1.5rem;
+  padding-left: 0.75rem;
   padding-top: 0.25rem;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .ustp-cert-subgrid {
+    grid-template-columns: 1fr 1fr;
+    padding-left: 1.5rem;
+    font-size: 0.6875rem;
+  }
 }
 
 .ustp-cert-subitem {
@@ -1271,10 +1316,15 @@
 
 .ustp-purpose-other-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   padding-top: 0.5rem;
   font-size: 0.75rem;
+}
+
+.ustp-purpose-other-row .ustp-underline-field {
+  min-width: 12rem;
 }
 
 .ustp-purpose-note {
@@ -1336,7 +1386,12 @@
 .ustp-signoff-subtext {
   font-size: 0.6875rem;
   color: #334155;
-  white-space: nowrap;
+}
+
+@media (min-width: 640px) {
+  .ustp-signoff-subtext {
+    white-space: nowrap;
+  }
 }
 
 .ustp-signoff-officials-grid {
@@ -1366,8 +1421,14 @@
 }
 
 .ustp-registrar-name {
-  padding-left: 1.5rem;
+  padding-left: 0;
   padding-top: 0.25rem;
+}
+
+@media (min-width: 640px) {
+  .ustp-registrar-name {
+    padding-left: 1.5rem;
+  }
 }
 
 .ustp-registrar-title {
