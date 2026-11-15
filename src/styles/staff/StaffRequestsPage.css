@@ -585,10 +585,18 @@
 .status-pill.on-hold,
 .status-pill.hold,
 .status-pill.clearance-verified,
-.status-pill.cancelled,
-.status-pill.rejected,
 .status-badge.on-hold {
   @apply bg-orange-100 text-orange-700 border border-orange-200;
+}
+
+.status-pill.rejected,
+.status-badge.rejected {
+  @apply bg-rose-100 text-rose-700 border border-rose-200;
+}
+
+.status-pill.cancelled,
+.status-badge.cancelled {
+  @apply bg-slate-100 text-slate-700 border border-slate-200;
 }
 
 .table-see-more-wrap {

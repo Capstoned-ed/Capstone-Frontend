@@ -355,8 +355,8 @@ test.describe('Security & Business Logic Hardening', () => {
       const data = await listResp.json();
       const requests = Array.isArray(data) ? data : (data.results || []);
 
-      // Find or advance a request to REQUIREMENTS_VERIFICATION where rejection is a valid action
-      let targetReq = requests.find((r: any) => ['REQUIREMENTS_VERIFICATION', 'PAYMENT_PENDING', 'PROCESSING'].includes(r.status));
+      // Find or advance a request to REQUIREMENTS_VERIFICATION or PAYMENT_PENDING where staff rejection is authorized
+      let targetReq = requests.find((r: any) => ['REQUIREMENTS_VERIFICATION', 'PAYMENT_PENDING', 'PENDING'].includes(r.status));
       if (!targetReq && requests.length > 0) {
         const reqToAdvance = requests.find((r: any) => r.status === 'PENDING') || requests[0];
         const advanceResp = await request.patch(`${apiBaseUrl}/api/requests/${reqToAdvance.id}/transition/`, {

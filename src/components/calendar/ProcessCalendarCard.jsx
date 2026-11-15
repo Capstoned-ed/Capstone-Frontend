@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { REQUEST_STATUS, normalizeToBackendStatus } from '../../constants/workflowStatuses';
 import '../../styles/staff/ProcessingCalendar.css';
 
 // Helper to safely convert an ISO string, Date object, or date string into local YYYY-MM-DD
@@ -56,57 +57,15 @@ function formatDateStrReadable(dateStr, options = { month: 'long', day: 'numeric
 
 // Helper to check if a request status qualifies for "Process Document" on the calendar
 export function isForProcessingStatus(status, rawStatus = '', paymentStatus = '') {
-  const s = String(status || '').trim().toUpperCase();
-  const rawS = String(rawStatus || '').trim().toUpperCase();
   const pStatus = String(paymentStatus || '').trim().toUpperCase();
+  if (pStatus === 'VERIFIED') return true;
 
-  // If status is Pending or For Payment or On Hold, it is NOT for processing!
-  if (
-    s === 'PENDING' ||
-    s === 'RECEIVED' ||
-    s === 'REQUEST SUBMITTED' ||
-    s === 'PENDING PAYMENT' ||
-    s === 'PENDING_PAYMENT' ||
-    s === 'PAYMENT_PENDING' ||
-    s === 'PAYMENT PENDING' ||
-    s === 'FOR PAYMENT' ||
-    s === 'FOR_PAYMENT' ||
-    s === 'CLEARED FOR PAYMENT' ||
-    s === 'ON HOLD' ||
-    s === 'ON_HOLD' ||
-    s === 'HOLD' ||
-    s === 'CANCELLED' ||
-    s === 'REJECTED' ||
-    rawS === 'PENDING' ||
-    rawS === 'PAYMENT_PENDING' ||
-    rawS === 'PENDING_PAYMENT' ||
-    rawS === 'FOR_PAYMENT'
-  ) {
-    if (pStatus !== 'VERIFIED' && rawS !== 'PAYMENT_VERIFIED') {
-      return false;
-    }
-  }
-
+  const norm = normalizeToBackendStatus(rawStatus || status);
   return (
-    s === 'FOR PROCESSING' ||
-    s === 'FOR_PROCESSING' ||
-    s === 'PROCESSING' ||
-    s === 'DOCUMENT PREPARATION' ||
-    s === 'DOCUMENT_PREPARATION' ||
-    s === 'PAYMENT VERIFIED' ||
-    s === 'PAYMENT_VERIFIED' ||
-    rawS === 'FOR_PROCESSING' ||
-    rawS === 'PAYMENT_VERIFIED' ||
-    pStatus === 'VERIFIED' ||
-    s === 'FOR RELEASE' ||
-    s === 'FOR_RELEASE' ||
-    s === 'RELEASING' ||
-    s === 'READY_FOR_RELEASE' ||
-    s === 'READY FOR RELEASE' ||
-    s === 'READY_FOR_PICKUP' ||
-    s === 'READY FOR PICKUP' ||
-    s === 'CLAIMED' ||
-    s === 'RELEASED'
+    norm === REQUEST_STATUS.PAYMENT_VERIFIED ||
+    norm === REQUEST_STATUS.PROCESSING ||
+    norm === REQUEST_STATUS.READY_FOR_RELEASE ||
+    norm === REQUEST_STATUS.RELEASED
   );
 }
 
@@ -228,8 +187,8 @@ export default function ProcessCalendarCard({
 
       // Count processed requests in this batch (status 'For Release', 'Claimed', or 'Released')
       const processedCount = reqs.filter((r) => {
-        const s = (r.status || '').toLowerCase();
-        return s.includes('release') || s.includes('pickup') || s.includes('ready') || s.includes('claim');
+        const norm = normalizeToBackendStatus(r.status);
+        return norm === REQUEST_STATUS.READY_FOR_RELEASE || norm === REQUEST_STATUS.RELEASED;
       }).length;
 
       const completionPercentage = totalInBatch > 0

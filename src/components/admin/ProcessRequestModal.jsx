@@ -5,6 +5,13 @@ import requestsApi, { updateStoredRequest, logProcessedAction, setRequestArchive
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import { saveStoredNotification } from '../../api/notifications';
 import { getStoredPaymentProof, verifyStoredPaymentProof } from '../../api/payments';
+import {
+  REQUEST_STATUS,
+  normalizeToBackendStatus,
+  formatStatusDisplay,
+  STATUS_CONFIG,
+  BACKEND_STATUS_MAP,
+} from '../../constants/workflowStatuses';
 import PrintRequestFormModal from '../student/PrintRequestFormModal';
 import ClaimStubModal from '../common/ClaimStubModal';
 
@@ -15,19 +22,6 @@ export default function ProcessRequestModal({
   onUpdated,
 }) {
   const { user } = useAuth();
-  const BACKEND_STATUS_MAP = {
-    'Pending': 'PENDING',
-    'For Payment': 'PAYMENT_PENDING',
-    'Pending Payment': 'PAYMENT_PENDING',
-    'Payment Pending': 'PAYMENT_PENDING',
-    'For Processing': 'PAYMENT_VERIFIED',
-    'Processing': 'PROCESSING',
-    'Releasing': 'READY_FOR_RELEASE',
-    'For release': 'READY_FOR_RELEASE',
-    'Claimed': 'RELEASED',
-    'On Hold': 'REQUIREMENTS_VERIFICATION',
-  };
-
   const toast = useToast();
   const [newStatus, setNewStatus] = useState(() => requestItem?.status || 'Pending');
   const [notes, setNotes] = useState('');
@@ -414,9 +408,10 @@ export default function ProcessRequestModal({
     setStatusDirectly('Pending Payment');
     setIsOrderConfirmed(true);
 
-    if (requestItem.rawId && typeof requestItem.rawId === 'number') {
+    const targetRawId = requestItem.rawId || requestItem.id;
+    if (targetRawId && !String(targetRawId).startsWith('fallback_')) {
       try {
-        await requestsApi.transition(requestItem.rawId, {
+        await requestsApi.transition(targetRawId, {
           status: 'PAYMENT_PENDING',
           remarks: `Clearance verified by ${verifiedByName}. Assessed amount: ${cleanAmount}. Date of release: ${dateOfRelease}.`,
         });
@@ -468,11 +463,11 @@ export default function ProcessRequestModal({
 
     try {
       setLoading(true);
-      if (typeof targetId === 'number') {
+      if (targetId && !String(targetId).startsWith('fallback_')) {
         await requestsApi.transition(targetId, {
           status: 'REJECTED',
           remarks: reason,
-        }).catch(() => {});
+        });
       }
 
       const nowTime = Date.now();
@@ -620,9 +615,10 @@ export default function ProcessRequestModal({
       });
     }
 
-    if (requestItem.rawId && typeof requestItem.rawId === 'number') {
+    const targetRawId = requestItem.rawId || requestItem.id;
+    if (targetRawId && !String(targetRawId).startsWith('fallback_')) {
       try {
-        await requestsApi.transition(requestItem.rawId, {
+        await requestsApi.transition(targetRawId, {
           status: isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING',
           remarks: isVerified
             ? `Official Receipt verified (OR: ${finalOrNumber}). Verified by ${user?.username || 'Admin'}.`
@@ -742,15 +738,17 @@ export default function ProcessRequestModal({
         return;
       }
 
-      if (requestItem.rawId && typeof requestItem.rawId === 'number') {
+      const targetRawId = requestItem.rawId || requestItem.id;
+      if (targetRawId && !String(targetRawId).startsWith('fallback_')) {
         const backendStatus = BACKEND_STATUS_MAP[localStatus] || localStatus;
         try {
-          await requestsApi.transition(requestItem.rawId, {
+          await requestsApi.transition(targetRawId, {
             status: backendStatus,
             remarks: notes || requestItem.remarks || '',
           });
         } catch (apiErr) {
           console.warn('Backend transition notice:', apiErr);
+          throw apiErr;
         }
       }
 
@@ -837,7 +835,7 @@ export default function ProcessRequestModal({
 
     try {
       setLoading(true);
-      if (typeof targetId === 'number') {
+      if (targetId && !String(targetId).startsWith('fallback_')) {
         await requestsApi.transition(targetId, {
           status: 'RELEASED',
           remarks: notes || 'Document claimed by student at registrar window.',
@@ -924,7 +922,7 @@ export default function ProcessRequestModal({
   return (
     <>
       <div className="staff-process-backdrop" onClick={onClose}>
-        <div className="staff-process-dialog max-w-3xl" onClick={(e) => e.stopPropagation()}>
+        <div className="staff-process-dialog max-w-3xl" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
           {/* Sticky Header */}
           <div className="staff-process-header">
             <div>

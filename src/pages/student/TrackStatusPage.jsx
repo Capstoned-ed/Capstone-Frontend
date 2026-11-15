@@ -11,6 +11,12 @@ import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
 import ClaimStubModal from '../../components/common/ClaimStubModal';
+import {
+  REQUEST_STATUS,
+  normalizeToBackendStatus,
+  formatStatusDisplay,
+  isClaimedStatus,
+} from '../../constants/workflowStatuses';
 import '../../styles/student/TrackStatusPage.css';
 
 const DEFAULT_TIMELINE_STEPS = [
@@ -21,56 +27,30 @@ const DEFAULT_TIMELINE_STEPS = [
   { id: 'releasing', name: 'Releasing', label: 'Ready for Claiming' },
 ];
 
-function formatStatusDisplay(rawStatus) {
-  if (!rawStatus) return 'Pending';
-  const s = rawStatus.trim();
-  const upper = s.toUpperCase();
-  switch (upper) {
-    case 'PENDING':
-    case 'PENDONG':
-    case 'RECEIVED':
-    case 'REQUEST SUBMITTED':
-      return 'Pending';
-    case 'FOR_PAYMENT':
-    case 'FOR PAYMENT':
-    case 'PAYMENT_PENDING':
-    case 'PAYMENT PENDING':
-    case 'PENDING_PAYMENT':
-    case 'PENDING PAYMENT':
-    case 'CLEARED FOR PAYMENT':
-      return 'For Payment';
-    case 'PAYMENT_VERIFIED':
-    case 'PAYMENT VERIFIED':
-    case 'FOR_PROCESSING':
-    case 'FOR PROCESSING':
-      return 'For Processing';
-    case 'PROCESSING':
-    case 'DOCUMENT_PREPARATION':
-    case 'DOCUMENT PREPARATION':
-      return 'Processing';
-    case 'READY_FOR_RELEASE':
-    case 'READY FOR RELEASE':
-    case 'READY_FOR_PICKUP':
-    case 'READY FOR PICKUP':
-    case 'FOR_RELEASE':
-    case 'FOR RELEASE':
-    case 'RELEASING':
-      return 'Releasing';
-    case 'RELEASED':
-    case 'CLAIMED':
-    case 'CLAIMED / RELEASED':
-    case 'CLAIMED/RELEASED':
-      return 'Claimed';
-    case 'ON HOLD':
-    case 'ON_HOLD':
-    case 'HOLD':
-    case 'REQUIREMENTS_VERIFICATION':
-    case 'CLEARANCE_VERIFIED':
-    case 'CANCELLED':
-    case 'REJECTED':
-      return 'On Hold';
+function getStatusPillClass(status) {
+  const norm = normalizeToBackendStatus(status);
+  switch (norm) {
+    case REQUEST_STATUS.PENDING:
+      return 'pending';
+    case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
+      return 'on-hold';
+    case REQUEST_STATUS.REQUIREMENTS_REJECTED:
+    case REQUEST_STATUS.REJECTED:
+      return 'rejected';
+    case REQUEST_STATUS.PAYMENT_PENDING:
+      return 'payment-pending';
+    case REQUEST_STATUS.PAYMENT_VERIFIED:
+      return 'for-processing';
+    case REQUEST_STATUS.PROCESSING:
+      return 'processing';
+    case REQUEST_STATUS.READY_FOR_RELEASE:
+      return 'releasing';
+    case REQUEST_STATUS.RELEASED:
+      return 'claimed';
+    case REQUEST_STATUS.CANCELLED:
+      return 'cancelled';
     default:
-      return s;
+      return 'pending';
   }
 }
 
@@ -250,6 +230,25 @@ export default function TrackStatusPage() {
     setSelectedTrackId(req.tracking_number || req.trackingId || String(reqId));
   };
 
+  // Cancel pending request (Student self-service cancellation)
+  const handleCancelRequest = async () => {
+    if (!matchedRequest) return;
+    const reqId = matchedRequest.rawId || matchedRequest.id;
+    const trackingNo = matchedRequest.tracking_number || matchedRequest.id;
+    try {
+      await requestsApi.transition(reqId, {
+        status: 'CANCELLED',
+        remarks: 'Cancelled by student',
+      });
+      toast.success(`Request ${trackingNo} cancelled successfully.`);
+      fetchData(true);
+    } catch (err) {
+      console.error('Failed to cancel request:', err);
+      const detail = err.response?.data?.detail || err.message || 'Failed to cancel request.';
+      toast.error(detail);
+    }
+  };
+
   // Determine active tracking ID:
   // 1. url query if present
   // 2. Or student selected request in current tab
@@ -299,43 +298,40 @@ export default function TrackStatusPage() {
   // Normalized Display Status
   const displayStatus = useMemo(() => {
     if (!matchedRequest) return 'Pending';
-    return formatStatusDisplay(matchedRequest.status);
+    return formatStatusDisplay(matchedRequest.status, { useReleasing: true });
   }, [matchedRequest]);
 
-  // Check if request is On Hold
+  // Check if request is On Hold / Requirements Verification
   const isOnHold = useMemo(() => {
-    return displayStatus === 'On Hold';
-  }, [displayStatus]);
+    if (!matchedRequest) return false;
+    const norm = normalizeToBackendStatus(matchedRequest.status);
+    return norm === REQUEST_STATUS.REQUIREMENTS_VERIFICATION || displayStatus === 'On Hold';
+  }, [matchedRequest, displayStatus]);
 
   // Step Index for 5-Step Timeline (0 to 4)
   const currentStepIndex = useMemo(() => {
-    const s = String(displayStatus || matchedRequest?.status || '').trim().toLowerCase();
-    if (s === 'claimed' || s === 'released' || s.includes('claim')) {
-      return 5;
+    if (!matchedRequest) return 0;
+    const norm = normalizeToBackendStatus(matchedRequest.status);
+    switch (norm) {
+      case REQUEST_STATUS.RELEASED:
+        return 5;
+      case REQUEST_STATUS.READY_FOR_RELEASE:
+        return 4;
+      case REQUEST_STATUS.PROCESSING:
+        return 3;
+      case REQUEST_STATUS.PAYMENT_VERIFIED:
+        return 2;
+      case REQUEST_STATUS.PAYMENT_PENDING:
+        return 1;
+      case REQUEST_STATUS.PENDING:
+      case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
+      case REQUEST_STATUS.REQUIREMENTS_REJECTED:
+      case REQUEST_STATUS.REJECTED:
+      case REQUEST_STATUS.CANCELLED:
+      default:
+        return 0;
     }
-    if (s === 'releasing' || s === 'for release' || s.includes('release') || s === 'ready_for_release' || s === 'ready_for_pickup') {
-      return 4;
-    }
-    if (s === 'processing' || (s.includes('processing') && !s.includes('for processing'))) {
-      return 3;
-    }
-    if (s === 'for processing' || s.includes('for processing') || s.includes('payment verified') || s.includes('payment_verified')) {
-      return 2;
-    }
-    if (
-      s === 'for payment' ||
-      s === 'pending payment' ||
-      s === 'payment pending' ||
-      s.includes('for payment') ||
-      s.includes('pending payment') ||
-      s.includes('cleared for payment') ||
-      s.includes('payment_pending') ||
-      s.includes('pending_payment')
-    ) {
-      return 1;
-    }
-    return 0;
-  }, [displayStatus, matchedRequest]);
+  }, [matchedRequest]);
 
   const [mlEstimatedCompletion, setMlEstimatedCompletion] = useState(null);
 
@@ -597,7 +593,7 @@ export default function TrackStatusPage() {
                   const isActive = activeTrackingId.toUpperCase() === code.toUpperCase();
                   const cred = credTypeMap.get(req.credential_type);
                   const docTitle = resolveRequestDocType(req, cred);
-                  const status = formatStatusDisplay(req.status);
+                  const status = formatStatusDisplay(req.status, { useReleasing: true });
 
                   return (
                     <div
@@ -615,26 +611,12 @@ export default function TrackStatusPage() {
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <span className={`status-pill shrink-0 ${
-                          status === 'On Hold'
-                            ? 'on-hold'
-                            : status === 'Claimed'
-                            ? 'claimed'
-                            : status === 'Releasing' || status === 'For release'
-                            ? 'releasing'
-                            : status === 'Processing'
-                            ? 'processing'
-                            : status === 'For Processing'
-                            ? 'for-processing'
-                            : status === 'Pending Payment' || status === 'For Payment'
-                            ? 'payment-pending'
-                            : 'pending'
-                        }`}>
+                        <span className={`status-pill shrink-0 ${getStatusPillClass(req.status)}`}>
                           {status}
                         </span>
 
                         {/* Done button on Claimed status in Active Requests */}
-                        {status === 'Claimed' && activeQueueTab === 'active' && (
+                        {isClaimedStatus(req.status) && activeQueueTab === 'active' && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -699,6 +681,51 @@ export default function TrackStatusPage() {
           </div>
         )}
 
+        {/* Conditional Rejected Alert Banner */}
+        {matchedRequest && (normalizeToBackendStatus(matchedRequest.status) === REQUEST_STATUS.REJECTED || normalizeToBackendStatus(matchedRequest.status) === REQUEST_STATUS.REQUIREMENTS_REJECTED) && (
+          <div className="track-on-hold-banner border-rose-200 bg-rose-50" role="alert">
+            <div className="track-on-hold-icon-box bg-rose-100 text-rose-600">
+              <svg className="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <div className="track-on-hold-content">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="track-on-hold-badge bg-rose-100 text-rose-700 border-rose-300">REJECTED</span>
+                <h4 className="track-on-hold-title text-rose-950">Request has been Rejected</h4>
+              </div>
+              <p className="track-on-hold-desc text-rose-800">
+                {(() => {
+                  const remarks = (matchedRequest?.notes || matchedRequest?.remarks || '').trim();
+                  return remarks
+                    ? `Registrar Remark: ${remarks}`
+                    : 'Your credential request has been declined or rejected by the Registrar Office.';
+                })()}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Conditional Cancelled Alert Banner */}
+        {matchedRequest && normalizeToBackendStatus(matchedRequest.status) === REQUEST_STATUS.CANCELLED && (
+          <div className="track-on-hold-banner border-slate-300 bg-slate-50" role="alert">
+            <div className="track-on-hold-icon-box bg-slate-200 text-slate-600">
+              <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+            </div>
+            <div className="track-on-hold-content">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="track-on-hold-badge bg-slate-200 text-slate-700 border-slate-300">CANCELLED</span>
+                <h4 className="track-on-hold-title text-slate-900">Request Cancelled</h4>
+              </div>
+              <p className="track-on-hold-desc text-slate-600">
+                This document request was cancelled.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Case 1: Matched Request Display - Tracking Status Only */}
         {matchedRequest ? (
           <>
@@ -736,24 +763,10 @@ export default function TrackStatusPage() {
                   >
                     {copied ? '✓ Copied' : '📋 Copy'}
                   </button>
-                  <span className={`status-pill ${
-                    isOnHold
-                      ? 'on-hold'
-                      : displayStatus === 'Claimed'
-                      ? 'claimed'
-                      : displayStatus === 'Releasing'
-                      ? 'releasing'
-                      : displayStatus === 'Processing'
-                      ? 'processing'
-                      : displayStatus === 'For Processing'
-                      ? 'for-processing'
-                      : displayStatus === 'Pending Payment' || displayStatus === 'For Payment'
-                      ? 'payment-pending'
-                      : 'pending'
-                  }`}>
+                  <span className={`status-pill ${getStatusPillClass(matchedRequest.status)}`}>
                     {displayStatus}
                   </span>
-                  {displayStatus === 'Claimed' && activeQueueTab !== 'history' && (
+                  {isClaimedStatus(matchedRequest.status) && activeQueueTab !== 'history' && (
                     <button
                       type="button"
                       onClick={() => handleMarkDone(matchedRequest)}
@@ -940,6 +953,16 @@ export default function TrackStatusPage() {
             >
               Claim Stub
             </button>
+            {displayStatus === 'Pending' && (
+              <button
+                type="button"
+                onClick={handleCancelRequest}
+                className="px-4 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                title="Cancel your pending document request"
+              >
+                <span>✕ Cancel Request</span>
+              </button>
+            )}
             {displayStatus === 'Claimed' && activeQueueTab !== 'history' && (
               <button
                 type="button"
