@@ -1795,14 +1795,14 @@ export default function RequestDocumentPage() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="review-sub-title mb-0">Document Request:</h3>
-                    {currentDocDetails.items.length > 1 && (
+                    {currentDocDetails.items.length > 0 && (
                       <span className="text-xs font-semibold text-slate-500">
-                        {currentDocDetails.items.length} documents selected
+                        {currentDocDetails.items.length} {currentDocDetails.items.length === 1 ? 'document' : 'documents'} selected
                       </span>
                     )}
                   </div>
 
-                  {currentDocDetails.items.length > 1 ? (
+                  {currentDocDetails.items.length > 0 ? (
                     <div className="space-y-2.5">
                       {currentDocDetails.items.map((it) => {
                         const itemCopies = getCopiesForDoc(it.title);
