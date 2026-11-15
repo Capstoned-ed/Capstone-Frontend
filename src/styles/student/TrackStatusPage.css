@@ -54,13 +54,31 @@
   margin: 0 auto;
 }
 
-.track-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #cbd5e1;
-  margin-bottom: 2rem;
+  .track-timeline-card {
+    padding: 1.5rem 1.125rem;
+  }
+
+  .track-card-header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #cbd5e1;
+    margin-bottom: 1.5rem;
+  }
+
+@media (min-width: 640px) {
+  .track-timeline-card {
+    padding: 2.5rem 2rem;
+  }
+
+  .track-card-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 2rem;
+  }
 }
 
 .track-card-lbl {
@@ -72,8 +90,14 @@
 .track-card-est-title {
   font-size: 0.75rem;
   color: #64748b;
-  text-align: right;
+  text-align: left;
   margin-bottom: 0.125rem;
+}
+
+@media (min-width: 640px) {
+  .track-card-est-title {
+    text-align: right;
+  }
 }
 
 .track-card-est-date {
@@ -332,16 +356,26 @@
 .track-selector-row-item {
   width: 100%;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.6rem 0.85rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.7rem 0.85rem;
   border-radius: 0.75rem;
   background-color: #f8fafc;
   border: 1px solid #e2e8f0;
   text-align: left;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+@media (min-width: 640px) {
+  .track-selector-row-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.6rem 0.85rem;
+  }
 }
 
 .track-selector-row-item:hover {
@@ -419,18 +453,19 @@
    ========================================================================== */
 .track-info-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 0.875rem 1.25rem;
   background-color: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 1rem;
-  padding: 1.125rem 1.25rem;
+  padding: 1rem 1.125rem;
   margin-bottom: 2rem;
 }
 
 @media (min-width: 640px) {
   .track-info-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding: 1.125rem 1.25rem;
   }
 }
 
@@ -452,9 +487,16 @@
   font-size: 0.875rem;
   font-weight: 700;
   color: #1e293b;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
+}
+
+@media (min-width: 640px) {
+  .track-info-val {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .track-copy-btn {
@@ -870,9 +912,18 @@
   }
   .claim-stub-field {
     width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+  }
+  .claim-stub-label {
+    white-space: normal;
+    font-size: 0.8125rem;
   }
   .claim-stub-underline {
+    width: 100%;
     white-space: normal;
+    padding: 0 0.25rem 2px 0.25rem;
   }
 }
 

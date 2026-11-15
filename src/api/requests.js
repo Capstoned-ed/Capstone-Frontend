@@ -216,7 +216,7 @@ export function isRequestAssignedToUser(request, currentUser, assignmentsMap = n
     }
   }
 
-  // 2. Check if explicitly claimed by this user in session or local storage
+  // 2. Check if explicitly claimed by this specific user in local storage
   try {
     const claimedRaw = typeof window !== 'undefined' ? localStorage.getItem('regquest_claimed_requests') : null;
     if (claimedRaw) {
@@ -224,7 +224,7 @@ export function isRequestAssignedToUser(request, currentUser, assignmentsMap = n
       for (const k of reqKeys) {
         if (claimedMap[k]) {
           const val = String(claimedMap[k]).trim().toLowerCase();
-          if (candidates.has(val) || val === 'claimed' || val === 'true' || val === '1') {
+          if (candidates.has(val)) {
             return true;
           }
         }
@@ -272,15 +272,6 @@ export function isRequestAssignedToUser(request, currentUser, assignmentsMap = n
 
   for (const candidate of candidates) {
     if (assignedStr === candidate) return true;
-    if (
-      candidate.length >= 4 &&
-      candidate !== 'staff' &&
-      candidate !== 'admin' &&
-      candidate !== 'user' &&
-      (assignedStr.includes(candidate) || candidate.includes(assignedStr))
-    ) {
-      return true;
-    }
   }
 
   return false;
@@ -597,17 +588,8 @@ export function resolveRequestDocType(r, cred = null) {
     return r.document_type;
   }
 
-  // 2. Credential type details object
-  if (!isInvalidDocName(r.credential_type_details?.name)) {
-    return r.credential_type_details.name;
-  }
-
-  // 3. Matched CredentialType model from database
-  if (!isInvalidDocName(cred?.name)) {
-    return cred.name;
-  }
-
-  // 4. Check if remarks contain an explicit document tag, e.g. "[Certification - GPA]" (ignoring non-document tags like [Walk-in FTF])
+  // 2. Check if remarks contain an explicit document tag, e.g. "[Evaluation & TOR]" or "[Certification - GPA]"
+  // (prioritize before credential_type_details.name so multi-document or sub-document requests aren't masked by primary cred type)
   const remarks = String(r.remarks || r.purpose || '').trim();
   const bracketMatch = remarks.match(/\[(.*?)\]/);
   if (bracketMatch && bracketMatch[1] && bracketMatch[1].trim()) {
@@ -622,14 +604,24 @@ export function resolveRequestDocType(r, cred = null) {
     }
   }
 
+  // 3. Credential type details object
+  if (!isInvalidDocName(r.credential_type_details?.name)) {
+    return r.credential_type_details.name;
+  }
+
+  // 4. Matched CredentialType model from database
+  if (!isInvalidDocName(cred?.name)) {
+    return cred.name;
+  }
+
   // 5. Check for specific keywords in remarks that indicate exact certification sub-document
   const remLower = remarks.toLowerCase();
   if (remLower.includes('gpa')) return 'Certification - GPA';
   if (remLower.includes('earned unit') || remLower.includes('earned units')) return 'Certification - Earned Units';
   if (remLower.includes('endorsement')) return 'Certification - Endorsement';
   if (remLower.includes('subjects w/ grades') || remLower.includes('subject w/ grade')) return 'Certification - Subjects w/ grades';
-  if (remLower.includes('authentication') || remLower.includes('auth')) return 'Authentication';
-  if (remLower.includes('transcript') || remLower.includes('tor')) return 'Transcript of Records (TOR)';
+  if (remLower.includes('authentication') || /\bauth\b/.test(remLower)) return 'Authentication';
+  if (remLower.includes('transcript') || /\btor\b/.test(remLower)) return 'Transcript of Records (TOR)';
   if (remLower.includes('dismissal')) return 'Honorable Dismissal';
   if (remLower.includes('evaluation')) return 'Evaluation';
 
@@ -1038,13 +1030,18 @@ export const requestsApi = {
       } else {
         const backendItem = combined[index];
         const locStatusUpper = String(loc.status || '').trim().toUpperCase();
-        // Always prefer local status if locally updated (or non-pending), since backend transitions may lag or fail
-        const preferredStatus =
-          (loc.updated_at && loc.status) || (loc.status && locStatusUpper !== 'PENDING')
-            ? loc.status
-            : (backendItem.status && String(backendItem.status).toUpperCase() !== 'PENDING'
-                ? backendItem.status
-                : (loc.status || backendItem.status));
+        const backendStatusUpper = String(backendItem.status || '').trim().toUpperCase();
+        const locTime = loc.updated_at ? new Date(loc.updated_at).getTime() : 0;
+        const backendTime = backendItem.updated_at ? new Date(backendItem.updated_at).getTime() : 0;
+
+        let preferredStatus = backendItem.status || loc.status;
+        if (loc.status && locStatusUpper !== 'PENDING' && backendStatusUpper === 'PENDING') {
+          preferredStatus = loc.status;
+        } else if (backendItem.status && backendStatusUpper !== 'PENDING' && locStatusUpper === 'PENDING') {
+          preferredStatus = backendItem.status;
+        } else if (loc.status && locTime > backendTime) {
+          preferredStatus = loc.status;
+        }
 
         combined[index] = {
           ...backendItem,
@@ -1090,6 +1087,19 @@ export const requestsApi = {
       .filter(isValidRequest)
       .map((item) => {
         let enriched = { ...item };
+        if (Array.isArray(enriched.payments) && enriched.payments.length > 0) {
+          const latestPay = enriched.payments[0];
+          if (!enriched.payment_status && latestPay?.status) {
+            enriched.payment_status =
+              latestPay.status === 'PENDING' ? 'PAYMENT_SUBMITTED' : latestPay.status;
+          }
+          if (!enriched.or_number && latestPay?.receipt_reference_number) {
+            enriched.or_number = latestPay.receipt_reference_number;
+          }
+          if (!enriched.assessed_amount && latestPay?.amount) {
+            enriched.assessed_amount = latestPay.amount;
+          }
+        }
         if (!enriched.clearance_preview || (!enriched.clearance_preview.startsWith('data:') && !enriched.clearance_preview.startsWith('blob:'))) {
           const clRec = getClearanceAttachment([
             enriched.tracking_number,
@@ -1173,7 +1183,8 @@ export const requestsApi = {
   /**
    * Transition request status (e.g. PAYMENT_VERIFIED -> PROCESSING -> READY_FOR_RELEASE)
    */
-  transition: async (id, payload) => {
+  transition: async (id, payload, { throwOnError = true } = {}) => {
+    let resData = null;
     try {
       const cleanPayload = payload
         ? {
@@ -1182,11 +1193,15 @@ export const requestsApi = {
           }
         : payload;
       const response = await apiClient.patch(`/api/requests/${id}/transition/`, cleanPayload);
-      return response.data;
+      resData = response.data;
+      return resData;
     } catch (apiErr) {
       console.warn('Backend transition notice:', apiErr);
-      throw apiErr;
+      if (throwOnError) {
+        throw apiErr;
+      }
     }
+    return resData || { id, ...payload };
   },
 
   /**
@@ -1284,6 +1299,7 @@ export function isConfirmedForPayment(req) {
   if (
     paymentStatus === 'VERIFIED' ||
     paymentStatus === 'PAYMENT_SUBMITTED' ||
+    (Array.isArray(req.payments) && req.payments.some((p) => p?.status === 'VERIFIED' || p?.status === 'PENDING')) ||
     s === 'FOR PROCESSING' ||
     s === 'FOR_PROCESSING' ||
     s === 'PROCESSING' ||
@@ -1376,10 +1392,45 @@ export function setRequestArchived(idOrTracking, isArchived = true, user = null,
   }
 }
 
+export function preserveDocTagInRemarks(requestOrRemarks, newRemarks = '') {
+  const rawNew = String(newRemarks || '').trim();
+  if (rawNew.startsWith('[')) return rawNew;
+
+  let docTag = '';
+  const existingRemarks =
+    typeof requestOrRemarks === 'string'
+      ? requestOrRemarks
+      : String(requestOrRemarks?.remarks || requestOrRemarks?.purpose || '');
+
+  const match = existingRemarks.trim().match(/^(\[[^\]]+\])/);
+  if (match && match[1]) {
+    const tagLower = match[1].toLowerCase();
+    if (!tagLower.includes('staff') && !tagLower.includes('walk-in') && !tagLower.includes('ftf')) {
+      docTag = match[1];
+    }
+  }
+
+  if (!docTag && requestOrRemarks && typeof requestOrRemarks === 'object') {
+    const docName = String(requestOrRemarks.document_type || '').trim();
+    if (
+      docName &&
+      !/^(document|document request|walk-in|walkin|ftf)$/i.test(docName)
+    ) {
+      docTag = `[${docName}]`;
+    }
+  }
+
+  if (docTag) {
+    return rawNew ? `${docTag} ${rawNew}` : docTag;
+  }
+  return rawNew;
+}
+
 const DOC_CODE_RULES = [
   { match: (s) => /transcript|tor/i.test(s), code: '1' },
   { match: (s) => /honorable|dismissal|hd/i.test(s), code: '2' },
   { match: (s) => /evaluation|eval/i.test(s), code: '5' },
+  { match: (s) => /authentication|auth/i.test(s), code: '6' },
   { match: (s) => /car/i.test(s), code: '4F' },
   { match: (s) => /gpa/i.test(s), code: '4B' },
   { match: (s) => /officially\s*enrolled|enrolled|coe/i.test(s), code: '4A' },

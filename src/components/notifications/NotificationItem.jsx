@@ -176,7 +176,7 @@ export default function NotificationItem({
         return { label: 'Process Request →', path: ROUTES.STAFF.REQUESTS };
       }
       if (user?.role === ROLES.ADMIN) {
-        return { label: 'Admin Requests →', path: ROUTES.ADMIN.REQUESTS };
+        return null;
       }
       const trackParam = related_object_id ? `?trackId=${related_object_id}` : '';
       if (event_type === 'PAYMENT_PENDING') {

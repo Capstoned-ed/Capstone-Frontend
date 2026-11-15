@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ROLES } from '../../constants/roles';
 import StudentEditModal from './StudentEditModal';
+import TablePagination from '../common/TablePagination';
 import '../../styles/admin/StudentTableCard.css';
 
-export default function StudentTableCard({ users = [], onStudentUpdated }) {
-  const [selectedStudent, setSelectedStudent] = useState(null);
-  const [showAllStudents, setShowAllStudents] = useState(false);
+const PAGE_SIZE = 10;
 
-  // Filter ONLY student role accounts
-  const students = users.filter((u) => u.role === ROLES.STUDENT);
+export default function StudentTableCard({ users = [], onStudentUpdated }) {
+  const tableScrollRef = useRef(null);
+  const [lockedMinHeight, setLockedMinHeight] = useState(null);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Format student display name
   const formatStudentName = (student) => {
@@ -41,6 +44,36 @@ export default function StudentTableCard({ users = [], onStudentUpdated }) {
       .join(' ');
   };
 
+  // Filter ONLY student role accounts + search query
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const students = users
+    .filter((u) => u.role === ROLES.STUDENT)
+    .filter((student) => {
+      if (!normalizedQuery) return true;
+      const haystacks = [
+        formatStudentName(student),
+        student.student_id,
+        student.username,
+        student.program,
+        student.course_name,
+        student.year_level,
+        student.email,
+      ]
+        .filter(Boolean)
+        .map((v) => String(v).toLowerCase());
+      return haystacks.some((val) => val.includes(normalizedQuery));
+    });
+
+  const totalPages = Math.max(1, Math.ceil(students.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedStudents = students.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  useEffect(() => {
+    if (totalPages > 1 && paginatedStudents.length === PAGE_SIZE && tableScrollRef.current) {
+      setLockedMinHeight(tableScrollRef.current.offsetHeight);
+    }
+  }, [totalPages, paginatedStudents.length]);
+
   const handleUpdate = (updatedStudent) => {
     if (onStudentUpdated) {
       onStudentUpdated(updatedStudent);
@@ -49,7 +82,7 @@ export default function StudentTableCard({ users = [], onStudentUpdated }) {
   };
 
   return (
-    <div className="student-table-card">
+    <div className="student-table-card" style={{ overflowAnchor: 'none' }}>
       {/* Mint Green Card Header Bar matching reference photo */}
       <div className="student-table-header-bar">
         <div className="student-table-header-left">
@@ -59,19 +92,56 @@ export default function StudentTableCard({ users = [], onStudentUpdated }) {
               <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
             </svg>
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <h3 className="student-table-title">
               Student Accounts Management
             </h3>
             <p className="student-table-desc">
               View, update, and organize student profiles and registration data.
             </p>
+            <div className="relative mt-2.5 max-w-xs sm:max-w-sm">
+              <svg
+                className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Search student by name, ID, program, or email..."
+                className="w-full pl-9 pr-8 py-1.5 text-xs bg-white border border-emerald-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCurrentPage(1);
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                  aria-label="Clear student search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Student Table */}
-      <div className="student-table-scroll">
+      <div
+        ref={tableScrollRef}
+        className="student-table-scroll"
+        style={totalPages > 1 && lockedMinHeight ? { minHeight: `${lockedMinHeight}px` } : undefined}
+      >
         <table className="student-table-element">
           <thead>
             <tr className="student-table-thead-tr">
@@ -91,7 +161,7 @@ export default function StudentTableCard({ users = [], onStudentUpdated }) {
                 </td>
               </tr>
             ) : (
-              (showAllStudents ? students : students.slice(0, 10)).map((student) => {
+              paginatedStudents.map((student) => {
                 const displayName = formatStudentName(student);
                 const idNumber = student.student_id || student.username || '—';
                 const program = student.program || 'B.S in Information Technology';
@@ -141,29 +211,15 @@ export default function StudentTableCard({ users = [], onStudentUpdated }) {
             )}
           </tbody>
         </table>
-        {students.length > 10 && (
-          <div className="table-see-more-wrap">
-            <button
-              type="button"
-              onClick={() => setShowAllStudents((prev) => !prev)}
-              className="table-see-more-btn"
-            >
-              <span>
-                {showAllStudents ? 'See Less' : 'See More'}
-              </span>
-              <svg
-                className={`w-4 h-4 transition-transform ${showAllStudents ? 'rotate-180' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2.5}
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-          </div>
-        )}
       </div>
+
+      <TablePagination
+        currentPage={safePage}
+        totalItems={students.length}
+        pageSize={PAGE_SIZE}
+        onPageChange={setCurrentPage}
+        accentColor="emerald"
+      />
 
       {/* Student Profile Edit Modal */}
       <StudentEditModal

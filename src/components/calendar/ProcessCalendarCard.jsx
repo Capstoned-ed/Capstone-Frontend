@@ -105,6 +105,14 @@ export default function ProcessCalendarCard({
 
     // Map all requests directly to their release date so that EVERY request with a release date
     // on that day is shown, regardless of whether it is already completed or still processing/pending.
+    const isSundayDateStr = (dateStr) => {
+      if (!dateStr) return false;
+      const [y, m, d] = dateStr.split('-').map(Number);
+      return new Date(y, m - 1, d).getDay() === 0;
+    };
+
+    const skipSunday = (dateStr) => (isSundayDateStr(dateStr) ? addDaysToDateStr(dateStr, 1) : dateStr);
+
     requests.forEach((r) => {
       const relRaw = r.release_date || r.date_of_release || r.target_release_date;
       let relDate = relRaw ? toLocalDateStr(relRaw) : null;
@@ -115,6 +123,7 @@ export default function ProcessCalendarCard({
         }
       }
       if (relDate) {
+        relDate = skipSunday(relDate);
         if (!dailyReleasingRequestsMap[relDate]) {
           dailyReleasingRequestsMap[relDate] = [];
         }
@@ -137,11 +146,13 @@ export default function ProcessCalendarCard({
       );
       const totalProcessingInBatch = processingReqs.length;
 
-      // Determine batch expected release date
+      // Determine batch expected release date (never on Sunday)
       const firstWithRelDate = reqs.find((r) => (r.release_date || r.date_of_release) && (r.release_date || r.date_of_release) > reqDate);
-      const releaseDate = firstWithRelDate
-        ? toLocalDateStr(firstWithRelDate.release_date || firstWithRelDate.date_of_release)
-        : addDaysToDateStr(reqDate, 5);
+      const releaseDate = skipSunday(
+        firstWithRelDate
+          ? toLocalDateStr(firstWithRelDate.release_date || firstWithRelDate.date_of_release)
+          : addDaysToDateStr(reqDate, 5)
+      );
 
       // Also ensure all batch requests are in dailyReleasingRequestsMap for this releaseDate if not already there
       if (!dailyReleasingRequestsMap[releaseDate]) {
@@ -150,7 +161,7 @@ export default function ProcessCalendarCard({
       reqs.forEach((r) => {
         const rKey = String(r.id || r.rawId || r.tracking_number);
         const specificRel = (r.release_date || r.date_of_release) ? toLocalDateStr(r.release_date || r.date_of_release) : null;
-        const targetRel = specificRel || releaseDate;
+        const targetRel = skipSunday(specificRel || releaseDate);
         if (!dailyReleasingRequestsMap[targetRel]) {
           dailyReleasingRequestsMap[targetRel] = [];
         }
@@ -159,18 +170,28 @@ export default function ProcessCalendarCard({
         }
       });
 
-      // Processing days are the days strictly between reqDate and releaseDate
+      // Processing days are the non-Sunday days strictly between reqDate and releaseDate
       const diffDays = getDaysBetween(reqDate, releaseDate);
-      const numProcessingDays = Math.max(1, diffDays - 1);
+      const validProcessingDates = [];
+      for (let i = 1; i < diffDays; i++) {
+        const candidate = addDaysToDateStr(reqDate, i);
+        if (!isSundayDateStr(candidate)) {
+          validProcessingDates.push(candidate);
+        }
+      }
+      if (validProcessingDates.length === 0) {
+        validProcessingDates.push(skipSunday(addDaysToDateStr(reqDate, 1)));
+      }
+      const numProcessingDays = validProcessingDates.length;
 
-      // Divide ONLY the for-processing requests across scheduled processing days
+      // Divide ONLY the for-processing requests across scheduled non-Sunday processing days
       if (totalProcessingInBatch > 0) {
         const baseQuota = Math.floor(totalProcessingInBatch / numProcessingDays);
         const remainder = totalProcessingInBatch % numProcessingDays;
 
         let startIndex = 0;
         for (let i = 0; i < numProcessingDays; i++) {
-          const procDate = addDaysToDateStr(reqDate, i + 1);
+          const procDate = validProcessingDates[i];
           const dailyQuota = baseQuota + (i < remainder ? 1 : 0);
           const slice = processingReqs.slice(startIndex, startIndex + dailyQuota);
           startIndex += dailyQuota;

@@ -30,9 +30,20 @@ export default function MainLayout({ children }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans text-slate-800">
+    <div className="min-h-screen w-full overflow-x-clip bg-slate-50 flex flex-col md:flex-row font-sans text-slate-800">
       <header className="md:hidden bg-[#0B0B36] text-white px-4 py-3 flex items-center justify-between sticky top-0 z-40 shadow-md">
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2.5">
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-2 -ml-2 rounded-lg text-slate-200 hover:text-white hover:bg-white/10"
+            title="Toggle Navigation Menu"
+            aria-label="Toggle Navigation Menu"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
           <span className="font-bold text-lg tracking-tight">RegQuest</span>
           <span className="text-xs bg-white/10 px-2 py-0.5 rounded text-amber-300 capitalize font-medium">
             {user?.role}
@@ -40,16 +51,6 @@ export default function MainLayout({ children }) {
         </div>
         <div className="flex items-center space-x-2">
           <NotificationBell variant="dark" dropdownPositionClass="top-full right-0 mt-2" />
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 rounded-lg text-slate-200 hover:text-white hover:bg-white/10"
-            title="Toggle Navigation Menu"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
         </div>
       </header>
 
@@ -77,7 +78,7 @@ export default function MainLayout({ children }) {
         />
       </div>
 
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-y-auto">
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-y-auto overflow-x-hidden">
         <main className={`flex-1 w-full ${isAdminDashboard || isStudentDashboard || isStaffDashboard ? 'p-0 max-w-none' : isStudentView ? 'px-4 sm:px-8 pt-4 sm:pt-6 pb-6 max-w-7xl mx-auto' : 'p-6 sm:p-8 max-w-7xl mx-auto'}`}>
           {children ? children : <Outlet />}
         </main>

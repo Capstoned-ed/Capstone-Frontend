@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import paymentsApi, { getStoredPaymentProof } from '../../api/payments';
+import { saveStoredNotification } from '../../api/notifications';
+import { getStaffAssignments } from '../../api/requests';
 import useToast from '../../hooks/useToast';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -64,7 +66,8 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+    const hasValidExt = /\.(png|jpe?g|gif|webp|bmp|jfif|pdf)$/i.test(file.name || '');
+    if (!file.type.startsWith('image/') && file.type !== 'application/pdf' && !hasValidExt) {
       toast.warning('Please upload a valid image file (PNG, JPG) or PDF.');
       return;
     }
@@ -93,6 +96,7 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
 
     setSubmitting(true);
     try {
+      const trackingCode = request?.tracking_number || request?.trackingId || request?.id || '';
       const finalOrNumber = orNumberInput.trim() || (paymentOption === 'PERSONAL' ? 'Paid at USTP Cashier (FTF)' : 'Submitted at Window');
       await paymentsApi.submit({
         requestId: request.rawId || request.id,
@@ -105,6 +109,31 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
         studentName: request.student_name || user?.full_name || user?.username || 'Student',
         studentId: request.student_id || user?.student_id || user?.username || '',
         userId: request.user || user?.id,
+      });
+
+      const studentName =
+        user?.full_name ||
+        [user?.first_name, user?.last_name].filter(Boolean).join(' ') ||
+        user?.username ||
+        'A student';
+      const assignmentsMap = getStaffAssignments();
+      const assignedStaff =
+        request?.assigned_staff ||
+        assignmentsMap[String(trackingCode)] ||
+        assignmentsMap[String(request?.rawId)] ||
+        assignmentsMap[String(request?.id)] ||
+        null;
+
+      saveStoredNotification({
+        event_type: 'PAYMENT_SUBMITTED',
+        title: 'Student Payment Submitted',
+        message: `${studentName} submitted ${paymentOption === 'ONLINE' ? 'online receipt' : 'face-to-face'} payment for request (${trackingCode}).`,
+        target_role: 'staff',
+        target_roles: ['staff', 'registrar'],
+        target_name: assignedStaff || undefined,
+        tracking_number: trackingCode,
+        related_object_type: 'CredentialRequest',
+        related_object_id: String(request?.rawId || request?.id || trackingCode),
       });
 
       toast.success(

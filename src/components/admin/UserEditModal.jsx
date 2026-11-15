@@ -3,10 +3,35 @@ import { ROLES } from '../../constants/roles';
 import usersApi from '../../api/users';
 import useToast from '../../hooks/useToast';
 
+const getNameError = (val, label = 'Name') => {
+  if (!val) return '';
+  return /[^a-zA-Z\u00C0-\u024F\u1E00-\u1EFF\s]/.test(val)
+    ? `${label} must not contain numbers or special characters.`
+    : '';
+};
+
+const getNumericError = (val, label = 'Contact Number') => {
+  if (!val) return '';
+  return /\D/.test(val) ? `${label} must contain numbers only.` : '';
+};
+
 function EditUserForm({ user, onClose, onUserUpdated }) {
   const toast = useToast();
+  const cachedStaff = (() => {
+    try {
+      const profiles = JSON.parse(localStorage.getItem('regquest_staff_profiles') || '{}');
+      return profiles[user.username] || profiles[String(user.id)] || {};
+    } catch {
+      return {};
+    }
+  })();
+
   const [formData, setFormData] = useState({
-    email: user.email || '',
+    first_name: user.first_name || cachedStaff.first_name || '',
+    last_name: user.last_name || cachedStaff.last_name || '',
+    email: user.email || cachedStaff.email || '',
+    contact_number: user.contact_number || cachedStaff.contact_number || '',
+    birth_date: user.birth_date || cachedStaff.birth_date || '',
     role: user.role || ROLES.STAFF,
     is_active: user.is_active ?? true,
   });
@@ -16,61 +41,102 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    const nextVal = type === 'checkbox' ? checked : value;
     setFormData((prev) => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]: nextVal,
     }));
-    if (errors[name]) {
+
+    if (name === 'first_name') {
+      setErrors((prev) => ({ ...prev, first_name: getNameError(value, 'First Name') || null }));
+    } else if (name === 'last_name') {
+      setErrors((prev) => ({ ...prev, last_name: getNameError(value, 'Last Name') || null }));
+    } else if (name === 'contact_number') {
+      setErrors((prev) => ({ ...prev, contact_number: getNumericError(value, 'Contact Number') || null }));
+    } else if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: null }));
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setErrors({});
+    const validationErrors = {};
+    const firstErr = getNameError(formData.first_name, 'First Name');
+    const lastErr = getNameError(formData.last_name, 'Last Name');
+    const contactErr = getNumericError(formData.contact_number, 'Contact Number');
 
+    if (firstErr) validationErrors.first_name = firstErr;
+    if (lastErr) validationErrors.last_name = lastErr;
+    if (contactErr) validationErrors.contact_number = contactErr;
     if (!formData.email.trim()) {
-      setErrors({ email: 'Email address cannot be empty.' });
+      validationErrors.email = 'Email address cannot be empty.';
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      toast.error(Object.values(validationErrors)[0]);
       return;
     }
+    setErrors({});
 
     setLoading(true);
     try {
+      const firstName = formData.first_name.trim();
+      const lastName = formData.last_name.trim();
+      const fullName = `${firstName} ${lastName}`.trim();
+      const emailLower = formData.email.trim().toLowerCase();
+
       const payload = {
-        email: formData.email.trim(),
+        first_name: firstName,
+        last_name: lastName,
+        email: emailLower,
+        contact_number: formData.contact_number.trim(),
+        birth_date: formData.birth_date || null,
         role: formData.role,
         is_active: formData.is_active,
       };
 
       const updated = await usersApi.update(user.id, payload);
+      const merged = {
+        ...updated,
+        first_name: firstName,
+        last_name: lastName,
+        full_name: fullName || updated.username || user.username,
+        email: emailLower,
+        contact_number: formData.contact_number.trim(),
+        birth_date: formData.birth_date || null,
+        role: formData.role,
+        is_active: formData.is_active,
+      };
 
-      // Persist edited email directly into student or staff profiles
+      // Persist edited info directly into student or staff profiles
       try {
-        const emailLower = formData.email.trim().toLowerCase();
         const uRole = (formData.role || user.role || '').toLowerCase();
         const uKey = user.username || String(user.id);
 
         if (uRole === 'student') {
           const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
-          if (profiles[uKey]) profiles[uKey].email = emailLower;
-          if (user.id && profiles[String(user.id)]) profiles[String(user.id)].email = emailLower;
+          const pData = { ...(profiles[uKey] || {}), ...merged };
+          profiles[uKey] = pData;
+          if (user.id) profiles[String(user.id)] = { ...(profiles[String(user.id)] || {}), ...pData };
           localStorage.setItem('regquest_student_profiles', JSON.stringify(profiles));
         } else {
           const staffProfiles = JSON.parse(localStorage.getItem('regquest_staff_profiles') || '{}');
-          if (staffProfiles[uKey]) staffProfiles[uKey].email = emailLower;
-          if (user.id && staffProfiles[String(user.id)]) staffProfiles[String(user.id)].email = emailLower;
+          const sData = { ...(staffProfiles[uKey] || {}), ...merged };
+          staffProfiles[uKey] = sData;
+          if (user.id) staffProfiles[String(user.id)] = { ...(staffProfiles[String(user.id)] || {}), ...sData };
           localStorage.setItem('regquest_staff_profiles', JSON.stringify(staffProfiles));
         }
 
         window.dispatchEvent(new CustomEvent('regquest_profile_updated', {
-          detail: { username: user.username, email: emailLower }
+          detail: { username: user.username, email: emailLower, full_name: fullName }
         }));
       } catch (profileErr) {
-        console.warn('Could not update profile email storage:', profileErr);
+        console.warn('Could not update profile storage:', profileErr);
       }
 
-      toast.success(`User "${user.username}" updated successfully.`);
-      onUserUpdated(updated);
+      toast.success(`User "${fullName || user.username}" updated successfully.`);
+      onUserUpdated(merged);
       onClose();
     } catch (err) {
       const resData = err.response?.data;
@@ -120,42 +186,133 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
         </span>
       </div>
 
-      {/* Email */}
-      <div>
-        <label className="block text-xs font-semibold text-slate-700 mb-1">
-          Institutional Email <span className="text-rose-500">*</span>
-        </label>
-        <input
-          type="email"
-          name="email"
-          value={formData.email}
-          onChange={handleChange}
-          className={`w-full px-3 py-2 border rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 ${
-            errors.email
-              ? 'border-rose-400 focus:ring-rose-200'
-              : 'border-slate-300 focus:ring-blue-500/20 focus:border-blue-500'
-          }`}
-        />
-        {errors.email && (
-          <p className="text-xs text-rose-500 mt-1 font-medium">{errors.email}</p>
-        )}
+      {/* First Name & Last Name */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">
+            First Name
+          </label>
+          <input
+            type="text"
+            name="first_name"
+            value={formData.first_name}
+            onChange={handleChange}
+            placeholder="First Name"
+            className={`w-full px-3 py-2 border rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 ${
+              errors.first_name
+                ? 'border-rose-400 focus:ring-rose-200'
+                : 'border-slate-300 focus:ring-blue-500/20 focus:border-blue-500'
+            }`}
+          />
+          {errors.first_name && (
+            <p className="text-xs text-rose-500 mt-1 font-medium">{errors.first_name}</p>
+          )}
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">
+            Last Name
+          </label>
+          <input
+            type="text"
+            name="last_name"
+            value={formData.last_name}
+            onChange={handleChange}
+            placeholder="Last Name"
+            className={`w-full px-3 py-2 border rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 ${
+              errors.last_name
+                ? 'border-rose-400 focus:ring-rose-200'
+                : 'border-slate-300 focus:ring-blue-500/20 focus:border-blue-500'
+            }`}
+          />
+          {errors.last_name && (
+            <p className="text-xs text-rose-500 mt-1 font-medium">{errors.last_name}</p>
+          )}
+        </div>
       </div>
 
-      {/* Role Selector */}
-      <div>
-        <label className="block text-xs font-semibold text-slate-700 mb-1">
-          Select Role Assignment <span className="text-rose-500">*</span>
-        </label>
-        <select
-          name="role"
-          value={formData.role}
-          onChange={handleChange}
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-        >
-          <option value={ROLES.REGISTRAR}>Registrar — Review and approve/reject credential requests</option>
-          <option value={ROLES.STAFF}>Staff — Process approved requests, prepare documents, and update statuses</option>
-          <option value={ROLES.ADMIN}>Admin — Manage user accounts, assign roles, system settings, reports &amp; monitor activities</option>
-        </select>
+      {/* Email & Contact Number */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">
+            Institutional Email <span className="text-rose-500">*</span>
+          </label>
+          <input
+            type="email"
+            name="email"
+            value={formData.email}
+            onChange={handleChange}
+            className={`w-full px-3 py-2 border rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 ${
+              errors.email
+                ? 'border-rose-400 focus:ring-rose-200'
+                : 'border-slate-300 focus:ring-blue-500/20 focus:border-blue-500'
+            }`}
+          />
+          {errors.email && (
+            <p className="text-xs text-rose-500 mt-1 font-medium">{errors.email}</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">
+            Contact Number
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            name="contact_number"
+            value={formData.contact_number}
+            onChange={handleChange}
+            placeholder="e.g. 09123456789"
+            className={`w-full px-3 py-2 border rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 ${
+              errors.contact_number
+                ? 'border-rose-400 focus:ring-rose-200'
+                : 'border-slate-300 focus:ring-blue-500/20 focus:border-blue-500'
+            }`}
+          />
+          {errors.contact_number && (
+            <p className="text-xs text-rose-500 mt-1 font-medium">{errors.contact_number}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Birthdate & Role Selector */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">
+            Birthdate
+          </label>
+          <input
+            type="date"
+            name="birth_date"
+            value={formData.birth_date}
+            max={new Date().toISOString().split('T')[0]}
+            onChange={handleChange}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">
+            Select Role Assignment <span className="text-rose-500">*</span>
+          </label>
+          <select
+            name="role"
+            value={formData.role}
+            onChange={handleChange}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+          >
+            <option value={ROLES.REGISTRAR}>Registrar</option>
+            <option value={ROLES.STAFF}>Staff</option>
+            <option value={ROLES.ADMIN}>Admin</option>
+          </select>
+          <p className="text-[11px] text-slate-500 mt-1">
+            {formData.role === ROLES.REGISTRAR
+              ? 'Review and approve/reject credential requests'
+              : formData.role === ROLES.ADMIN
+              ? 'Manage user accounts, assign roles, system settings & reports'
+              : 'Process approved requests, prepare documents, and update statuses'}
+          </p>
+        </div>
       </div>
 
       {/* Active Status Checkbox */}
@@ -195,7 +352,7 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
           {loading && (
             <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
           )}
-          <span>{loading ? 'Saving Changes...' : 'Save Role Changes'}</span>
+          <span>{loading ? 'Saving Changes...' : 'Save Changes'}</span>
         </button>
       </div>
     </form>
@@ -214,7 +371,7 @@ export default function UserEditModal({ user, isOpen, onClose, onUserUpdated }) 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
       <div
-        className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 transform transition-all"
+        className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full overflow-hidden border border-slate-200 transform transition-all"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -226,8 +383,8 @@ export default function UserEditModal({ user, isOpen, onClose, onUserUpdated }) 
               </svg>
             </div>
             <div>
-              <h3 className="text-base font-bold text-white tracking-tight">Change Role &amp; Access</h3>
-              <p className="text-xs text-blue-100">Update account permissions for {displayName}</p>
+              <h3 className="text-base font-bold text-white tracking-tight">Update Staff &amp; Role Profile</h3>
+              <p className="text-xs text-blue-100">Update account information, role, and access for {displayName}</p>
             </div>
           </div>
           <button
