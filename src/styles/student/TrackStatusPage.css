@@ -289,6 +289,18 @@
   border: 1px solid #fed7aa;
 }
 
+.status-pill.rejected {
+  background-color: #ffe4e6;
+  color: #be123c;
+  border: 1px solid #fecdd3;
+}
+
+.status-pill.cancelled {
+  background-color: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
 /* ==========================================================================
    Submitted Requests Selector Card (Single Row Items, Max 3 Visible, Scrollable)
    ========================================================================== */

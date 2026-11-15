@@ -26,8 +26,15 @@ import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
 import { StaffRequestsTable } from '../../components/staff';
 import PredictedInsightCard from '../../components/admin/PredictedInsightCard';
 import useToast from '../../hooks/useToast';
+import {
+  REQUEST_STATUS,
+  normalizeToBackendStatus,
+  formatStatusDisplay,
+  isClaimedStatus,
+} from '../../constants/workflowStatuses';
 import '../../styles/staff/StaffDashboard.css';
 import '../../styles/staff/StaffRequestsPage.css';
+
 function calculateReleaseDate(createdAt, processingDays = 5) {
   if (!createdAt) return 'N/A';
   const d = new Date(createdAt);
@@ -41,50 +48,6 @@ function calculateReleaseDate(createdAt, processingDays = 5) {
     }
   }
   return d.toISOString().split('T')[0];
-}
-
-function formatStatusDisplay(rawStatus) {
-  if (!rawStatus) return 'Pending';
-  const s = rawStatus.trim().toUpperCase();
-  switch (s) {
-    case 'PENDING':
-    case 'RECEIVED':
-    case 'REQUEST SUBMITTED':
-      return 'Pending';
-    case 'FOR_PAYMENT':
-    case 'FOR PAYMENT':
-    case 'PAYMENT_PENDING':
-    case 'PAYMENT PENDING':
-    case 'PENDING_PAYMENT':
-    case 'PENDING PAYMENT':
-      return 'Pending Payment';
-    case 'PAYMENT_VERIFIED':
-    case 'PAYMENT VERIFIED':
-    case 'FOR_PROCESSING':
-    case 'FOR PROCESSING':
-      return 'For Processing';
-    case 'PROCESSING':
-    case 'DOCUMENT PREPARATION':
-    case 'RELEASE SCHEDULE CONFIRMED':
-      return 'Processing';
-    case 'READY_FOR_RELEASE':
-    case 'READY FOR RELEASE':
-    case 'READY_FOR_PICKUP':
-    case 'READY FOR PICKUP':
-    case 'FOR_RELEASE':
-    case 'FOR RELEASE':
-      return 'For Release';
-    case 'RELEASED':
-    case 'CLAIMED':
-    case 'CLAIMED / RELEASED':
-      return 'Claimed';
-    case 'ON HOLD':
-    case 'REQUIREMENTS_VERIFICATION':
-      return 'On Hold';
-    default:
-      if (s === 'FOR RELEASE' || s === 'FOR_RELEASE') return 'For Release';
-      return rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
-  }
 }
 
 export default function StaffDashboard() {
@@ -726,41 +689,29 @@ export default function StaffDashboard() {
   }, [isCalendarExpanded, currentWeekDays, batchSchedule]);
 
   const getStatusBadge = (status) => {
-    const s = String(status || '').trim();
-    switch (s) {
-      case 'Pending':
-      case 'PENDING':
-      case 'Pendong':
+    const norm = normalizeToBackendStatus(status);
+    switch (norm) {
+      case REQUEST_STATUS.PENDING:
         return <span className="status-pill pending">Pending</span>;
-      case 'For Payment':
-      case 'FOR PAYMENT':
-      case 'FOR_PAYMENT':
-      case 'Pending Payment':
-      case 'PAYMENT_PENDING':
-      case 'Payment Pending':
+      case REQUEST_STATUS.PAYMENT_PENDING:
         return <span className="status-pill for-payment">Pending Payment</span>;
-      case 'For Processing':
-      case 'FOR_PROCESSING':
-      case 'PAYMENT_VERIFIED':
+      case REQUEST_STATUS.PAYMENT_VERIFIED:
         return <span className="status-pill for-processing">For Processing</span>;
-      case 'Processing':
-      case 'PROCESSING':
+      case REQUEST_STATUS.PROCESSING:
         return <span className="status-pill processing">Processing</span>;
-      case 'For release':
-      case 'For Release':
-      case 'Releasing':
-      case 'RELEASING':
-      case 'READY_FOR_RELEASE':
+      case REQUEST_STATUS.READY_FOR_RELEASE:
         return <span className="status-pill for-release">For release</span>;
-      case 'Claimed':
-      case 'RELEASED':
+      case REQUEST_STATUS.RELEASED:
         return <span className="status-pill claimed">Claimed</span>;
-      case 'On Hold':
-      case 'on Hold':
-      case 'ON_HOLD':
+      case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
         return <span className="status-pill on-hold">On Hold</span>;
+      case REQUEST_STATUS.REQUIREMENTS_REJECTED:
+      case REQUEST_STATUS.REJECTED:
+        return <span className="status-pill rejected">Rejected</span>;
+      case REQUEST_STATUS.CANCELLED:
+        return <span className="status-pill cancelled">Cancelled</span>;
       default:
-        return <span className="status-pill pending">{s}</span>;
+        return <span className="status-pill pending">{formatStatusDisplay(norm) || 'Pending'}</span>;
     }
   };
 
