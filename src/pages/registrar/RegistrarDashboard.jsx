@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
 import ustpBuilding from '../../assets/USTP.png';
 import PredictedInsightCard from '../../components/admin/PredictedInsightCard';
 import RequestVolumeCard from '../../components/admin/RequestVolumeCard';
+import TablePagination from '../../components/common/TablePagination';
 import useDashboardData from '../../hooks/useDashboardData';
 import { useAuth } from '../../hooks/useAuth';
 import useToast from '../../hooks/useToast';
@@ -165,6 +166,27 @@ export default function RegistrarDashboard() {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [processModalOpen, setProcessModalOpen] = useState(false);
   const [archivedMap, setArchivedMap] = useState(() => getArchivedRequestsMap());
+  const [staffMetricsPage, setStaffMetricsPage] = useState(1);
+  const STAFF_METRICS_PAGE_SIZE = 5;
+  const staffMetricsTableRef = useRef(null);
+  const [lockedStaffMetricsHeight, setLockedStaffMetricsHeight] = useState(null);
+
+  const totalStaffMetricsPages = Math.max(1, Math.ceil(staffMetrics.length / STAFF_METRICS_PAGE_SIZE));
+  const safeStaffMetricsPage = Math.min(staffMetricsPage, totalStaffMetricsPages);
+  const paginatedStaffMetrics = staffMetrics.slice(
+    (safeStaffMetricsPage - 1) * STAFF_METRICS_PAGE_SIZE,
+    safeStaffMetricsPage * STAFF_METRICS_PAGE_SIZE
+  );
+
+  useEffect(() => {
+    if (
+      totalStaffMetricsPages > 1 &&
+      paginatedStaffMetrics.length === STAFF_METRICS_PAGE_SIZE &&
+      staffMetricsTableRef.current
+    ) {
+      setLockedStaffMetricsHeight(staffMetricsTableRef.current.offsetHeight);
+    }
+  }, [totalStaffMetricsPages, paginatedStaffMetrics.length]);
 
   useEffect(() => {
     const handleArchivedUpdate = () => {
@@ -531,7 +553,7 @@ export default function RegistrarDashboard() {
             </div>
 
             {/* Staff Performance Metrics Card */}
-            <div className="admin-card">
+            <div className="admin-card" style={{ overflowAnchor: 'none' }}>
               <div>
                 <div className="admin-card-header-stacked">
                   <h3 className="admin-card-title">
@@ -558,7 +580,15 @@ export default function RegistrarDashboard() {
                     No active staff performance metrics found.
                   </div>
                 ) : (
-                  <div className="staff-table-scroll">
+                  <div
+                    ref={staffMetricsTableRef}
+                    className="staff-table-scroll"
+                    style={
+                      totalStaffMetricsPages > 1 && lockedStaffMetricsHeight
+                        ? { minHeight: `${lockedStaffMetricsHeight}px` }
+                        : undefined
+                    }
+                  >
                     <table className="staff-table">
                       <thead>
                         <tr className="staff-table-head-row">
@@ -570,7 +600,7 @@ export default function RegistrarDashboard() {
                         </tr>
                       </thead>
                       <tbody className="staff-table-tbody">
-                        {staffMetrics.map((staff) => (
+                        {paginatedStaffMetrics.map((staff) => (
                           <tr key={staff.name} className="staff-table-row">
                             <td className="staff-table-name">
                               {staff.name}
@@ -594,6 +624,15 @@ export default function RegistrarDashboard() {
                   </div>
                 )}
               </div>
+              {!loading && staffMetrics.length > 0 && (
+                <TablePagination
+                  currentPage={safeStaffMetricsPage}
+                  totalItems={staffMetrics.length}
+                  pageSize={STAFF_METRICS_PAGE_SIZE}
+                  onPageChange={setStaffMetricsPage}
+                  accentColor="blue"
+                />
+              )}
             </div>
           </div>
         </section>
