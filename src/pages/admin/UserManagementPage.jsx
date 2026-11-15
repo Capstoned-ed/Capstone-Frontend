@@ -149,6 +149,7 @@ export default function UserManagementPage() {
       activity.unshift({
         id: `act-${Date.now()}`,
         actor: (currentAdmin?.username || 'admin').toLowerCase(),
+        actorId: currentAdmin?.id ? String(currentAdmin.id) : null,
         actorName: currentAdmin?.full_name || currentAdmin?.username || 'Administrator',
         targetName,
         targetId: updatedUser.username || String(updatedUser.id),
@@ -171,6 +172,7 @@ export default function UserManagementPage() {
       activity.unshift({
         id: `act-${Date.now()}`,
         actor: (currentAdmin?.username || 'admin').toLowerCase(),
+        actorId: currentAdmin?.id ? String(currentAdmin.id) : null,
         actorName: currentAdmin?.full_name || currentAdmin?.username || 'Administrator',
         targetName: `Account ID #${userId}`,
         targetId: String(userId),
@@ -370,6 +372,7 @@ export default function UserManagementPage() {
         activity.unshift({
           id: `act-${Date.now()}`,
           actor: (currentAdmin?.username || 'admin').toLowerCase(),
+          actorId: currentAdmin?.id ? String(currentAdmin.id) : null,
           actorName: currentAdmin?.full_name || currentAdmin?.username || 'Administrator',
           targetName: fullName,
           targetId: finalIdNumber,
@@ -586,6 +589,7 @@ export default function UserManagementPage() {
         activity.unshift({
           id: `act-${Date.now()}`,
           actor: (currentAdmin?.username || 'admin').toLowerCase(),
+          actorId: currentAdmin?.id ? String(currentAdmin.id) : null,
           actorName: currentAdmin?.full_name || currentAdmin?.username || 'Administrator',
           targetName: fullName,
           targetId: finalStudentId,

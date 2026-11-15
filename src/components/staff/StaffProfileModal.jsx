@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { ROLES } from '../../constants/roles';
 import { ROUTES } from '../../constants/routes';
 import usersApi from '../../api/users';
+import auditApi from '../../api/audit';
 import { getProcessedActions } from '../../api/requests';
 import useToast from '../../hooks/useToast';
 
@@ -154,17 +155,23 @@ export default function StaffProfileModal({ isOpen, onClose }) {
   // STRICT RULE: Only show actions that were processed using THIS authenticated account!
   // If this account has never processed anything, display an empty log (0 count).
   useEffect(() => {
-    if (isOpen) {
-      setLoadingUpdates(true);
+    if (!isOpen) return;
 
+    let ignore = false;
+    setLoadingUpdates(true);
+
+    const loadLogs = async () => {
       try {
         const currentUsername = (user?.username || '').toLowerCase();
         const currentUserId = user?.id ? String(user.id) : null;
 
-        // 1. Load requests processed by this specific account
+        // 1. Load backend-persisted AuditLog entries for this authenticated user
+        const backendLogs = await auditApi.getMyLogs();
+
+        // 2. Load requests processed by this specific account (localStorage)
         const processedActions = getProcessedActions(user);
 
-        // 2. Load account provisioning actions performed by this account (e.g. if Admin)
+        // 3. Load account provisioning actions performed by this account (localStorage)
         const customActivity = JSON.parse(localStorage.getItem('regquest_account_activity') || '[]');
         const myActivity = Array.isArray(customActivity)
           ? customActivity.filter((act) => {
@@ -175,30 +182,44 @@ export default function StaffProfileModal({ isOpen, onClose }) {
             })
           : [];
 
-        // Combine only actions performed by THIS account
-        const combined = [...processedActions, ...myActivity];
+        // Combine backend logs + localStorage actions (backend first so it wins on deduplication)
+        const combined = [...backendLogs, ...processedActions, ...myActivity];
 
-        // Deduplicate
         const unique = [];
         const seenIds = new Set();
         combined.forEach((item) => {
           if (!item || !item.id) return;
-          if (!seenIds.has(item.id)) {
-            seenIds.add(item.id);
-            unique.push(item);
-          }
+          if (seenIds.has(item.id)) return;
+          // Avoid near-duplicate entries when both backend AuditLog and localStorage recorded the same event
+          const isNearDuplicate =
+            item.source !== 'backend' &&
+            unique.some(
+              (existing) =>
+                existing.source === 'backend' &&
+                String(existing.targetId || '').toLowerCase() === String(item.targetId || '').toLowerCase() &&
+                Math.abs(new Date(existing.timestamp) - new Date(item.timestamp)) < 15000
+            );
+          if (isNearDuplicate) return;
+
+          seenIds.add(item.id);
+          unique.push(item);
         });
 
         // Sort descending by timestamp
         unique.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        setAccountUpdates(unique);
+        if (!ignore) setAccountUpdates(unique);
       } catch (err) {
         console.warn('Failed to load profile account updates:', err);
-        setAccountUpdates([]);
+        if (!ignore) setAccountUpdates([]);
       } finally {
-        setLoadingUpdates(false);
+        if (!ignore) setLoadingUpdates(false);
       }
-    }
+    };
+
+    loadLogs();
+    return () => {
+      ignore = true;
+    };
   }, [isOpen, user]);
 
   if (!isOpen) return null;
@@ -475,7 +496,7 @@ export default function StaffProfileModal({ isOpen, onClose }) {
           {activeTab === 'overview' && (
             <div className="mt-5">
               {/* Summary Metrics Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-5">
                 <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-sm">
                   <span className="text-xs font-semibold text-slate-500 block mb-1">
                     {isAdmin ? 'Actions Processed' : 'Processed Requests'}
@@ -499,18 +520,6 @@ export default function StaffProfileModal({ isOpen, onClose }) {
                   </div>
                   <span className="text-[11px] text-emerald-600 font-medium mt-0.5 block">
                     &bull; Active Session ({user?.username})
-                  </span>
-                </div>
-
-                <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-sm">
-                  <span className="text-xs font-semibold text-slate-500 block mb-1">
-                    Assigned Office
-                  </span>
-                  <div className="text-sm font-bold text-slate-800 truncate">
-                    {editableDepartment.split('(')[0].trim()}
-                  </div>
-                  <span className="text-[11px] text-slate-400 mt-0.5 block">
-                    USTP Campus
                   </span>
                 </div>
               </div>
