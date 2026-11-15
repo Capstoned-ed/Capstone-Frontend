@@ -1,4 +1,24 @@
+import { jwtDecode } from 'jwt-decode';
 import apiClient from './client';
+
+export function getActiveUserId(user = null) {
+  if (user?.id) return String(user.id);
+  if (user?.user_id) return String(user.user_id);
+  if (typeof window === 'undefined') return 'anon';
+  try {
+    const token = localStorage.getItem('access_token');
+    if (!token) return 'anon';
+    const decoded = jwtDecode(token);
+    return String(decoded.user_id || decoded.id || 'anon');
+  } catch {
+    return 'anon';
+  }
+}
+
+export function getNotificationsStorageKey(user = null) {
+  const uid = getActiveUserId(user);
+  return uid !== 'anon' ? `notifications_${uid}` : 'notifications_anon';
+}
 
 export const NOTIFICATIONS_STORAGE_KEY = 'regquest_stored_notifications';
 
@@ -183,6 +203,8 @@ export function isNotificationForUser(notification, user) {
     msg.startsWith('Workflow Audit:') ||
     msg.startsWith('Institutional Volume:') ||
     msg.startsWith('Security Audit:') ||
+    msg.startsWith('New assigned request:') ||
+    msg.startsWith('Assigned Request:') ||
     msg.startsWith('Request ');
 
   // -------------------------------------------------------------
@@ -269,11 +291,51 @@ export function isNotificationForUser(notification, user) {
     if (targetRoles.length > 0 && !targetRoles.some((r) => r === 'staff' || r === 'registrar')) return false;
 
     // Direct targeting check if notification was explicitly addressed to a particular staff/user
-    if (notification.target_username && currentUsername && notification.target_username.toLowerCase() !== currentUsername) {
+    const hasSpecificTarget = Boolean(
+      notification.target_user_id ||
+      notification.target_username ||
+      notification.target_name
+    );
+
+    // Assigned-request notifications must always match a specific target
+    if (notification.event_type === 'REQUEST_ASSIGNED' && !hasSpecificTarget) {
       return false;
     }
-    if (notification.target_user_id && currentUserId && String(notification.target_user_id) !== currentUserId) {
-      return false;
+
+    if (hasSpecificTarget && !(role === 'registrar' && notification.event_type === 'PAYMENT_SUBMITTED')) {
+      const candidates = new Set();
+      const addCandidate = (val) => {
+        if (val !== undefined && val !== null) {
+          const s = String(val).trim().toLowerCase();
+          if (s && s !== 'staff' && s !== 'registrar' && s !== 'admin') {
+            candidates.add(s);
+          }
+        }
+      };
+      addCandidate(user.username);
+      addCandidate(user.full_name);
+      addCandidate([user.first_name, user.last_name].filter(Boolean).join(' '));
+      addCandidate(user.id);
+      addCandidate(user.userId);
+
+      const targetId = notification.target_user_id ? String(notification.target_user_id).trim() : null;
+      const targetUser = notification.target_username ? String(notification.target_username).trim().toLowerCase() : null;
+      const targetName = notification.target_name ? String(notification.target_name).trim().toLowerCase() : null;
+
+      let matched = false;
+      if (targetId && (targetId === String(user.id) || targetId === String(user.userId))) {
+        matched = true;
+      }
+      if (targetUser && candidates.has(targetUser)) {
+        matched = true;
+      }
+      if (targetName && candidates.has(targetName)) {
+        matched = true;
+      }
+
+      if (!matched) {
+        return false;
+      }
     }
 
     return true;
@@ -378,7 +440,8 @@ export function getStoredNotifications(user = null) {
 
     if (!user) return [];
 
-    const rawSaved = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    const key = getNotificationsStorageKey(user);
+    const rawSaved = localStorage.getItem(key);
     const savedNotifications = rawSaved ? JSON.parse(rawSaved) : [];
 
     const readIds = getReadNotificationIds(user);
@@ -411,12 +474,14 @@ export function getStoredNotifications(user = null) {
  * Save a genuine real-time notification into local storage and notify active listeners.
  * Explicitly infers and sets target_role and target_roles to prevent cross-role leaks.
  */
-export function saveStoredNotification(notification) {
+export function saveStoredNotification(notification, user = null) {
   if (!notification || !notification.message) return null;
   if (isHallucinatedNotification(notification)) return null;
 
   try {
-    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    const targetUser = user || (notification.target_user_id ? { id: notification.target_user_id } : null);
+    const key = getNotificationsStorageKey(targetUser);
+    const raw = localStorage.getItem(key);
     const existing = raw ? JSON.parse(raw) : [];
 
     const msg = String(notification.message || '').trim();
@@ -459,13 +524,14 @@ export function saveStoredNotification(notification) {
       created_at: notification.created_at || new Date().toISOString(),
       target_user_id: notification.target_user_id || null,
       target_username: notification.target_username || null,
+      target_name: notification.target_name || null,
       target_student_id: notification.target_student_id || null,
       target_role: inferredTargetRole,
       target_roles: inferredTargetRoles,
     };
 
     const updated = [item, ...existing];
-    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
+    localStorage.setItem(key, JSON.stringify(updated));
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('regquest_notification_created', { detail: item }));
@@ -485,10 +551,11 @@ export function saveStoredNotification(notification) {
 export function markStoredNotificationRead(id, user = null) {
   try {
     markNotificationIdAsRead(id, user);
-    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    const key = getNotificationsStorageKey(user);
+    const raw = localStorage.getItem(key);
     const existing = raw ? JSON.parse(raw) : [];
     const updated = existing.map((n) => (String(n.id) === String(id) ? { ...n, is_read: true } : n));
-    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
+    localStorage.setItem(key, JSON.stringify(updated));
     notifyRealtimeUpdate({ reason: 'marked_read', id });
   } catch (err) {
     console.warn('Failed to mark stored notification as read:', err);
@@ -503,7 +570,8 @@ export function markAllStoredNotificationsRead(user = null, currentNotifications
     const idsToMark = currentNotifications.map((n) => n.id);
     markAllNotificationIdsAsRead(idsToMark, user);
 
-    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    const key = getNotificationsStorageKey(user);
+    const raw = localStorage.getItem(key);
     const existing = raw ? JSON.parse(raw) : [];
 
     const updated = existing.map((n) => {
@@ -512,7 +580,7 @@ export function markAllStoredNotificationsRead(user = null, currentNotifications
       }
       return n;
     });
-    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
+    localStorage.setItem(key, JSON.stringify(updated));
     notifyRealtimeUpdate({ reason: 'marked_all_read' });
   } catch (err) {
     console.warn('Failed to mark all stored notifications as read:', err);

@@ -4,9 +4,14 @@ import PredictedInsightCard from '../../components/admin/PredictedInsightCard';
 import RequestVolumeCard from '../../components/admin/RequestVolumeCard';
 import UserTable from '../../components/admin/UserTable';
 import useDashboardData from '../../hooks/useDashboardData';
+import { useAuth } from '../../hooks/useAuth';
+import { ROLES } from '../../constants/roles';
+import { ROUTES } from '../../constants/routes';
 import '../../styles/admin/AdminDashboard.css';
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
+  const isRegistrar = user?.role === ROLES.REGISTRAR;
   const {
     loading,
     statusDistribution,
@@ -33,10 +38,13 @@ export default function AdminDashboard() {
         {/* Banner Text Content */}
         <div className="admin-banner-content">
           <h1 className="admin-banner-title">
-            Registrar Admin <span className="admin-banner-title-highlight">Dashboard</span>
+            {isRegistrar ? 'Registrar' : 'Admin'}{' '}
+            <span className="admin-banner-title-highlight">Dashboard</span>
           </h1>
           <p className="admin-banner-subtitle">
-            System Analytics &amp; User Management
+            {isRegistrar
+              ? 'Manage requests, approvals, and operations'
+              : 'Manage users, system settings, and operations'}
           </p>
         </div>
       </div>
@@ -149,8 +157,9 @@ export default function AdminDashboard() {
                         <tr className="staff-table-head-row">
                           <th className="staff-table-th left">Staff Members</th>
                           <th className="staff-table-th center">Completed</th>
+                          <th className="staff-table-th center">For Processing</th>
+                          <th className="staff-table-th center">Processing</th>
                           <th className="staff-table-th center">Pending</th>
-                          <th className="staff-table-th right">Avg. Time</th>
                         </tr>
                       </thead>
                       <tbody className="staff-table-tbody">
@@ -163,10 +172,13 @@ export default function AdminDashboard() {
                               {staff.completed}
                             </td>
                             <td className="staff-table-pending">
-                              {staff.pending}
+                              {staff.forProcessing ?? 0}
                             </td>
-                            <td className="staff-table-avg">
-                              {staff.avgTime || '2.1 days'}
+                            <td className="staff-table-pending">
+                              {staff.processing ?? 0}
+                            </td>
+                            <td className="staff-table-pending">
+                              {staff.pending}
                             </td>
                           </tr>
                         ))}
@@ -185,6 +197,7 @@ export default function AdminDashboard() {
             dailyData={dailyVolume}
             monthlyData={monthlyVolume}
             loading={loading}
+            viewMoreRoute={ROUTES.ADMIN.ANALYTICS}
           />
         </section>
 

@@ -54,6 +54,62 @@ function formatDateStrReadable(dateStr, options = { month: 'long', day: 'numeric
   return dateObj.toLocaleDateString('en-US', options);
 }
 
+// Helper to check if a request status qualifies for "Process Document" on the calendar
+export function isForProcessingStatus(status, rawStatus = '', paymentStatus = '') {
+  const s = String(status || '').trim().toUpperCase();
+  const rawS = String(rawStatus || '').trim().toUpperCase();
+  const pStatus = String(paymentStatus || '').trim().toUpperCase();
+
+  // If status is Pending or For Payment or On Hold, it is NOT for processing!
+  if (
+    s === 'PENDING' ||
+    s === 'RECEIVED' ||
+    s === 'REQUEST SUBMITTED' ||
+    s === 'PENDING PAYMENT' ||
+    s === 'PENDING_PAYMENT' ||
+    s === 'PAYMENT_PENDING' ||
+    s === 'PAYMENT PENDING' ||
+    s === 'FOR PAYMENT' ||
+    s === 'FOR_PAYMENT' ||
+    s === 'CLEARED FOR PAYMENT' ||
+    s === 'ON HOLD' ||
+    s === 'ON_HOLD' ||
+    s === 'HOLD' ||
+    s === 'CANCELLED' ||
+    s === 'REJECTED' ||
+    rawS === 'PENDING' ||
+    rawS === 'PAYMENT_PENDING' ||
+    rawS === 'PENDING_PAYMENT' ||
+    rawS === 'FOR_PAYMENT'
+  ) {
+    if (pStatus !== 'VERIFIED' && rawS !== 'PAYMENT_VERIFIED') {
+      return false;
+    }
+  }
+
+  return (
+    s === 'FOR PROCESSING' ||
+    s === 'FOR_PROCESSING' ||
+    s === 'PROCESSING' ||
+    s === 'DOCUMENT PREPARATION' ||
+    s === 'DOCUMENT_PREPARATION' ||
+    s === 'PAYMENT VERIFIED' ||
+    s === 'PAYMENT_VERIFIED' ||
+    rawS === 'FOR_PROCESSING' ||
+    rawS === 'PAYMENT_VERIFIED' ||
+    pStatus === 'VERIFIED' ||
+    s === 'FOR RELEASE' ||
+    s === 'FOR_RELEASE' ||
+    s === 'RELEASING' ||
+    s === 'READY_FOR_RELEASE' ||
+    s === 'READY FOR RELEASE' ||
+    s === 'READY_FOR_PICKUP' ||
+    s === 'READY FOR PICKUP' ||
+    s === 'CLAIMED' ||
+    s === 'RELEASED'
+  );
+}
+
 /**
  * Reusable ProcessCalendarCard Component
  * Displays the full month processing calendar with batch scheduling and active batches list
@@ -81,30 +137,114 @@ export default function ProcessCalendarCard({
     });
 
     const newRequestsCountMap = {}; // dateStr -> number of new requests submitted
+    const newRequestsMap = {};      // dateStr -> array of new requests submitted
     const dailyProcessingMap = {};  // dateStr -> number of requests scheduled to process
+    const dailyProcessingRequestsMap = {}; // dateStr -> array of requests specifically scheduled for this day
     const releaseBatchesMap = {};   // dateStr -> array of batch release objects
+    const dailyReleasingRequestsMap = {}; // dateStr -> array of ALL requests scheduled for release on this date (bahala dili pa completed)
     const allBatchesList = [];      // Array of all active batch summaries for bottom section
+
+    // Map all requests directly to their release date so that EVERY request with a release date
+    // on that day is shown, regardless of whether it is already completed or still processing/pending.
+    const isSundayDateStr = (dateStr) => {
+      if (!dateStr) return false;
+      const [y, m, d] = dateStr.split('-').map(Number);
+      return new Date(y, m - 1, d).getDay() === 0;
+    };
+
+    const skipSunday = (dateStr) => (isSundayDateStr(dateStr) ? addDaysToDateStr(dateStr, 1) : dateStr);
+
+    requests.forEach((r) => {
+      const relRaw = r.release_date || r.date_of_release || r.target_release_date;
+      let relDate = relRaw ? toLocalDateStr(relRaw) : null;
+      if (!relDate) {
+        const reqDate = toLocalDateStr(r.request_date || r.created_at);
+        if (reqDate) {
+          relDate = addDaysToDateStr(reqDate, 5);
+        }
+      }
+      if (relDate) {
+        relDate = skipSunday(relDate);
+        if (!dailyReleasingRequestsMap[relDate]) {
+          dailyReleasingRequestsMap[relDate] = [];
+        }
+        const rKey = String(r.id || r.rawId || r.tracking_number);
+        if (!dailyReleasingRequestsMap[relDate].some((ex) => String(ex.id || ex.rawId || ex.tracking_number) === rKey)) {
+          dailyReleasingRequestsMap[relDate].push(r);
+        }
+      }
+    });
 
     Object.entries(batchesByDate).forEach(([reqDate, reqs]) => {
       const totalInBatch = reqs.length;
       newRequestsCountMap[reqDate] = (newRequestsCountMap[reqDate] || 0) + totalInBatch;
+      if (!newRequestsMap[reqDate]) newRequestsMap[reqDate] = [];
+      newRequestsMap[reqDate].push(...reqs);
 
-      // Determine batch expected release date
-      const firstWithRelDate = reqs.find((r) => r.release_date && r.release_date > reqDate);
-      const releaseDate = firstWithRelDate ? firstWithRelDate.release_date : addDaysToDateStr(reqDate, 5);
+      // ONLY requests that have reached 'For Processing' (or beyond) reflect in the Process Document schedule!
+      const processingReqs = reqs.filter((r) =>
+        isForProcessingStatus(r.status, r.rawStatus || r.raw?.status, r.payment_status)
+      );
+      const totalProcessingInBatch = processingReqs.length;
 
-      // Processing days are the days strictly between reqDate and releaseDate
+      // Determine batch expected release date (never on Sunday)
+      const firstWithRelDate = reqs.find((r) => (r.release_date || r.date_of_release) && (r.release_date || r.date_of_release) > reqDate);
+      const releaseDate = skipSunday(
+        firstWithRelDate
+          ? toLocalDateStr(firstWithRelDate.release_date || firstWithRelDate.date_of_release)
+          : addDaysToDateStr(reqDate, 5)
+      );
+
+      // Also ensure all batch requests are in dailyReleasingRequestsMap for this releaseDate if not already there
+      if (!dailyReleasingRequestsMap[releaseDate]) {
+        dailyReleasingRequestsMap[releaseDate] = [];
+      }
+      reqs.forEach((r) => {
+        const rKey = String(r.id || r.rawId || r.tracking_number);
+        const specificRel = (r.release_date || r.date_of_release) ? toLocalDateStr(r.release_date || r.date_of_release) : null;
+        const targetRel = skipSunday(specificRel || releaseDate);
+        if (!dailyReleasingRequestsMap[targetRel]) {
+          dailyReleasingRequestsMap[targetRel] = [];
+        }
+        if (!dailyReleasingRequestsMap[targetRel].some((ex) => String(ex.id || ex.rawId || ex.tracking_number) === rKey)) {
+          dailyReleasingRequestsMap[targetRel].push(r);
+        }
+      });
+
+      // Processing days are the non-Sunday days strictly between reqDate and releaseDate
       const diffDays = getDaysBetween(reqDate, releaseDate);
-      const numProcessingDays = Math.max(1, diffDays - 1);
+      const validProcessingDates = [];
+      for (let i = 1; i < diffDays; i++) {
+        const candidate = addDaysToDateStr(reqDate, i);
+        if (!isSundayDateStr(candidate)) {
+          validProcessingDates.push(candidate);
+        }
+      }
+      if (validProcessingDates.length === 0) {
+        validProcessingDates.push(skipSunday(addDaysToDateStr(reqDate, 1)));
+      }
+      const numProcessingDays = validProcessingDates.length;
 
-      // Divide requests across scheduled processing days
-      const baseQuota = Math.floor(totalInBatch / numProcessingDays);
-      const remainder = totalInBatch % numProcessingDays;
+      // Divide ONLY the for-processing requests across scheduled non-Sunday processing days
+      if (totalProcessingInBatch > 0) {
+        const baseQuota = Math.floor(totalProcessingInBatch / numProcessingDays);
+        const remainder = totalProcessingInBatch % numProcessingDays;
 
-      for (let i = 0; i < numProcessingDays; i++) {
-        const procDate = addDaysToDateStr(reqDate, i + 1);
-        const dailyQuota = baseQuota + (i < remainder ? 1 : 0);
-        dailyProcessingMap[procDate] = (dailyProcessingMap[procDate] || 0) + dailyQuota;
+        let startIndex = 0;
+        for (let i = 0; i < numProcessingDays; i++) {
+          const procDate = validProcessingDates[i];
+          const dailyQuota = baseQuota + (i < remainder ? 1 : 0);
+          const slice = processingReqs.slice(startIndex, startIndex + dailyQuota);
+          startIndex += dailyQuota;
+
+          if (dailyQuota > 0) {
+            dailyProcessingMap[procDate] = (dailyProcessingMap[procDate] || 0) + dailyQuota;
+            if (!dailyProcessingRequestsMap[procDate]) {
+              dailyProcessingRequestsMap[procDate] = [];
+            }
+            dailyProcessingRequestsMap[procDate].push(...slice);
+          }
+        }
       }
 
       // Count processed requests in this batch (status 'For Release', 'Claimed', or 'Released')
@@ -113,7 +253,9 @@ export default function ProcessCalendarCard({
         return s.includes('release') || s.includes('pickup') || s.includes('ready') || s.includes('claim');
       }).length;
 
-      const completionPercentage = totalInBatch > 0 ? Math.round((processedCount / totalInBatch) * 100) : 100;
+      const completionPercentage = totalInBatch > 0
+        ? Math.round((processedCount / totalInBatch) * 100)
+        : 100;
 
       const batchObj = {
         batchId: `batch-${reqDate}`,
@@ -122,9 +264,11 @@ export default function ProcessCalendarCard({
         releaseDate,
         releaseDateFormatted: formatDateStrReadable(releaseDate),
         totalRequests: totalInBatch,
+        processingRequestsCount: totalProcessingInBatch,
         processedCount,
         completionPercentage,
-        requests: reqs,
+        requests: reqs, // All requests included, bahala dili pa completed
+        allBatchRequests: reqs,
       };
 
       if (!releaseBatchesMap[releaseDate]) {
@@ -139,8 +283,11 @@ export default function ProcessCalendarCard({
 
     return {
       newRequestsCountMap,
+      newRequestsMap,
       dailyProcessingMap,
+      dailyProcessingRequestsMap,
       releaseBatchesMap,
+      dailyReleasingRequestsMap,
       allBatchesList,
     };
   }, [requests]);
@@ -181,23 +328,38 @@ export default function ProcessCalendarCard({
 
         const newReqs = batchSchedule.newRequestsCountMap[dateStr] || 0;
         const proc = batchSchedule.dailyProcessingMap[dateStr] || 0;
-        const releasingBatches = batchSchedule.releaseBatchesMap[dateStr] || [];
-        const isReleaseDate = releasingBatches.length > 0;
-        const releases = releasingBatches.reduce((sum, b) => sum + b.totalRequests, 0);
+
+        // Releasing requests on this day: ALL requests scheduled for release on this date
+        // (bahala dili pa completed!)
+        const releasingList = batchSchedule.dailyReleasingRequestsMap[dateStr] || [];
+        const isReleaseDate = releasingList.length > 0;
+        const releases = releasingList.length;
 
         let comp = null;
         let relTargetStr = '';
         if (isReleaseDate) {
-          const totalReqs = releasingBatches.reduce((sum, b) => sum + b.totalRequests, 0);
-          const totalProc = releasingBatches.reduce((sum, b) => sum + b.processedCount, 0);
-          comp = totalReqs > 0 ? Math.round((totalProc / totalReqs) * 100) : 100;
+          const completedCount = releasingList.filter((r) => {
+            const s = String(r.status || '').toLowerCase();
+            return s.includes('release') || s.includes('pickup') || s.includes('ready') || s.includes('claim');
+          }).length;
+          comp = releases > 0 ? Math.round((completedCount / releases) * 100) : 100;
 
           // Format batch origin date for banner
-          const originDateStr = releasingBatches[0].requestDate;
-          relTargetStr = formatDateStrReadable(originDateStr, { month: 'long', day: 'numeric', year: 'numeric' });
+          const originDates = [
+            ...new Set(releasingList.map((r) => toLocalDateStr(r.request_date || r.created_at)).filter(Boolean))
+          ];
+          if (originDates.length === 1) {
+            relTargetStr = formatDateStrReadable(originDates[0], { month: 'long', day: 'numeric', year: 'numeric' });
+          } else if (originDates.length > 1) {
+            relTargetStr = `${formatDateStrReadable(originDates[0], { month: 'short', day: 'numeric' })} +`;
+          }
         }
 
         const hasActiveWork = newReqs > 0 || proc > 0 || isReleaseDate;
+
+        // Build exact lists of requests for each category on this date
+        const toProcessList = batchSchedule.dailyProcessingRequestsMap[dateStr] || [];
+        const newRequestsList = batchSchedule.newRequestsMap[dateStr] || [];
 
         week.push({
           dayNumber: day.getDate(),
@@ -211,6 +373,9 @@ export default function ProcessCalendarCard({
           proc,
           releases,
           comp,
+          toProcessList,
+          releasingList,
+          newRequestsList,
         });
       }
 
@@ -246,6 +411,37 @@ export default function ProcessCalendarCard({
 
   const handleToday = () => {
     setActiveDate(new Date());
+  };
+
+  const handleSelectDay = (d, preferredTab) => {
+    const toProc = d.toProcessList || [];
+    const rel = d.releasingList || [];
+    const newR = d.newRequestsList || [];
+
+    let activeTab = preferredTab;
+    if (!activeTab) {
+      if (toProc.length > 0) activeTab = 'toProcess';
+      else if (rel.length > 0) activeTab = 'releasing';
+      else if (newR.length > 0) activeTab = 'newRequests';
+      else activeTab = 'toProcess';
+    }
+
+    onDateClick(
+      d.dateStr,
+      {
+        toProcess: toProc,
+        releasing: rel,
+        newRequests: newR,
+      },
+      {
+        proc: d.proc,
+        newReqs: d.newReqs,
+        releases: d.releases,
+        isReleaseDate: d.isReleaseDate,
+        relTargetStr: d.relTargetStr,
+        preferredTab: activeTab,
+      }
+    );
   };
 
   return (
@@ -336,7 +532,7 @@ export default function ProcessCalendarCard({
                   return (
                     <div
                       key={d.dateStr}
-                      onClick={() => onDateClick(d.dateStr)}
+                      onClick={() => handleSelectDay(d)}
                       className={`calendar-day-cell ${
                         isSelected
                           ? 'is-selected'
@@ -382,15 +578,31 @@ export default function ProcessCalendarCard({
                           {d.isReleaseDate && (
                             <div
                               className="day-pill pill-release"
-                              title={`Release documents from: ${d.relTargetStr}`}
+                              title={
+                                d.relTargetStr
+                                  ? `Release documents from: ${d.relTargetStr} (${d.releases} total)`
+                                  : `Release documents: ${d.releases} requests`
+                              }
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectDay(d, 'releasing');
+                              }}
                             >
-                              Release documents from: {d.relTargetStr}
+                              {d.relTargetStr
+                                ? `Release documents from: ${d.relTargetStr}`
+                                : `Release documents: ${d.releases}`}
                             </div>
                           )}
 
                           {/* 2. Process Document Quota (Divided across processing days) */}
                           {d.proc > 0 && (
-                            <div className="day-pill pill-process">
+                            <div
+                              className="day-pill pill-process"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectDay(d, 'toProcess');
+                              }}
+                            >
                               <span>Process document:</span>
                               <strong className="pill-value">{d.proc}</strong>
                             </div>
@@ -398,7 +610,13 @@ export default function ProcessCalendarCard({
 
                           {/* 3. New Requests Received (On request submission dates) */}
                           {d.newReqs > 0 && (
-                            <div className="day-pill pill-requests">
+                            <div
+                              className="day-pill pill-requests"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectDay(d, 'newRequests');
+                              }}
+                            >
                               <span>New requests:</span>
                               <strong className="pill-value">{d.newReqs}</strong>
                             </div>
@@ -437,7 +655,21 @@ export default function ProcessCalendarCard({
               {batchSchedule.allBatchesList.map((batch) => (
                 <div
                   key={batch.batchId}
-                  onClick={() => onDateClick(batch.requestDate)}
+                  onClick={() =>
+                    onDateClick(
+                      batch.requestDate,
+                      {
+                        toProcess: batch.requests || [],
+                        releasing: batch.allBatchRequests || batch.requests || [],
+                        newRequests: batch.allBatchRequests || batch.requests || [],
+                      },
+                      {
+                        isBatch: true,
+                        batch,
+                        preferredTab: 'toProcess',
+                      }
+                    )
+                  }
                   className="batch-item-card"
                 >
                   <div>

@@ -8,7 +8,7 @@ import CredentialTypeFormModal from '../../components/credentials/CredentialType
 import CredentialDeleteDialog from '../../components/credentials/CredentialDeleteDialog';
 import '../../styles/CredentialTypes.css';
 
-export default function CredentialsPage() {
+export default function RegistrarCredentialsPage() {
   const { user } = useAuth();
   const toast = useToast();
 
@@ -22,9 +22,8 @@ export default function CredentialsPage() {
   const [deleteDialogOpen, setDeleteDialogOpenOpen] = useState(false);
   const [selectedForDelete, setSelectedForDelete] = useState(null);
 
-  // RBAC: Only Admin and Registrar can mutate
-  const canMutate = user?.role === ROLES.ADMIN || user?.role === ROLES.REGISTRAR;
-
+  // RBAC: Registrar can mutate credential types
+  const canMutate = user?.role === ROLES.REGISTRAR || user?.role === ROLES.ADMIN;
 
   useEffect(() => {
     let ignore = false;

@@ -1,7 +1,91 @@
 import { useState, useEffect, useCallback } from 'react';
-import requestsApi from '../api/requests';
+import requestsApi, {
+  getStoredRequests,
+  isValidRequest,
+  getStaffAssignments,
+  isRequestAssignedToUser,
+  getArchivedRequestsMap,
+  isRequestArchived,
+  getProcessedActions,
+} from '../api/requests';
 import usersApi from '../api/users';
 import { ROLES } from '../constants/roles';
+
+function isCompletedRequest(r, archivedMap) {
+  if (!r) return false;
+  const s = (r.status || '').toUpperCase().trim();
+  return (
+    s === 'RELEASED' ||
+    s.includes('CLAIM') ||
+    s === 'COMPLETED' ||
+    s === 'DONE' ||
+    isRequestArchived(r, archivedMap)
+  );
+}
+
+function isForProcessingRequest(r) {
+  if (!r) return false;
+  const s = (r.status || '').toUpperCase().trim();
+  return (
+    s === 'FOR PROCESSING' ||
+    s === 'FOR_PROCESSING' ||
+    s === 'PAYMENT_VERIFIED' ||
+    s === 'PAYMENT VERIFIED'
+  );
+}
+
+function isProcessingRequest(r) {
+  if (!r) return false;
+  if (isForProcessingRequest(r)) return false;
+  const s = (r.status || '').toUpperCase().trim();
+  return (
+    s === 'PROCESSING' ||
+    s.includes('PREPARATION') ||
+    s.includes('RELEASE') ||
+    s.includes('PICKUP') ||
+    s.includes('READY')
+  );
+}
+
+// Safely convert an ISO string, Date object, or date string into local YYYY-MM-DD
+function toLocalDateStr(val) {
+  if (!val) return '';
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+    return val;
+  }
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return typeof val === 'string' ? val.split('T')[0] : '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dt = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dt}`;
+}
+
+// Dynamically map each request to its corresponding document type key
+function getDocTypeKey(req, credTypes = []) {
+  const credId = req.credential_type || req.credential;
+  const cred = credTypes.find(
+    (c) => c.id === credId || c.code === credId || String(c.id) === String(credId)
+  );
+  const code = (cred?.code || req.document_type || req.credential_name || '').toUpperCase();
+  const name = (cred?.name || req.document_type || req.credential_name || '').toUpperCase();
+
+  if (code === 'TOR' || code.includes('TOR') || name.includes('TRANSCRIPT')) return 'transcript';
+  if (code === 'HD' || code.includes('HD') || name.includes('HONORABLE') || name.includes('DISMISSAL')) return 'dismissal';
+  if (code === 'EVAL' || code.includes('EVAL') || name.includes('EVALUATION')) return 'evaluation';
+  if (code === 'CAR' || code.includes('CAR') || name.includes('CERTIFICATE OF ACADEMIC')) return 'car';
+  if (
+    code === 'COE' ||
+    code.includes('COE') ||
+    code.includes('ENR') ||
+    name.includes('ENROLL') ||
+    name.includes('OFFICIALLY')
+  ) {
+    return 'enrolled';
+  }
+
+  return 'transcript';
+}
 
 export default function useDashboardData() {
   const [loading, setLoading] = useState(true);
@@ -24,27 +108,33 @@ export default function useDashboardData() {
     async function loadDashboardData() {
       try {
         const [requestsRes, typesRes, usersRes] = await Promise.all([
-          requestsApi.list(),
-          requestsApi.getCredentialTypes(),
-          usersApi.list(),
+          requestsApi.list().catch(() => []),
+          requestsApi.getCredentialTypes().catch(() => []),
+          usersApi.list().catch(() => []),
         ]);
 
         if (ignore) return;
 
-        const requests = Array.isArray(requestsRes) ? requestsRes : requestsRes?.results || [];
+        const backendList = Array.isArray(requestsRes) ? requestsRes : requestsRes?.results || [];
         const types = Array.isArray(typesRes) ? typesRes : typesRes?.results || [];
         const users = Array.isArray(usersRes) ? usersRes : usersRes?.results || [];
 
-        // 1. Map Credential Type IDs to normalized codes
-        const typeCodeMap = {};
-        types.forEach((t) => {
-          typeCodeMap[t.id] = (t.code || '').toUpperCase();
+        // Merge backend requests and locally stored requests
+        const stored = getStoredRequests();
+        const combined = [...backendList];
+        stored.forEach((s) => {
+          const key = s.tracking_number || s.id;
+          if (!combined.some((b) => (b.tracking_number || b.id) === key)) {
+            combined.push(s);
+          }
         });
 
+        const requests = combined.filter(isValidRequest);
+
         // -------------------------------------------------------------
-        // 2. Compute Dynamic Status Distribution
+        // 1. Compute Dynamic Status Distribution
         // -------------------------------------------------------------
-        const validRequests = requests.filter((r) => Boolean(String(r.tracking_number || '').trim()));
+        const validRequests = requests.filter((r) => Boolean(String(r.tracking_number || r.id || '').trim()));
         const totalRequests = validRequests.length;
         const statusCounts = {
           'Pending': 0,
@@ -56,9 +146,14 @@ export default function useDashboardData() {
           'On Hold': 0,
         };
 
+        const archivedMap = getArchivedRequestsMap();
+        const assignments = getStaffAssignments();
+
         validRequests.forEach((req) => {
           const s = (req.status || '').toUpperCase().trim();
-          if (s === 'PENDING' || s === 'PENDONG' || s === 'RECEIVED' || s === 'REQUEST SUBMITTED') {
+          if (isCompletedRequest(req, archivedMap)) {
+            statusCounts['Claimed']++;
+          } else if (s === 'PENDING' || s === 'PENDONG' || s === 'RECEIVED' || s === 'REQUEST SUBMITTED') {
             statusCounts['Pending']++;
           } else if (
             s === 'FOR PAYMENT' ||
@@ -89,8 +184,6 @@ export default function useDashboardData() {
             s === 'RELEASING'
           ) {
             statusCounts['For release']++;
-          } else if (s === 'RELEASED' || s === 'CLAIMED' || s === 'CLAIMED / RELEASED') {
-            statusCounts['Claimed']++;
           } else if (
             s === 'REQUIREMENTS_VERIFICATION' ||
             s === 'CLEARANCE_VERIFIED' ||
@@ -115,116 +208,139 @@ export default function useDashboardData() {
         setStatusDistribution(computedStatusDistribution);
 
         // -------------------------------------------------------------
-        // 3. Compute Dynamic Staff Performance Metrics
+        // 2. Compute Dynamic Staff Performance Metrics (per-staff)
         // -------------------------------------------------------------
-        const staffUsers = users.filter((u) => u.role === ROLES.STAFF || u.role === ROLES.REGISTRAR);
-        const activeStaff = staffUsers.length > 0 ? staffUsers : users.filter((u) => u.role === ROLES.ADMIN);
-
-        const pendingCount = validRequests.filter((r) => {
-          const s = (r.status || '').toUpperCase().trim();
-          return s !== 'RELEASED' && s !== 'CLAIMED' && s !== 'CLAIMED / RELEASED';
-        }).length;
-        const completedCount = validRequests.filter((r) => {
-          const s = (r.status || '').toUpperCase().trim();
-          return s === 'RELEASED' || s === 'CLAIMED' || s === 'CLAIMED / RELEASED';
-        }).length;
+        const staffUsers = users.filter((u) => {
+          const r = String(u.role || '').toLowerCase();
+          return r === ROLES.STAFF || r === ROLES.REGISTRAR;
+        });
+        const activeStaff = staffUsers.length > 0 ? staffUsers : users.filter((u) => String(u.role || '').toLowerCase() === ROLES.ADMIN);
 
         const computedStaffMetrics = activeStaff.map((staff) => {
           const displayName = staff.first_name && staff.last_name
             ? `${staff.first_name} ${staff.last_name}`
-            : staff.first_name || staff.username;
+            : staff.full_name || staff.first_name || staff.username;
 
-          const staffCompleted = completedCount > 0
-            ? Math.round(completedCount / Math.max(1, activeStaff.length))
-            : 0;
-          const staffPending = pendingCount > 0
-            ? Math.round(pendingCount / Math.max(1, activeStaff.length))
-            : 0;
+          const staffReqs = validRequests.filter((r) =>
+            isRequestAssignedToUser(r, staff, assignments, users)
+          );
+
+          const completedReqs = staffReqs.filter((r) => isCompletedRequest(r, archivedMap));
+          const completedTrackingSet = new Set(
+            completedReqs
+              .map((r) => String(r.tracking_number || r.trackingId || r.id || '').trim().toUpperCase())
+              .filter(Boolean)
+          );
+
+          // Also include Claimed & Done actions logged by this staff member
+          const claimedLogs = getProcessedActions(staff).filter((act) => {
+            const st = String(act.status || '').toLowerCase();
+            const ac = String(act.action || '').toLowerCase();
+            return st.includes('claim') || st.includes('done') || ac.includes('claim');
+          });
+          claimedLogs.forEach((act) => {
+            const code = String(act.trackingNumber || act.targetId || act.id || '').trim().toUpperCase();
+            if (code) completedTrackingSet.add(code);
+          });
+
+          const staffCompleted = Math.max(completedReqs.length, completedTrackingSet.size);
+          const remainingReqs = staffReqs.filter((r) => !isCompletedRequest(r, archivedMap));
+          const staffForProcessing = remainingReqs.filter((r) => isForProcessingRequest(r)).length;
+          const staffProcessing = remainingReqs.filter((r) => isProcessingRequest(r)).length;
+          const staffPending = remainingReqs.filter(
+            (r) => !isForProcessingRequest(r) && !isProcessingRequest(r)
+          ).length;
 
           return {
             name: displayName,
             completed: staffCompleted,
+            forProcessing: staffForProcessing,
+            processing: staffProcessing,
             pending: staffPending,
-            avgTime: staffCompleted > 0 ? '2.1 days' : '—',
           };
         });
         setStaffMetrics(computedStaffMetrics);
 
         // -------------------------------------------------------------
-        // 4. Compute Dynamic Request Volume (Daily & Monthly)
+        // 3. Compute Dynamic Request Volume (Daily & Monthly)
         // -------------------------------------------------------------
         const now = new Date();
         const currentYear = now.getFullYear();
 
         // Monthly: Jan through Dec of current year
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const computedMonthlyVolume = monthNames.map((label, monthIdx) => {
-          const monthReqs = requests.filter((r) => {
-            if (!r.created_at) return false;
-            const d = new Date(r.created_at);
-            return d.getFullYear() === currentYear && d.getMonth() === monthIdx;
-          });
+        const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const monthsData = monthLabels.map((label) => ({
+          label,
+          transcript: 0,
+          dismissal: 0,
+          evaluation: 0,
+          car: 0,
+          enrolled: 0,
+          totalLine: 0,
+        }));
 
-          const counts = { transcript: 0, dismissal: 0, evaluation: 0, car: 0, enrolled: 0 };
-          monthReqs.forEach((r) => {
-            const code = typeCodeMap[r.credential_type] || '';
-            if (code === 'TOR') counts.transcript++;
-            else if (code === 'HD') counts.dismissal++;
-            else if (code === 'EVAL') counts.evaluation++;
-            else if (code === 'CAR') counts.car++;
-            else if (code === 'COE' || code === 'ENR') counts.enrolled++;
-            else counts.transcript++;
-          });
-
-          const totalLine = monthReqs.length;
-          return {
-            label,
-            ...counts,
-            totalLine,
-          };
+        requests.forEach((r) => {
+          const reqDateStr = toLocalDateStr(r.request_date || r.created_at);
+          if (!reqDateStr) return;
+          const [y, m] = reqDateStr.split('-').map(Number);
+          if (y === currentYear && m >= 1 && m <= 12) {
+            const monthIdx = m - 1;
+            const docKey = getDocTypeKey(r, types);
+            const copies = parseInt(r.copies) || 1;
+            monthsData[monthIdx][docKey] = (monthsData[monthIdx][docKey] || 0) + copies;
+          }
         });
+
+        const computedMonthlyVolume = monthsData.map((d) => ({
+          ...d,
+          totalLine: d.transcript + d.dismissal + d.evaluation + d.car + d.enrolled,
+        }));
         setMonthlyVolume(computedMonthlyVolume);
 
         // Daily: Mon through Sun of the current week
-        const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        const dayOfWeek = (now.getDay() + 6) % 7; // 0 for Monday, 6 for Sunday
+        const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        const dayOfWeek = (now.getDay() + 6) % 7; // Mon = 0 ... Sun = 6
         const monday = new Date(now);
         monday.setDate(now.getDate() - dayOfWeek);
         monday.setHours(0, 0, 0, 0);
 
-        const computedDailyVolume = dayNames.map((label, dayIdx) => {
-          const targetDate = new Date(monday);
-          targetDate.setDate(monday.getDate() + dayIdx);
-
-          const dayReqs = requests.filter((r) => {
-            if (!r.created_at) return false;
-            const d = new Date(r.created_at);
-            return (
-              d.getFullYear() === targetDate.getFullYear() &&
-              d.getMonth() === targetDate.getMonth() &&
-              d.getDate() === targetDate.getDate()
-            );
-          });
-
-          const counts = { transcript: 0, dismissal: 0, evaluation: 0, car: 0, enrolled: 0 };
-          dayReqs.forEach((r) => {
-            const code = typeCodeMap[r.credential_type] || '';
-            if (code === 'TOR') counts.transcript++;
-            else if (code === 'HD') counts.dismissal++;
-            else if (code === 'EVAL') counts.evaluation++;
-            else if (code === 'CAR') counts.car++;
-            else if (code === 'COE' || code === 'ENR') counts.enrolled++;
-            else counts.transcript++;
-          });
-
-          const totalLine = dayReqs.length;
+        const daysData = dayLabels.map((label, idx) => {
+          const d = new Date(monday);
+          d.setDate(monday.getDate() + idx);
+          const dateStr = toLocalDateStr(d);
           return {
             label,
-            ...counts,
-            totalLine,
+            dateStr,
+            transcript: 0,
+            dismissal: 0,
+            evaluation: 0,
+            car: 0,
+            enrolled: 0,
+            totalLine: 0,
           };
         });
+
+        const dateIndexMap = {};
+        daysData.forEach((item, idx) => {
+          dateIndexMap[item.dateStr] = idx;
+        });
+
+        requests.forEach((r) => {
+          const reqDateStr = toLocalDateStr(r.request_date || r.created_at);
+          if (reqDateStr && dateIndexMap[reqDateStr] !== undefined) {
+            const idx = dateIndexMap[reqDateStr];
+            const docKey = getDocTypeKey(r, types);
+            const copies = parseInt(r.copies) || 1;
+            daysData[idx][docKey] = (daysData[idx][docKey] || 0) + copies;
+          }
+        });
+
+        const computedDailyVolume = daysData.map((d) => ({
+          ...d,
+          totalLine: d.transcript + d.dismissal + d.evaluation + d.car + d.enrolled,
+        }));
         setDailyVolume(computedDailyVolume);
+
         setLoading(false);
       } catch (err) {
         if (ignore) return;
@@ -240,10 +356,14 @@ export default function useDashboardData() {
       loadDashboardData();
     };
     window.addEventListener('regquest_requests_updated', handleSync);
+    window.addEventListener('regquest_archived_updated', handleSync);
+    window.addEventListener('regquest_staff_assignments_updated', handleSync);
 
     return () => {
       ignore = true;
       window.removeEventListener('regquest_requests_updated', handleSync);
+      window.removeEventListener('regquest_archived_updated', handleSync);
+      window.removeEventListener('regquest_staff_assignments_updated', handleSync);
     };
   }, [reloadTrigger]);
 

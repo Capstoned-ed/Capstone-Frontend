@@ -1,7 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import requestsApi, { saveStoredRequest } from '../../api/requests';
+import requestsApi, {
+  saveStoredRequest,
+  getStoredRequests,
+  resolveDocCodes,
+  generateTrackingNumberFallback,
+} from '../../api/requests';
 import { saveStoredNotification } from '../../api/notifications';
 import credentialTypesApi from '../../api/credentialTypes';
 import clearancesApi, { saveClearanceAttachment } from '../../api/clearances';
@@ -14,10 +19,23 @@ export default function RequestDocumentPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const docQuery = searchParams.get('doc') || searchParams.get('type') || searchParams.get('credential');
 
-  const [currentStep, setCurrentStep] = useState(1);
+  const draftKey = `regquest_request_draft_${user?.id || user?.username || 'guest'}`;
+  const readDraft = () => {
+    try {
+      const raw = sessionStorage.getItem(draftKey);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+  const initialDraft = useMemo(() => readDraft(), [draftKey]);
+
+  const [currentStep, setCurrentStep] = useState(() =>
+    initialDraft?.currentStep === 2 ? 2 : 1
+  );
   const [credentialTypes, setCredentialTypes] = useState([]);
 
   const resolveStudentName = (u) => {
@@ -34,9 +52,46 @@ export default function RequestDocumentPage() {
     return 'Juan Dela Cruz';
   };
 
+  const resolveStudentEmail = (u) => {
+    if (u?.email) return u.email;
+    try {
+      const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+      const p = profiles[u?.username] || profiles[u?.userId] || profiles[u?.id];
+      if (p?.email) return p.email;
+      const usersCache = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
+      const match = usersCache.find((x) => x.username && x.username.toLowerCase() === (u?.username || '').toLowerCase());
+      if (match?.email) return match.email;
+    } catch {}
+    if (u?.username === '2023301564') return 'daisy.traya@ustp.edu.ph';
+    return '';
+  };
+
   // Form State (Step 1)
   const [fullName, setFullName] = useState(() => resolveStudentName(user));
   const [course, setCourse] = useState(user?.program || 'BS in Information Technology');
+
+  const [dateOfRequest, setDateOfRequest] = useState(() => new Date().toISOString().split('T')[0]);
+  const [birthDate, setBirthDate] = useState('2002-05-15');
+  const [userCategory, setUserCategory] = useState('student'); // 'student' or 'alumnus'
+  const [contactNo, setContactNo] = useState('09123456789');
+  const [contactNoError, setContactNoError] = useState('');
+
+  const getContactNoError = (value, { required = false } = {}) => {
+    const raw = String(value ?? '');
+    if (!raw.trim()) {
+      return required ? 'Please enter your contact number.' : '';
+    }
+    if (/\D/.test(raw)) {
+      return 'Contact No. must contain numbers only.';
+    }
+    return '';
+  };
+
+  const handleContactNoChange = (e) => {
+    const val = e.target.value;
+    setContactNo(val);
+    setContactNoError(getContactNoError(val));
+  };
 
   useEffect(() => {
     const resolved = resolveStudentName(user);
@@ -46,11 +101,15 @@ export default function RequestDocumentPage() {
     if (user?.program) {
       setCourse(user.program);
     }
+    try {
+      const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+      const p = profiles[user?.student_id] || profiles[user?.username] || profiles[user?.id] || {};
+      const resolvedBirthDate = user?.birth_date || user?.birthdate || p?.birth_date || p?.birthdate;
+      const resolvedContact = user?.contact_number || p?.contact_number;
+      if (resolvedBirthDate) setBirthDate(resolvedBirthDate);
+      if (resolvedContact) setContactNo(resolvedContact);
+    } catch {}
   }, [user]);
-  const [dateOfRequest, setDateOfRequest] = useState(() => new Date().toISOString().split('T')[0]);
-  const [birthDate, setBirthDate] = useState('2002-05-15');
-  const [userCategory, setUserCategory] = useState('student'); // 'student' or 'alumnus'
-  const [contactNo, setContactNo] = useState('09123456789');
   const [dateOfGraduation, setDateOfGraduation] = useState('');
   const [lastSemAttendance, setLastSemAttendance] = useState('2nd Sem, AY 2025-2026');
   const [alreadyRequested, setAlreadyRequested] = useState('no');
@@ -59,13 +118,17 @@ export default function RequestDocumentPage() {
   const [isCleared, setIsCleared] = useState('yes');
   const [clearanceError, setClearanceError] = useState(false);
 
-  // Selected Documents in Part 2 (empty on initial open)
-  const [selectedDocName, setSelectedDocName] = useState('');
+  // Selected Documents in Part 2 (multiple documents allowed)
+  const [selectedDocs, setSelectedDocs] = useState(() =>
+    Array.isArray(initialDraft?.selectedDocs) ? initialDraft.selectedDocs : []
+  );
   const [selectedCredTypeId, setSelectedCredTypeId] = useState(null);
 
-  // Purpose in Part 3
-  const [purposeOption, setPurposeOption] = useState('For Personal File');
-  const [otherPurpose, setOtherPurpose] = useState('');
+  // Purpose in Part 3 (multiple purposes allowed)
+  const [selectedPurposes, setSelectedPurposes] = useState(() =>
+    Array.isArray(initialDraft?.selectedPurposes) ? initialDraft.selectedPurposes : []
+  );
+  const [otherPurpose, setOtherPurpose] = useState(() => initialDraft?.otherPurpose || '');
 
   // Photo Upload State (Part 3)
   const [photoFile, setPhotoFile] = useState(null);
@@ -144,15 +207,26 @@ export default function RequestDocumentPage() {
     setClearanceIsPdf(false);
   };
 
-  // Step 2 State
+  // Step 2 State: Per-document copies map { [docTitle]: number }
+  const [docCopies, setDocCopies] = useState(() =>
+    initialDraft?.docCopies && typeof initialDraft.docCopies === 'object' ? initialDraft.docCopies : {}
+  );
+  const [docPendingRemoval, setDocPendingRemoval] = useState(null);
   const [copies, setCopies] = useState(1);
   const [yearLevel, setYearLevel] = useState(user?.year_level || '4th year');
   const [studentId, setStudentId] = useState(user?.student_id || user?.username || '2026202666');
-  const [email, setEmail] = useState(user?.email || 'juan@email.com');
-  const [purposeInput, setPurposeInput] = useState('For Personal Files');
+  const [email, setEmail] = useState(() => resolveStudentEmail(user));
+
+  useEffect(() => {
+    const resolvedEmail = resolveStudentEmail(user);
+    if (resolvedEmail) {
+      setEmail(resolvedEmail);
+    }
+  }, [user]);
+  const [purposeInput, setPurposeInput] = useState('');
 
   // Step 3 State
-  const [generatedTrackingId, setGeneratedTrackingId] = useState('RQ-097323');
+  const [generatedTrackingId, setGeneratedTrackingId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Helper to accurately map selected document names to backend database CredentialType IDs
@@ -201,44 +275,14 @@ export default function RequestDocumentPage() {
     return typesList[0]?.id || 1;
   };
 
-  useEffect(() => {
-    let ignore = false;
-    async function loadCredTypes() {
-      try {
-        const types = await credentialTypesApi.list();
-        if (!ignore && Array.isArray(types) && types.length > 0) {
-          setCredentialTypes(types);
-          if (selectedDocName) {
-            const resolvedId = resolveCredentialTypeId(selectedDocName, types);
-            setSelectedCredTypeId(resolvedId);
-          }
-        }
-      } catch {
-        // Fallback gracefully
-      }
-    }
-    loadCredTypes();
-    return () => {
-      ignore = true;
-    };
-  }, [selectedDocName]);
-
-  // Compute dynamic document info, description, and pricing for Review Data
-  const currentDocDetails = useMemo(() => {
-    if (!selectedDocName) {
-      return {
-        title: 'No document selected',
-        description: 'Please select a document in Part 2 below.',
-        unitPrice: 0,
-        totalPrice: 0,
-      };
-    }
-
-    let cleanTitle = selectedDocName;
+  // Get document info, price, and database type ID
+  const getDocumentItemInfo = (docName, typesList = []) => {
+    if (!docName) return { title: '', description: '', unitPrice: 80, typeId: 1 };
+    let cleanTitle = docName;
     let desc = 'Official academic credential';
     let unitPrice = 80;
+    const lower = docName.toLowerCase();
 
-    const lower = selectedDocName.toLowerCase();
     if (lower.includes('transcript') || lower.includes('tor')) {
       cleanTitle = 'Transcript of Records (TOR)';
       desc = 'Official academic record of courses taken and grades earned.';
@@ -286,37 +330,364 @@ export default function RequestDocumentPage() {
     }
 
     // Check if an exact DB credential type exists matching the chosen name
-    const exactDb = credentialTypes.find((t) => t.name.toLowerCase() === selectedDocName.toLowerCase());
+    const exactDb = typesList.find((t) => t.name.toLowerCase() === docName.toLowerCase());
     if (exactDb) {
       cleanTitle = exactDb.name;
       if (exactDb.description) desc = exactDb.description;
       if (exactDb.price) unitPrice = parseFloat(exactDb.price) || unitPrice;
-    } else {
-      // If user selected a custom DB credential (not one of the certification sub-options)
-      const typeMatch = credentialTypes.find((t) => selectedCredTypeId && t.id === selectedCredTypeId);
-      if (typeMatch && !selectedDocName.includes('Certification - ') && !lower.includes('gpa') && !lower.includes('unit') && !lower.includes('endorsement') && !lower.includes('subject')) {
-        cleanTitle = typeMatch.name;
-        if (typeMatch.description) desc = typeMatch.description;
-        if (typeMatch.price) unitPrice = parseFloat(typeMatch.price) || unitPrice;
-      }
     }
+
+    const typeId = resolveCredentialTypeId(cleanTitle, typesList);
 
     return {
       title: cleanTitle,
       description: desc,
       unitPrice,
-      totalPrice: unitPrice * copies,
+      typeId,
     };
-  }, [selectedDocName, selectedCredTypeId, credentialTypes, copies]);
-
-  const handleDocumentSelect = (docName, typeId = null) => {
-    setSelectedDocName(docName);
-    const resolvedId = typeId || resolveCredentialTypeId(docName, credentialTypes);
-    setSelectedCredTypeId(resolvedId);
   };
 
-  // Automatically select document in Part 2 when navigated from Available Credentials
   useEffect(() => {
+    let ignore = false;
+    async function loadCredTypes() {
+      try {
+        const types = await credentialTypesApi.list();
+        if (!ignore && Array.isArray(types) && types.length > 0) {
+          setCredentialTypes(types);
+        }
+      } catch {
+        // Fallback gracefully
+      }
+    }
+    loadCredTypes();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (selectedDocs.length > 0 && credentialTypes.length > 0) {
+      const resolvedId = resolveCredentialTypeId(selectedDocs[0], credentialTypes);
+      setSelectedCredTypeId(resolvedId);
+    } else if (selectedDocs.length === 0) {
+      setSelectedCredTypeId(null);
+    }
+  }, [selectedDocs, credentialTypes]);
+
+  // Helper to get number of copies for a specific document
+  const getCopiesForDoc = (docTitle) => {
+    if (!docTitle) return 1;
+    return docCopies[docTitle] || 1;
+  };
+
+  // Helper to update number of copies for a specific document
+  const handleUpdateDocCopies = (docTitle, count, rawName = null) => {
+    if (!docTitle) return;
+    if (count < 1) {
+      setDocPendingRemoval({
+        rawName: rawName || docTitle,
+        title: docTitle,
+      });
+      return;
+    }
+    const safeCount = Math.max(1, Math.min(10, count));
+    setDocCopies((prev) => ({
+      ...prev,
+      [docTitle]: safeCount,
+    }));
+    setCopies(safeCount);
+  };
+
+  const handleConfirmRemoveDoc = () => {
+    if (!docPendingRemoval) return;
+    const { rawName, title } = docPendingRemoval;
+    const nextDocs = selectedDocs.filter((d) => d !== rawName && d !== title);
+    setSelectedDocs(nextDocs);
+    setDocCopies((prev) => {
+      const next = { ...prev };
+      delete next[rawName];
+      delete next[title];
+      return next;
+    });
+    setDocPendingRemoval(null);
+    if (nextDocs.length === 0) {
+      toast.info('Document removed. Please select a document to request.');
+      setCurrentStep(1);
+    } else {
+      toast.info(`${title} removed from your request.`);
+    }
+  };
+
+  // Compute dynamic document info, description, and pricing for Review Data
+  const currentDocDetails = useMemo(() => {
+    if (selectedDocs.length === 0) {
+      return {
+        title: 'No document selected',
+        description: 'Please select document/s in Part 2 below.',
+        unitPrice: 0,
+        totalPrice: 0,
+        totalCopies: 0,
+        items: [],
+      };
+    }
+
+    const items = selectedDocs.map((name) => {
+      const info = getDocumentItemInfo(name, credentialTypes);
+      const itemCopies = docCopies[info.title] || docCopies[name] || 1;
+      const itemTotal = info.unitPrice * itemCopies;
+      return {
+        ...info,
+        rawName: name,
+        copies: itemCopies,
+        itemTotal,
+      };
+    });
+
+    const totalUnitPrice = items.reduce((sum, item) => sum + item.unitPrice, 0);
+    const totalPrice = items.reduce((sum, item) => sum + item.itemTotal, 0);
+    const totalCopies = items.reduce((sum, item) => sum + item.copies, 0);
+    const title = items.map((item) => item.title).join(', ');
+    const description =
+      items.length === 1
+        ? items[0].description
+        : items.map((item) => `${item.title} (${item.copies} ${item.copies > 1 ? 'copies' : 'copy'} @ ₱${item.unitPrice})`).join(' + ');
+
+    return {
+      title,
+      description,
+      unitPrice: totalUnitPrice,
+      totalPrice,
+      totalCopies,
+      items,
+    };
+  }, [selectedDocs, credentialTypes, docCopies]);
+
+  // Backward compatibility alias for single doc name
+  const selectedDocName = selectedDocs[0] || '';
+
+  // Check if any Certification (general or any sub-option) is selected
+  const isCertActive = useMemo(() => {
+    return selectedDocs.some((d) => {
+      const l = d.toLowerCase();
+      return (
+        l.includes('cert') ||
+        l === 'car' ||
+        l.includes('- car') ||
+        l.includes('enrolled') ||
+        l === 'coe' ||
+        l.includes('gpa') ||
+        l.includes('unit') ||
+        l.includes('endorsement') ||
+        l.includes('subject') ||
+        l.includes('grade')
+      );
+    });
+  }, [selectedDocs]);
+
+  // Check if specific certification sub-option is selected
+  const isCertSubSelected = (certLabel) => {
+    const target = certLabel.toLowerCase();
+    return selectedDocs.some((d) => {
+      const l = d.toLowerCase();
+      if (d === `Certification - ${certLabel}` || d === certLabel) return true;
+      if (target === 'car' && (l === 'car' || l.includes('- car'))) return true;
+      if (target === 'officially enrolled' && (l.includes('enrolled') || l === 'coe')) return true;
+      if (target === 'gpa' && l.includes('gpa')) return true;
+      if (target === 'earned units' && (l.includes('earned') || l.includes('unit'))) return true;
+      if (target === 'endorsement' && l.includes('endorsement')) return true;
+      if (target === 'subjects w/ grades' && (l.includes('subject') || l.includes('grade'))) return true;
+      return false;
+    });
+  };
+
+  // Toggle specific certification sub-option (CAR, GPA, etc.)
+  const handleToggleCertSub = (certLabel) => {
+    const docKey = `Certification - ${certLabel}`;
+    setSelectedDocs((prev) => {
+      const target = certLabel.toLowerCase();
+      const exists = prev.some((d) => {
+        const l = d.toLowerCase();
+        if (d === docKey || d === certLabel) return true;
+        if (target === 'car' && (l === 'car' || l.includes('- car'))) return true;
+        if (target === 'officially enrolled' && (l.includes('enrolled') || l === 'coe')) return true;
+        if (target === 'gpa' && l.includes('gpa')) return true;
+        if (target === 'earned units' && (l.includes('earned') || l.includes('unit'))) return true;
+        if (target === 'endorsement' && l.includes('endorsement')) return true;
+        if (target === 'subjects w/ grades' && (l.includes('subject') || l.includes('grade'))) return true;
+        return false;
+      });
+
+      if (exists) {
+        return prev.filter((d) => {
+          const l = d.toLowerCase();
+          if (d === docKey || d === certLabel) return false;
+          if (target === 'car' && (l === 'car' || l.includes('- car'))) return false;
+          if (target === 'officially enrolled' && (l.includes('enrolled') || l === 'coe')) return false;
+          if (target === 'gpa' && l.includes('gpa')) return false;
+          if (target === 'earned units' && (l.includes('earned') || l.includes('unit'))) return false;
+          if (target === 'endorsement' && l.includes('endorsement')) return false;
+          if (target === 'subjects w/ grades' && (l.includes('subject') || l.includes('grade'))) return false;
+          return true;
+        });
+      } else {
+        return [...prev, docKey];
+      }
+    });
+  };
+
+  // Toggle parent Certification (P80)
+  const handleToggleCertGeneral = () => {
+    if (isCertActive) {
+      // De-select all certification items
+      setSelectedDocs((prev) =>
+        prev.filter((d) => {
+          const l = d.toLowerCase();
+          return !(
+            l.includes('cert') ||
+            l === 'car' ||
+            l.includes('- car') ||
+            l.includes('enrolled') ||
+            l === 'coe' ||
+            l.includes('gpa') ||
+            l.includes('unit') ||
+            l.includes('endorsement') ||
+            l.includes('subject') ||
+            l.includes('grade')
+          );
+        })
+      );
+    } else {
+      // Select parent Certification (P80)
+      setSelectedDocs((prev) => [...prev, 'Certification (P80)']);
+    }
+  };
+
+  // Generic document toggle for non-certification items
+  const handleToggleDocument = (docName) => {
+    setSelectedDocs((prev) => {
+      const exists = prev.includes(docName);
+      if (exists) {
+        return prev.filter((d) => d !== docName);
+      } else {
+        return [...prev, docName];
+      }
+    });
+  };
+
+  const handleToggleEvaluation = () => {
+    setSelectedDocs((prev) => {
+      const exists = prev.some((d) => {
+        const l = d.toLowerCase();
+        return l === 'evaluation (p50)' || l.includes('evaluation') || l === 'eval';
+      });
+      if (exists) {
+        return prev.filter((d) => {
+          const l = d.toLowerCase();
+          return !(l === 'evaluation (p50)' || l.includes('evaluation') || l === 'eval');
+        });
+      }
+      return [...prev, 'Evaluation (P50)'];
+    });
+  };
+
+  const handleToggleHonorableDismissal = () => {
+    setSelectedDocs((prev) => {
+      const exists = prev.some((d) => {
+        const l = d.toLowerCase();
+        return l === 'honorable dismissal (p100)' || l.includes('honorable') || l.includes('dismissal') || l === 'hd';
+      });
+      if (exists) {
+        return prev.filter((d) => {
+          const l = d.toLowerCase();
+          return !(l === 'honorable dismissal (p100)' || l.includes('honorable') || l.includes('dismissal') || l === 'hd');
+        });
+      }
+      return [...prev, 'Honorable Dismissal (P100)'];
+    });
+  };
+
+  const handleToggleTranscript = () => {
+    setSelectedDocs((prev) => {
+      const exists = prev.some((d) => {
+        const l = d.toLowerCase();
+        return l.includes('transcript') || l.includes('tor');
+      });
+      if (exists) {
+        return prev.filter((d) => {
+          const l = d.toLowerCase();
+          return !(l.includes('transcript') || l.includes('tor'));
+        });
+      }
+      return [...prev, 'Transcript of Records (P125/pg)'];
+    });
+  };
+
+  const handleToggleAuthentication = () => {
+    setSelectedDocs((prev) => {
+      const exists = prev.some((d) => {
+        const l = d.toLowerCase();
+        return l.includes('authentication') || l.includes('auth');
+      });
+      if (exists) {
+        return prev.filter((d) => {
+          const l = d.toLowerCase();
+          return !(l.includes('authentication') || l.includes('auth'));
+        });
+      }
+      return [...prev, 'Authentication (P5/pg)'];
+    });
+  };
+
+  // Helper for single selection or external clicks
+  const handleDocumentSelect = (docName, typeId = null) => {
+    setSelectedDocs((prev) => (prev.includes(docName) ? prev : [...prev, docName]));
+    if (typeId) {
+      setSelectedCredTypeId(typeId);
+    }
+  };
+
+  useEffect(() => {
+    try {
+      if (currentStep === 3) {
+        sessionStorage.removeItem(draftKey);
+      } else {
+        sessionStorage.setItem(
+          draftKey,
+          JSON.stringify({
+            currentStep,
+            selectedDocs,
+            docCopies,
+            selectedPurposes,
+            otherPurpose,
+          })
+        );
+      }
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [draftKey, currentStep, selectedDocs, docCopies, selectedPurposes, otherPurpose]);
+
+  const draftKeyRef = useRef(draftKey);
+  draftKeyRef.current = draftKey;
+
+  useEffect(() => {
+    return () => {
+      try {
+        sessionStorage.removeItem(draftKeyRef.current);
+      } catch {
+        // Ignore storage errors
+      }
+    };
+  }, []);
+
+  const appliedDocQueryRef = useRef(null);
+
+  // Automatically select document in Part 2 once when navigated from Available Credentials
+  useEffect(() => {
+    if (!docQuery || appliedDocQueryRef.current === docQuery) {
+      return;
+    }
+
     if (docQuery) {
       const lower = docQuery.toLowerCase().trim();
       let matchedDoc = null;
@@ -345,6 +716,9 @@ export default function RequestDocumentPage() {
       } else if (lower.startsWith('cert')) {
         matchedDoc = 'Certification (P80)';
       } else {
+        if (credentialTypes.length === 0) {
+          return;
+        }
         const dyn = credentialTypes.find(
           (c) => String(c.id) === lower || c.name.toLowerCase().includes(lower) || c.code?.toLowerCase() === lower
         );
@@ -357,8 +731,14 @@ export default function RequestDocumentPage() {
       }
 
       if (matchedDoc) {
-        handleDocumentSelect(matchedDoc, matchedTypeId);
+        appliedDocQueryRef.current = docQuery;
+        setSelectedDocs([matchedDoc]);
+        setDocCopies({});
+        if (matchedTypeId) {
+          setSelectedCredTypeId(matchedTypeId);
+        }
         setCurrentStep(1);
+        setSearchParams({}, { replace: true });
 
         // Smoothly scroll down to Part 2 so the student sees their chosen document
         const scrollPart2 = () => {
@@ -382,9 +762,37 @@ export default function RequestDocumentPage() {
     }
   }, [docQuery, credentialTypes]);
 
+  // Multiple Purpose Selection Handlers
+  const syncPurposeInput = (purposes, otherVal) => {
+    const list = purposes.map((p) => {
+      if (p === 'Others') {
+        const trimmed = (otherVal || '').trim();
+        return trimmed ? `Others (${trimmed})` : 'Others';
+      }
+      return p;
+    });
+    setPurposeInput(list.length > 0 ? list.join(', ') : '');
+  };
+
+  const handleTogglePurpose = (p) => {
+    setSelectedPurposes((prev) => {
+      const next = prev.includes(p) ? prev.filter((item) => item !== p) : [...prev, p];
+      syncPurposeInput(next, otherPurpose);
+      return next;
+    });
+  };
+
+  const handleOtherPurposeChange = (val) => {
+    setOtherPurpose(val);
+    setSelectedPurposes((prev) => {
+      const next = val.trim() ? (prev.includes('Others') ? prev : [...prev, 'Others']) : prev;
+      syncPurposeInput(next, val);
+      return next;
+    });
+  };
+
   const handlePurposeSelect = (p) => {
-    setPurposeOption(p);
-    setPurposeInput(p);
+    handleTogglePurpose(p);
   };
 
   // Step 1 -> Step 2
@@ -413,15 +821,37 @@ export default function RequestDocumentPage() {
       return;
     }
 
-    if (!selectedDocName) {
-      toast.warning('Please check the document you need in Part 2 before proceeding.');
+    const contactErr = getContactNoError(contactNo, { required: true });
+    if (contactErr) {
+      setContactNoError(contactErr);
+      toast.warning(contactErr);
+      const el = document.getElementById('ustp-contact-input');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.focus();
+      }
+      return;
+    }
+
+    if (selectedDocs.length === 0) {
+      toast.warning('Please check the document/s you need in Part 2 before proceeding.');
       const el = document.getElementById('ustp-part-2-section');
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
+    if (selectedPurposes.length === 0 && !purposeInput.trim()) {
+      toast.warning('Please check the purpose of your request in Part 3 before proceeding.');
+      return;
+    }
+
     setClearanceError(false);
-    const chosenPurpose = purposeOption === 'Others' ? (otherPurpose || 'Others') : purposeOption;
+    const chosenPurpose =
+      purposeInput.trim() ||
+      selectedPurposes
+        .map((p) => (p === 'Others' ? (otherPurpose.trim() ? `Others (${otherPurpose.trim()})` : 'Others') : p))
+        .join(', ') ||
+      '';
     setPurposeInput(chosenPurpose);
     setCurrentStep(2);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -431,15 +861,37 @@ export default function RequestDocumentPage() {
   const handleSubmitRequest = async (e) => {
     e.preventDefault();
 
+    if (selectedDocs.length === 0) {
+      toast.warning('Please select at least one document to request.');
+      setCurrentStep(1);
+      return;
+    }
+
     if (isCleared !== 'yes') {
       toast.warning('You must be cleared to proceed with your credential request.');
       setCurrentStep(1);
       return;
     }
 
+    const contactErr = getContactNoError(contactNo, { required: true });
+    if (contactErr) {
+      setContactNoError(contactErr);
+      toast.error(contactErr);
+      const el = document.getElementById('review-contact-input');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.focus();
+      }
+      return;
+    }
+
     if (!clearanceFile && !clearancePreview) {
-      toast.warning('Please attach your clearance document before submitting your request.');
-      setCurrentStep(1);
+      setClearanceError(true);
+      toast.error('Please attach your clearance document before submitting your request.');
+      const el = document.getElementById('review-clearance-card');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       return;
     }
 
@@ -472,10 +924,12 @@ export default function RequestDocumentPage() {
         } catch {}
       }
 
-      const targetCredTypeId = selectedCredTypeId || resolveCredentialTypeId(selectedDocName, credentialTypes);
-      const exactDocTitle = currentDocDetails.title || selectedDocName || 'Document Request';
-      const cleanPurpose = purposeInput || purposeOption || 'Official Academic Credential Request';
+      const primaryDoc = selectedDocs[0] || '';
+      const targetCredTypeId = selectedCredTypeId || resolveCredentialTypeId(primaryDoc, credentialTypes);
+      const exactDocTitle = currentDocDetails.title || primaryDoc || 'Document Request';
+      const cleanPurpose = purposeInput || selectedPurposes.join(', ') || 'Official Academic Credential Request';
       const formattedRemarks = `[${exactDocTitle}] ${cleanPurpose}`;
+      const docCode = resolveDocCodes(selectedDocs);
 
       // Submit directly to backend API so it persists in the database for Admin and Staff
       if (targetCredTypeId) {
@@ -483,24 +937,49 @@ export default function RequestDocumentPage() {
           createdItem = await requestsApi.create({
             credential_type: targetCredTypeId,
             remarks: formattedRemarks,
+            custom_doc_code: docCode,
           });
         } catch (apiErr) {
           console.warn('Backend create request returned validation response:', apiErr);
-          if (apiErr.response?.data) {
-            const msg = Object.values(apiErr.response.data).flat().join(' ');
-            if (msg.toLowerCase().includes('clearance')) {
-              toast.warning(msg || 'Please ensure you have an approved clearance.');
+          if (apiErr.response) {
+            let errorMsg = 'Failed to submit request to server.';
+            const errData = apiErr.response.data;
+            if (typeof errData === 'string') {
+              errorMsg = errData;
+            } else if (Array.isArray(errData)) {
+              errorMsg = errData.join(' ');
+            } else if (typeof errData === 'object' && errData !== null) {
+              errorMsg = Object.entries(errData)
+                .map(([k, v]) => `${k !== 'detail' && k !== 'non_field_errors' ? `${k}: ` : ''}${Array.isArray(v) ? v.join(' ') : v}`)
+                .join(' ');
             }
+            toast.error(errorMsg);
+            setSubmitting(false);
+            return;
           }
         }
       }
 
-      // Generate or use official backend tracking ID (e.g. REQ-2026-000003 or RQ-097323)
-      const randomSuffix = Math.floor(100000 + Math.random() * 900000);
-      const trackingCode = createdItem?.tracking_number || `RQ-${randomSuffix}`;
+      // Resolve tracking number: Prefer official backend tracking ID, fallback to structured formula
+      let trackingCode = createdItem?.tracking_number;
+      if (!trackingCode) {
+        const existingStored = getStoredRequests();
+        const userSeq = existingStored.filter((r) => r.student_id === studentId || r.user === (user?.userId || user?.id)).length + 1;
+        trackingCode = generateTrackingNumberFallback({
+          course: user?.course_code || course || 'IT',
+          studentId: studentId || user?.username || 'STUDENT',
+          docCode: docCode || '1',
+          sequence: userSeq,
+        });
+      }
       setGeneratedTrackingId(trackingCode);
 
       // Build comprehensive request record that is immediately accessible to Admin, Staff, and Student
+      const totalCopiesCount = currentDocDetails.totalCopies || 1;
+      const copiesSummary = currentDocDetails.items.length > 1
+        ? `${totalCopiesCount} copies (${currentDocDetails.items.map((it) => `${it.title}: ${it.copies}`).join(', ')})`
+        : `${totalCopiesCount} ${totalCopiesCount > 1 ? 'copies' : 'copy'}`;
+
       const requestRecord = {
         id: createdItem?.id || trackingCode,
         rawId: createdItem?.id || trackingCode,
@@ -517,7 +996,15 @@ export default function RequestDocumentPage() {
           price: currentDocDetails.unitPrice,
         },
         document_type: exactDocTitle,
-        copies: `${copies} ${copies > 1 ? 'copies' : 'copy'}`,
+        documents: currentDocDetails.items.map((it) => it.title),
+        doc_details: currentDocDetails.items.map((it) => ({
+          title: it.title,
+          copies: it.copies,
+          unitPrice: it.unitPrice,
+          total: it.itemTotal,
+        })),
+        copies: copiesSummary,
+        total_copies: totalCopiesCount,
         amount: `P${currentDocDetails.totalPrice}`,
         price: currentDocDetails.totalPrice,
         status: 'Pending',
@@ -538,23 +1025,6 @@ export default function RequestDocumentPage() {
       };
 
       saveStoredRequest(requestRecord);
-
-      // Cache student profile so Staff and Admin can resolve student details
-      try {
-        const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
-        const pObj = {
-          full_name: fullName,
-          first_name: fullName.split(' ')[0] || fullName,
-          last_name: fullName.split(' ').slice(1).join(' ') || '',
-          student_id: studentId,
-          course: course,
-          email: email,
-        };
-        if (studentId) profiles[studentId] = pObj;
-        if (user?.id) profiles[String(user.id)] = pObj;
-        if (user?.username) profiles[user.username] = pObj;
-        localStorage.setItem('regquest_student_profiles', JSON.stringify(profiles));
-      } catch {}
 
       if (clearancePreview) {
         const clMeta = {
@@ -736,12 +1206,22 @@ export default function RequestDocumentPage() {
                   <span className="ustp-section-title">Part 1: Please complete entries below.</span>
                   <div className="ustp-contact-wrap">
                     <span className="ustp-contact-label">CONTACT NO.:</span>
-                    <input
-                      type="text"
-                      value={contactNo}
-                      onChange={(e) => setContactNo(e.target.value)}
-                      className="ustp-underline-field ustp-contact-input"
-                    />
+                    <div className="flex flex-col">
+                      <input
+                        id="ustp-contact-input"
+                        type="text"
+                        inputMode="numeric"
+                        value={contactNo}
+                        onChange={handleContactNoChange}
+                        aria-invalid={Boolean(contactNoError)}
+                        className={`ustp-underline-field ustp-contact-input ${
+                          contactNoError ? '!border-red-500 !text-red-700 bg-red-50/40' : ''
+                        }`}
+                      />
+                      {contactNoError && (
+                        <p className="text-[10px] leading-tight text-red-600 mt-0.5 font-medium">{contactNoError}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -962,14 +1442,15 @@ export default function RequestDocumentPage() {
                   <div className="ustp-doc-col">
                     {/* Evaluation */}
                     {(() => {
-                      const isSelected = Boolean(selectedDocName) && (selectedDocName === 'Evaluation (P50)' || selectedDocName.toLowerCase().includes('evaluation') || selectedDocName.toLowerCase() === 'eval');
+                      const isSelected = selectedDocs.some(
+                        (d) => d === 'Evaluation (P50)' || d.toLowerCase().includes('evaluation') || d.toLowerCase() === 'eval'
+                      );
                       return (
                         <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
                           <input
-                            type="radio"
-                            name="selectedDoc"
+                            type="checkbox"
                             checked={isSelected}
-                            onChange={() => handleDocumentSelect('Evaluation (P50)')}
+                            onChange={handleToggleEvaluation}
                             className="ustp-checkbox-input"
                           />
                           <span>Evaluation (P50)</span>
@@ -979,14 +1460,15 @@ export default function RequestDocumentPage() {
 
                     {/* Honorable Dismissal */}
                     {(() => {
-                      const isSelected = Boolean(selectedDocName) && (selectedDocName === 'Honorable Dismissal (P100)' || selectedDocName.toLowerCase().includes('honorable') || selectedDocName.toLowerCase().includes('dismissal') || selectedDocName.toLowerCase() === 'hd');
+                      const isSelected = selectedDocs.some(
+                        (d) => d === 'Honorable Dismissal (P100)' || d.toLowerCase().includes('honorable') || d.toLowerCase().includes('dismissal') || d.toLowerCase() === 'hd'
+                      );
                       return (
                         <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
                           <input
-                            type="radio"
-                            name="selectedDoc"
+                            type="checkbox"
                             checked={isSelected}
-                            onChange={() => handleDocumentSelect('Honorable Dismissal (P100)')}
+                            onChange={handleToggleHonorableDismissal}
                             className="ustp-checkbox-input"
                           />
                           <span>Honorable Dismissal (P100)</span>
@@ -996,14 +1478,15 @@ export default function RequestDocumentPage() {
 
                     {/* Transcript of Records */}
                     {(() => {
-                      const isSelected = Boolean(selectedDocName) && (selectedDocName.toLowerCase().includes('transcript') || selectedDocName.toLowerCase().includes('tor'));
+                      const isSelected = selectedDocs.some(
+                        (d) => d.toLowerCase().includes('transcript') || d.toLowerCase().includes('tor')
+                      );
                       return (
                         <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
                           <input
-                            type="radio"
-                            name="selectedDoc"
+                            type="checkbox"
                             checked={isSelected}
-                            onChange={() => handleDocumentSelect('Transcript of Records (P125/pg)')}
+                            onChange={handleToggleTranscript}
                             className="ustp-checkbox-input"
                           />
                           <span>Transcript of Records (P125/pg)</span>
@@ -1013,14 +1496,15 @@ export default function RequestDocumentPage() {
 
                     {/* Authentication */}
                     {(() => {
-                      const isSelected = Boolean(selectedDocName) && (selectedDocName.toLowerCase().includes('authentication') || selectedDocName.toLowerCase().includes('auth'));
+                      const isSelected = selectedDocs.some(
+                        (d) => d.toLowerCase().includes('authentication') || d.toLowerCase().includes('auth')
+                      );
                       return (
                         <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
                           <input
-                            type="radio"
-                            name="selectedDoc"
+                            type="checkbox"
                             checked={isSelected}
-                            onChange={() => handleDocumentSelect('Authentication (P5/pg)')}
+                            onChange={handleToggleAuthentication}
                             className="ustp-checkbox-input"
                           />
                           <span>Authentication (P5/pg)</span>
@@ -1040,27 +1524,39 @@ export default function RequestDocumentPage() {
                           !n.includes('dismissal') &&
                           !n.includes('evaluation') &&
                           !n.includes('authentication') &&
+                          !n.includes('certification') &&
                           !n.includes('car') &&
                           !n.includes('enrolled') &&
+                          !n.includes('gpa') &&
+                          !n.includes('earned unit') &&
+                          !n.includes('endorsement') &&
+                          !n.includes('subjects w/ grades') &&
                           c !== 'tor' &&
                           c !== 'hd' &&
                           c !== 'eval' &&
+                          c !== 'auth' &&
+                          c !== 'cert' &&
                           c !== 'car' &&
-                          c !== 'coe'
+                          c !== 'coe' &&
+                          c !== 'gpa' &&
+                          c !== 'units' &&
+                          c !== 'endorse' &&
+                          c !== 'grades'
                         );
                       })
                       .map((ctype) => {
-                        const isSelected = Boolean(selectedDocName) && (selectedDocName === ctype.name || (selectedCredTypeId && selectedCredTypeId === ctype.id));
+                        const isSelected = selectedDocs.some(
+                          (d) => d === ctype.name || d.toLowerCase() === ctype.name.toLowerCase()
+                        );
                         return (
                           <label
                             key={ctype.id}
                             className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}
                           >
                             <input
-                              type="radio"
-                              name="selectedDoc"
+                              type="checkbox"
                               checked={isSelected}
-                              onChange={() => handleDocumentSelect(ctype.name, ctype.id)}
+                              onChange={() => handleToggleDocument(ctype.name)}
                               className="ustp-checkbox-input"
                             />
                             <span className="ustp-dynamic-cred-name">
@@ -1073,22 +1569,10 @@ export default function RequestDocumentPage() {
 
                   {/* Column 2: Certification and Sub-items */}
                   <div className="ustp-doc-col">
-                    {/* General Certification */}
-                    {(() => {
-                      const isCertGeneralSelected = Boolean(selectedDocName) && (selectedDocName === 'Certification (P80)' || selectedDocName === 'Certification');
-                      return (
-                        <label className={`ustp-doc-label ${isCertGeneralSelected ? 'selected' : ''}`}>
-                          <input
-                            type="radio"
-                            name="selectedDoc"
-                            checked={isCertGeneralSelected}
-                            onChange={() => handleDocumentSelect('Certification (P80)')}
-                            className="ustp-checkbox-input"
-                          />
-                          <span>Certification (P80)</span>
-                        </label>
-                      );
-                    })()}
+                    {/* General Certification - Header without box */}
+                    <div className="ustp-doc-label cursor-default select-none pointer-events-none pl-0">
+                      <span className="font-bold text-slate-800">Certification (P80)</span>
+                    </div>
 
                     {/* Specific Certification Sub-options */}
                     <div className="ustp-cert-subgrid">
@@ -1100,17 +1584,7 @@ export default function RequestDocumentPage() {
                         { label: 'Endorsement', key: 'Endorsement' },
                         { label: 'Subjects w/ grades', key: 'Subjects w/ grades' },
                       ].map((cert) => {
-                        const lower = (selectedDocName || '').toLowerCase();
-                        const isSubSelected = Boolean(selectedDocName) && (
-                          selectedDocName === `Certification - ${cert.label}` ||
-                          selectedDocName === cert.label ||
-                          (cert.label === 'CAR' && (selectedDocName === 'CAR' || lower === 'car' || lower.includes('- car'))) ||
-                          (cert.label === 'Officially enrolled' && (lower.includes('enrolled') || lower === 'coe')) ||
-                          (cert.label === 'GPA' && lower.includes('gpa')) ||
-                          (cert.label === 'Endorsement' && lower.includes('endorsement')) ||
-                          (cert.label === 'Earned Units' && (lower.includes('earned') || lower.includes('unit'))) ||
-                          (cert.label === 'Subjects w/ grades' && (lower.includes('subject') || lower.includes('grade')))
-                        );
+                        const isSubSelected = isCertSubSelected(cert.label);
 
                         return (
                           <label
@@ -1118,10 +1592,9 @@ export default function RequestDocumentPage() {
                             className={`ustp-cert-subitem ${isSubSelected ? 'selected' : ''}`}
                           >
                             <input
-                              type="radio"
-                              name="selectedDoc"
+                              type="checkbox"
                               checked={isSubSelected}
-                              onChange={() => handleDocumentSelect(`Certification - ${cert.label}`)}
+                              onChange={() => handleToggleCertSub(cert.label)}
                               className="ustp-checkbox-input"
                             />
                             <span>{cert.label}</span>
@@ -1144,10 +1617,9 @@ export default function RequestDocumentPage() {
                     {['For Evaluation', 'For Scholarship', 'For Passport', 'For Board Exam'].map((p) => (
                       <label key={p} className="ustp-checkbox-row">
                         <input
-                          type="radio"
-                          name="purposeSelection"
-                          checked={purposeOption === p}
-                          onChange={() => handlePurposeSelect(p)}
+                          type="checkbox"
+                          checked={selectedPurposes.includes(p)}
+                          onChange={() => handleTogglePurpose(p)}
                           className="ustp-checkbox-input"
                         />
                         <span>{p}</span>
@@ -1160,10 +1632,9 @@ export default function RequestDocumentPage() {
                     {['For Employment', 'For Personal File', 'For Advanced Studies', 'For Ranking'].map((p) => (
                       <label key={p} className="ustp-checkbox-row">
                         <input
-                          type="radio"
-                          name="purposeSelection"
-                          checked={purposeOption === p}
-                          onChange={() => handlePurposeSelect(p)}
+                          type="checkbox"
+                          checked={selectedPurposes.includes(p)}
+                          onChange={() => handleTogglePurpose(p)}
                           className="ustp-checkbox-input"
                         />
                         <span>{p}</span>
@@ -1176,10 +1647,9 @@ export default function RequestDocumentPage() {
                 <div className="ustp-purpose-other-row">
                   <label className="ustp-checkbox-row">
                     <input
-                      type="radio"
-                      name="purposeSelection"
-                      checked={purposeOption === 'Others'}
-                      onChange={() => handlePurposeSelect('Others')}
+                      type="checkbox"
+                      checked={selectedPurposes.includes('Others')}
+                      onChange={() => handleTogglePurpose('Others')}
                       className="ustp-checkbox-input"
                     />
                     <span>Others (Specify):</span>
@@ -1187,10 +1657,7 @@ export default function RequestDocumentPage() {
                   <input
                     type="text"
                     value={otherPurpose}
-                    onChange={(e) => {
-                      setOtherPurpose(e.target.value);
-                      setPurposeInput(e.target.value);
-                    }}
+                    onChange={(e) => handleOtherPurposeChange(e.target.value)}
                     placeholder="Specify other purpose..."
                     className="ustp-underline-field ustp-flex-1"
                   />
@@ -1326,46 +1793,169 @@ export default function RequestDocumentPage() {
               <div className="review-gray-box">
                 {/* Document Request */}
                 <div>
-                  <h3 className="review-sub-title">Document Request:</h3>
-                  <div className="review-doc-header">
-                    <div>
-                      <h4 className="review-doc-name">{currentDocDetails.title}</h4>
-                      <p className="review-doc-sub">{currentDocDetails.description}</p>
-                      {currentDocDetails.unitPrice > 0 && (
-                        <p className="review-doc-pricing">
-                          ₱{currentDocDetails.unitPrice.toFixed(2)} per copy
-                          {copies > 1 && ` • Estimated Total: ₱${currentDocDetails.totalPrice.toFixed(2)}`}
-                        </p>
-                      )}
-                    </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="review-sub-title mb-0">Document Request:</h3>
+                    {currentDocDetails.items.length > 1 && (
+                      <span className="text-xs font-semibold text-slate-500">
+                        {currentDocDetails.items.length} documents selected
+                      </span>
+                    )}
+                  </div>
 
-                    <div className="review-copies-control">
-                      <span className="review-copies-label">Number of copies</span>
-                      <div className="review-copies-stepper">
-                        <button
-                          type="button"
-                          onClick={() => setCopies((c) => Math.max(1, c - 1))}
-                          className="review-stepper-btn"
-                        >
-                          -
-                        </button>
-                        <input
-                          type="number"
-                          value={copies}
-                          min={1}
-                          max={10}
-                          onChange={(e) => setCopies(Math.max(1, parseInt(e.target.value) || 1))}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setCopies((c) => Math.min(10, c + 1))}
-                          className="review-stepper-btn"
-                        >
-                          +
-                        </button>
+                  {currentDocDetails.items.length > 1 ? (
+                    <div className="space-y-2.5">
+                      {currentDocDetails.items.map((it) => {
+                        const itemCopies = getCopiesForDoc(it.title);
+                        const itemSubtotal = it.unitPrice * itemCopies;
+
+                        return (
+                          <div
+                            key={it.title}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-white rounded-lg border border-slate-200 shadow-2xs hover:border-amber-300 transition-colors"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <h4 className="review-doc-name text-sm">{it.title}</h4>
+                              <div className="text-xs text-slate-700 mt-1 font-medium flex items-center gap-2">
+                                <span>₱{it.unitPrice.toFixed(2)} per copy</span>
+                                <span className="text-slate-300">•</span>
+                                <span className="font-bold text-amber-700 font-mono">
+                                  Subtotal: ₱{itemSubtotal.toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+                              <div className="review-copies-control">
+                                <span className="review-copies-label">Number of copies</span>
+                                <div className="review-copies-stepper">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateDocCopies(it.title, itemCopies - 1, it.rawName)}
+                                    className="review-stepper-btn"
+                                    title={itemCopies <= 1 ? 'Remove document' : 'Decrease copies'}
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    value={itemCopies}
+                                    min={1}
+                                    max={10}
+                                    readOnly
+                                    className="select-none pointer-events-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateDocCopies(it.title, itemCopies + 1, it.rawName)}
+                                    className="review-stepper-btn"
+                                    title="Increase copies"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setDocPendingRemoval({ rawName: it.rawName, title: it.title })}
+                                className="p-2 rounded-lg text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors cursor-pointer"
+                                title="Remove document"
+                                aria-label={`Remove ${it.title}`}
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Summary breakdown row */}
+                      <div className="flex items-center justify-between p-3 bg-amber-50/80 rounded-lg border border-amber-200">
+                        <div className="text-xs font-semibold text-amber-900">
+                          Total Copies: <span className="font-bold">{currentDocDetails.totalCopies}</span>
+                        </div>
+                        <div className="text-xs sm:text-sm font-extrabold text-slate-900">
+                          Estimated Total: <span className="font-mono text-amber-800">₱{currentDocDetails.totalPrice.toFixed(2)}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="review-doc-header">
+                      <div>
+                        <h4 className="review-doc-name">{currentDocDetails.title}</h4>
+                        {currentDocDetails.unitPrice > 0 && (
+                          <p className="review-doc-pricing">
+                            ₱{currentDocDetails.unitPrice.toFixed(2)} per copy
+                            {getCopiesForDoc(currentDocDetails.title) > 1 &&
+                              ` • Estimated Total: ₱${currentDocDetails.totalPrice.toFixed(2)}`}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2.5">
+                        <div className="review-copies-control">
+                          <span className="review-copies-label">Number of copies</span>
+                          <div className="review-copies-stepper">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleUpdateDocCopies(
+                                  currentDocDetails.title,
+                                  getCopiesForDoc(currentDocDetails.title) - 1,
+                                  currentDocDetails.items[0]?.rawName
+                                )
+                              }
+                              className="review-stepper-btn"
+                              title={getCopiesForDoc(currentDocDetails.title) <= 1 ? 'Remove document' : 'Decrease copies'}
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              value={getCopiesForDoc(currentDocDetails.title)}
+                              min={1}
+                              max={10}
+                              readOnly
+                              className="select-none pointer-events-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleUpdateDocCopies(
+                                  currentDocDetails.title,
+                                  getCopiesForDoc(currentDocDetails.title) + 1,
+                                  currentDocDetails.items[0]?.rawName
+                                )
+                              }
+                              className="review-stepper-btn"
+                              title="Increase copies"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                        {currentDocDetails.items.length === 1 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDocPendingRemoval({
+                                rawName: currentDocDetails.items[0]?.rawName || currentDocDetails.title,
+                                title: currentDocDetails.title,
+                              })
+                            }
+                            className="p-2 rounded-lg text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors cursor-pointer"
+                            title="Remove document"
+                            aria-label={`Remove ${currentDocDetails.title}`}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="review-divider" />
@@ -1428,11 +2018,19 @@ export default function RequestDocumentPage() {
                     <div>
                       <label className="review-input-label">Contact No.</label>
                       <input
+                        id="review-contact-input"
                         type="text"
+                        inputMode="numeric"
                         value={contactNo}
-                        onChange={(e) => setContactNo(e.target.value)}
-                        className="review-pill-input"
+                        onChange={handleContactNoChange}
+                        aria-invalid={Boolean(contactNoError)}
+                        className={`review-pill-input ${
+                          contactNoError ? '!border-red-500 !ring-1 !ring-red-500 bg-red-50/40' : ''
+                        }`}
                       />
+                      {contactNoError && (
+                        <p className="text-[11px] leading-tight text-red-600 mt-0.5 font-medium">{contactNoError}</p>
+                      )}
                     </div>
 
                     <div>
@@ -1489,115 +2087,197 @@ export default function RequestDocumentPage() {
                   </div>
                 </div>
 
-                {/* Attached Clearance & Passport Photo Section (Only shown if student attached photos) */}
-                {(clearancePreview || photoPreview) && (
-                  <>
-                    <div className="review-divider" />
-                    <div className="review-attached-section">
-                      <h3 className="review-sub-title">
-                        {clearancePreview && photoPreview
-                          ? 'Attached Clearance & Photo:'
-                          : clearancePreview
-                          ? 'Attached Clearance Photo:'
-                          : 'Attached Passport 2x2 Photo:'}
-                      </h3>
-                      <div
-                        className={`review-attached-grid ${
-                          clearancePreview && photoPreview ? 'dual' : 'single'
-                        }`}
-                      >
-                        {/* Clearance Form Card - Only shown if clearance document is attached */}
-                        {clearancePreview && (
-                          <div className="review-attached-card">
-                            <div className="review-attached-media">
-                              {clearanceIsPdf || clearanceFile?.name?.toLowerCase().endsWith('.pdf') ? (
-                                <div className="review-pdf-badge">
-                                  <span className="review-pdf-icon">📄</span>
-                                  <span>PDF</span>
+                {/* Attached Clearance & Passport Photo Section */}
+                {(() => {
+                  const isBoardExamPurpose =
+                    selectedPurposes.some((p) => p.toLowerCase().includes('board exam')) ||
+                    purposeInput.toLowerCase().includes('board exam');
+                  const showPassportCard = isBoardExamPurpose || Boolean(photoPreview);
+
+                  return (
+                    <>
+                      <div className="review-divider" />
+                      <div className="review-attached-section">
+                        <h3 className="review-sub-title">
+                          {showPassportCard ? 'Attached Clearance & Photo:' : 'Attached Clearance:'}
+                        </h3>
+                        <div className={`review-attached-grid ${showPassportCard ? 'dual' : 'single'}`}>
+                          {/* Clearance Form Card */}
+                          <div
+                            id="review-clearance-card"
+                            className={`review-attached-card ${
+                              clearanceError && !clearancePreview ? '!border-red-500 !ring-1 !ring-red-500 bg-red-50/30' : ''
+                            }`}
+                          >
+                            {clearancePreview ? (
+                              <>
+                                <div className="review-attached-media">
+                                  {clearanceIsPdf || clearanceFile?.name?.toLowerCase().endsWith('.pdf') ? (
+                                    <div className="review-pdf-badge">
+                                      <span className="review-pdf-icon">📄</span>
+                                      <span>PDF</span>
+                                    </div>
+                                  ) : (
+                                    <img
+                                      src={clearancePreview}
+                                      alt="Clearance Form"
+                                      className="review-attached-thumb"
+                                    />
+                                  )}
+                                  <div className="review-attached-info">
+                                    <span className="review-attached-title">Clearance Document</span>
+                                    <span className="review-attached-filename">
+                                      {clearanceFile ? clearanceFile.name : 'Attached Clearance'}
+                                    </span>
+                                    <span className="review-attached-badge">
+                                      ✓ Attached
+                                    </span>
+                                  </div>
                                 </div>
+
+                                <div className="review-attached-actions">
+                                  <label className="review-attached-btn-change">
+                                    Change
+                                    <input
+                                      type="file"
+                                      accept="application/pdf,image/png,image/jpeg,image/jpg"
+                                      onChange={handleClearanceUpload}
+                                      className="ustp-file-input-hidden"
+                                    />
+                                  </label>
+                                  <button
+                                    type="button"
+                                    onClick={handleRemoveClearance}
+                                    className="review-attached-btn-remove"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="review-attached-media">
+                                  <div
+                                    className={`w-12 h-12 rounded-lg border flex items-center justify-center shrink-0 ${
+                                      clearanceError
+                                        ? 'bg-red-50 border-red-200 text-red-600'
+                                        : 'bg-amber-50 border-amber-200 text-amber-600'
+                                    }`}
+                                  >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                    </svg>
+                                  </div>
+                                  <div className="review-attached-info">
+                                    <span className="review-attached-title">
+                                      Clearance Document <span className="text-red-500">*</span>
+                                    </span>
+                                    <span
+                                      className={`review-attached-filename ${
+                                        clearanceError ? 'text-red-600 font-semibold' : 'text-amber-700'
+                                      }`}
+                                    >
+                                      {clearanceError
+                                        ? 'Please attach your clearance document before submitting.'
+                                        : 'No clearance attached'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="review-attached-actions">
+                                  <label className="review-attached-btn-change">
+                                    Add Clearance
+                                    <input
+                                      type="file"
+                                      accept="application/pdf,image/png,image/jpeg,image/jpg"
+                                      onChange={handleClearanceUpload}
+                                      className="ustp-file-input-hidden"
+                                    />
+                                  </label>
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Passport / 2x2 Picture Card (only shown when Board Exam purpose or photo attached) */}
+                          {showPassportCard && (
+                            <div className="review-attached-card">
+                              {photoPreview ? (
+                                <>
+                                  <div className="review-attached-media">
+                                    <img
+                                      src={photoPreview}
+                                      alt="Passport Photo"
+                                      className="review-attached-thumb"
+                                    />
+                                    <div className="review-attached-info">
+                                      <span className="review-attached-title">Passport / 2x2 Photo</span>
+                                      <span className="review-attached-filename">
+                                        {photoFile ? photoFile.name : 'Passport Photo'}
+                                      </span>
+                                      <span className="review-attached-badge">
+                                        ✓ Attached
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="review-attached-actions">
+                                    <label className="review-attached-btn-change">
+                                      Change
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handlePhotoUpload}
+                                        className="ustp-file-input-hidden"
+                                      />
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={handleRemovePhoto}
+                                      className="review-attached-btn-remove"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                </>
                               ) : (
-                                <img
-                                  src={clearancePreview}
-                                  alt="Clearance Form"
-                                  className="review-attached-thumb"
-                                />
+                                <>
+                                  <div className="review-attached-media">
+                                    <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center shrink-0">
+                                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                      </svg>
+                                    </div>
+                                    <div className="review-attached-info">
+                                      <span className="review-attached-title">
+                                        Passport / 2x2 Photo
+                                      </span>
+                                      <span className="review-attached-filename">
+                                        Required for Board Exam requests
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="review-attached-actions">
+                                    <label className="review-attached-btn-change">
+                                      Add Photo
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handlePhotoUpload}
+                                        className="ustp-file-input-hidden"
+                                      />
+                                    </label>
+                                  </div>
+                                </>
                               )}
-                              <div className="review-attached-info">
-                                <span className="review-attached-title">Clearance Document</span>
-                                <span className="review-attached-filename">
-                                  {clearanceFile ? clearanceFile.name : 'Attached Clearance'}
-                                </span>
-                                <span className="review-attached-badge">
-                                  ✓ Attached
-                                </span>
-                              </div>
                             </div>
-
-                            <div className="review-attached-actions">
-                              <label className="review-attached-btn-change">
-                                Change
-                                <input
-                                  type="file"
-                                  accept="application/pdf,image/png,image/jpeg,image/jpg"
-                                  onChange={handleClearanceUpload}
-                                  className="ustp-file-input-hidden"
-                                />
-                              </label>
-                              <button
-                                type="button"
-                                onClick={handleRemoveClearance}
-                                className="review-attached-btn-remove"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Passport / 2x2 Picture Card - Only shown if passport photo is attached */}
-                        {photoPreview && (
-                          <div className="review-attached-card">
-                            <div className="review-attached-media">
-                              <img
-                                src={photoPreview}
-                                alt="Passport Photo"
-                                className="review-attached-thumb"
-                              />
-                              <div className="review-attached-info">
-                                <span className="review-attached-title">Passport / 2x2 Photo</span>
-                                <span className="review-attached-filename">
-                                  {photoFile ? photoFile.name : 'Passport Photo'}
-                                </span>
-                                <span className="review-attached-badge">
-                                  ✓ Attached
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="review-attached-actions">
-                              <label className="review-attached-btn-change">
-                                Change
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={handlePhotoUpload}
-                                  className="ustp-file-input-hidden"
-                                />
-                              </label>
-                              <button
-                                type="button"
-                                onClick={handleRemovePhoto}
-                                className="review-attached-btn-remove"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </>
-                )}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Footer Note */}
@@ -1668,18 +2348,55 @@ export default function RequestDocumentPage() {
                 Back to Home
               </button>
             </div>
-
-            {/* View Claim Stub Link */}
-            <button
-              type="button"
-              onClick={() => toast.success(`Claim stub for ${generatedTrackingId} saved to download queue.`)}
-              className="complete-stub-link"
-            >
-              View Claim Stub
-            </button>
           </div>
         )}
       </div>
+
+      {/* Confirm Remove Document Modal */}
+      {docPendingRemoval && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-remove-doc-title"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 id="confirm-remove-doc-title" className="text-sm font-extrabold text-slate-900 tracking-wide">
+                  ARE YOU SURE TO REMOVE/DELETE DOCUMENT?
+                </h3>
+                <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                  You are about to remove{' '}
+                  <span className="font-bold text-slate-900">{docPendingRemoval.title}</span> from your request.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDocPendingRemoval(null)}
+                className="px-4 py-2 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRemoveDoc}
+                className="px-4 py-2 rounded-lg text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors cursor-pointer"
+              >
+                Remove / Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

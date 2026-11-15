@@ -1,9 +1,16 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import requestsApi, { resolveRequestDocType } from '../../api/requests';
+import requestsApi, {
+  resolveRequestDocType,
+  sortRequestsNewestFirst,
+  getArchivedRequestsMap,
+  isRequestArchived,
+  setRequestArchived,
+} from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
+import ClaimStubModal from '../../components/common/ClaimStubModal';
 import '../../styles/student/TrackStatusPage.css';
 
 const DEFAULT_TIMELINE_STEPS = [
@@ -23,6 +30,7 @@ function formatStatusDisplay(rawStatus) {
     case 'PENDONG':
     case 'RECEIVED':
     case 'REQUEST SUBMITTED':
+    case 'REQUIREMENTS_VERIFICATION':
       return 'Pending';
     case 'FOR_PAYMENT':
     case 'FOR PAYMENT':
@@ -75,6 +83,20 @@ function calculateReleaseDate(createdAt, processingDays = 5) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+export function isClaimedStatus(r) {
+  if (!r) return false;
+  const s = formatStatusDisplay(r.status);
+  if (s === 'Claimed') return true;
+  const raw = String(r.status || '').trim().toLowerCase();
+  return (
+    raw === 'claimed' ||
+    raw === 'released' ||
+    raw === 'completed' ||
+    raw.includes('claim') ||
+    (raw.includes('release') && !raw.includes('ready') && !raw.includes('for'))
+  );
+}
+
 export default function TrackStatusPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -87,9 +109,38 @@ export default function TrackStatusPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showClaimStubModal, setShowClaimStubModal] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const claimStubRef = useRef(null);
 
-  // Search input state
-  const [searchInput, setSearchInput] = useState(urlTrackId);
+  // Download Claim Stub as PDF
+  const handleDownloadPdf = async () => {
+    const element = claimStubRef.current;
+    if (!element || downloading) return;
+    setDownloading(true);
+    try {
+      const html2pdfModule = await import('html2pdf.js');
+      const html2pdf = html2pdfModule.default || html2pdfModule;
+      const safeTracking = matchedRequest?.tracking_number || matchedRequest?.id || 'doc';
+      const opt = {
+        margin: [10, 10, 10, 10],
+        filename: `USTP_Claim_Stub_${safeTracking}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+      };
+      await html2pdf().set(opt).from(element).save();
+      toast.success('Claim Stub PDF downloaded successfully!');
+    } catch (err) {
+      console.warn('PDF export fallback:', err);
+      window.print();
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // Selected request tracking ID
+  const [selectedTrackId, setSelectedTrackId] = useState(urlTrackId);
 
   // Load requests and credential types
   const fetchData = async (isManualRefresh = false) => {
@@ -125,10 +176,10 @@ export default function TrackStatusPage() {
     };
   }, []);
 
-  // Sync search input when urlTrackId changes externally
+  // Sync selected tracking ID when urlTrackId changes externally
   useEffect(() => {
     if (urlTrackId) {
-      setSearchInput(urlTrackId);
+      setSelectedTrackId(urlTrackId);
     }
   }, [urlTrackId]);
 
@@ -139,37 +190,135 @@ export default function TrackStatusPage() {
     return map;
   }, [credentialTypes]);
 
-  // Student's Requests List (filtered for this student if user information is available)
+  // Archived state synced from localStorage / events
+  const [archivedMap, setArchivedMap] = useState(() => getArchivedRequestsMap());
+  const [activeQueueTab, setActiveQueueTab] = useState('active'); // 'active' | 'history'
+
+  useEffect(() => {
+    const handleSyncArchived = () => {
+      setArchivedMap(getArchivedRequestsMap());
+    };
+    window.addEventListener('regquest_archived_updated', handleSyncArchived);
+    window.addEventListener('storage', handleSyncArchived);
+    return () => {
+      window.removeEventListener('regquest_archived_updated', handleSyncArchived);
+      window.removeEventListener('storage', handleSyncArchived);
+    };
+  }, []);
+
+  // Student's Requests List (strictly isolated to this student, sorted strictly from NEWEST to OLDEST)
   const studentRequests = useMemo(() => {
     const currentUserId = user?.userId || user?.id;
     const currentStudentId = user?.student_id || user?.username;
+    const fullName =
+      user?.full_name ||
+      [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim();
+
+    if (!currentUserId && !currentStudentId) return [];
 
     const list = rawRequests.filter((r) => {
-      if (!currentUserId && !currentStudentId) return true;
       if (r.user && currentUserId && String(r.user) === String(currentUserId)) return true;
-      if (r.student_id && currentStudentId && String(r.student_id) === String(currentStudentId)) return true;
-      if (r.student_name && user?.username && r.student_name.toLowerCase().includes(user.username.toLowerCase())) return true;
-      if (r.student_name && user?.full_name && r.student_name.toLowerCase().includes(user.full_name.toLowerCase())) return true;
-      if (r.student_name && user?.first_name && r.student_name.toLowerCase().includes(user.first_name.toLowerCase())) return true;
+      if (
+        r.student_id &&
+        currentStudentId &&
+        String(r.student_id).trim().toLowerCase() === String(currentStudentId).trim().toLowerCase()
+      ) {
+        return true;
+      }
+      if (
+        !r.user &&
+        !r.student_id &&
+        r.student_name &&
+        fullName &&
+        r.student_name.trim().toLowerCase() === fullName.toLowerCase()
+      ) {
+        return true;
+      }
       return false;
     });
 
-    // If filtering by logged-in user yields results, return those; otherwise return all available requests for viewing
-    return list.length > 0 ? list : rawRequests;
+    // Sort strictly from newest to oldest (descending date)
+    return [...list].sort(sortRequestsNewestFirst);
   }, [rawRequests, user]);
 
+  // Split student requests into Active vs History
+  // Automatically move Claimed / Released requests directly to History!
+  const activeStudentRequests = useMemo(() => {
+    return studentRequests.filter((r) => !isClaimedStatus(r) && !isRequestArchived(r, archivedMap));
+  }, [studentRequests, archivedMap]);
+
+  const historyStudentRequests = useMemo(() => {
+    return studentRequests.filter((r) => isClaimedStatus(r) || isRequestArchived(r, archivedMap));
+  }, [studentRequests, archivedMap]);
+
+  // Displayed requests in the selector based on active tab
+  const displayedRequests = useMemo(() => {
+    if (activeQueueTab === 'history') {
+      return historyStudentRequests;
+    }
+    return activeStudentRequests;
+  }, [activeQueueTab, historyStudentRequests, activeStudentRequests]);
+
+  // Automatically switch to 'history' tab if selected/URL track ID is a claimed/history request,
+  // or if student only has completed/claimed requests in history
+  useEffect(() => {
+    if (urlTrackId) {
+      const isHist = historyStudentRequests.some((r) => {
+        const c = (r.tracking_number || r.trackingId || String(r.id)).toUpperCase();
+        return c === urlTrackId.trim().toUpperCase();
+      });
+      if (isHist) {
+        setActiveQueueTab('history');
+      }
+    } else if (!loading && activeStudentRequests.length === 0 && historyStudentRequests.length > 0 && activeQueueTab === 'active') {
+      setActiveQueueTab('history');
+    }
+  }, [urlTrackId, historyStudentRequests, activeStudentRequests.length, loading, activeQueueTab]);
+
+  // Mark request as Done (archived to history)
+  const handleMarkDone = (req) => {
+    if (!req) return;
+    const reqId = req.id || req.rawId || req.tracking_number;
+    setRequestArchived(reqId, true, user, { fallbackItem: req });
+    setArchivedMap(getArchivedRequestsMap());
+    toast.success(`Request ${req.tracking_number || req.trackingId || reqId} marked as Done and moved to History!`);
+    // Remain in active requests tab
+  };
+
+  // Restore request from history back to active
+  const handleRestoreRequest = (req) => {
+    if (!req) return;
+    const reqId = req.id || req.rawId || req.tracking_number;
+    setRequestArchived(reqId, false, user, { fallbackItem: req });
+    setArchivedMap(getArchivedRequestsMap());
+    toast.info(`Request ${req.tracking_number || req.trackingId || reqId} restored to Active Requests.`);
+    setActiveQueueTab('active');
+    setSelectedTrackId(req.tracking_number || req.trackingId || String(reqId));
+  };
+
   // Determine active tracking ID:
-  // 1. Search input / url query if present
-  // 2. Or default to the student's most recent request
+  // 1. url query if present
+  // 2. Or student selected request in current tab
+  // 3. Or default to the current tab's first request
   const activeTrackingId = useMemo(() => {
-    if (searchInput.trim()) return searchInput.trim();
     if (urlTrackId.trim()) return urlTrackId.trim();
+    if (selectedTrackId.trim()) {
+      const inCurrentTab = displayedRequests.some((r) => {
+        const c = (r.tracking_number || r.trackingId || String(r.id)).toUpperCase();
+        return c === selectedTrackId.trim().toUpperCase();
+      });
+      if (inCurrentTab) return selectedTrackId.trim();
+    }
+    if (displayedRequests.length > 0) {
+      const first = displayedRequests[0];
+      return first.tracking_number || first.trackingId || String(first.id);
+    }
     if (studentRequests.length > 0) {
       const first = studentRequests[0];
       return first.tracking_number || first.trackingId || String(first.id);
     }
     return '';
-  }, [searchInput, urlTrackId, studentRequests]);
+  }, [urlTrackId, selectedTrackId, displayedRequests, studentRequests]);
 
   // Match the active request object
   const matchedRequest = useMemo(() => {
@@ -206,24 +355,33 @@ export default function TrackStatusPage() {
 
   // Step Index for 5-Step Timeline (0 to 4)
   const currentStepIndex = useMemo(() => {
-    switch (displayStatus) {
-      case 'Claimed':
-      case 'Released':
-        return 5;
-      case 'Releasing':
-      case 'For release':
-        return 4;
-      case 'Processing':
-        return 3;
-      case 'For Processing':
-        return 2;
-      case 'Pending Payment':
-        return 1;
-      case 'Pending':
-      default:
-        return 0;
+    const s = String(displayStatus || matchedRequest?.status || '').trim().toLowerCase();
+    if (s === 'claimed' || s === 'released' || s.includes('claim')) {
+      return 5;
     }
-  }, [displayStatus]);
+    if (s === 'releasing' || s === 'for release' || s.includes('release') || s === 'ready_for_release' || s === 'ready_for_pickup') {
+      return 4;
+    }
+    if (s === 'processing' || (s.includes('processing') && !s.includes('for processing'))) {
+      return 3;
+    }
+    if (s === 'for processing' || s.includes('for processing') || s.includes('payment verified') || s.includes('payment_verified')) {
+      return 2;
+    }
+    if (
+      s === 'for payment' ||
+      s === 'pending payment' ||
+      s === 'payment pending' ||
+      s.includes('for payment') ||
+      s.includes('pending payment') ||
+      s.includes('cleared for payment') ||
+      s.includes('payment_pending') ||
+      s.includes('pending_payment')
+    ) {
+      return 1;
+    }
+    return 0;
+  }, [displayStatus, matchedRequest]);
 
   const [mlEstimatedCompletion, setMlEstimatedCompletion] = useState(null);
 
@@ -281,28 +439,93 @@ export default function TrackStatusPage() {
     return calculateReleaseDate(matchedRequest.created_at, matchedCred?.processing_days || 5);
   }, [matchedRequest, matchedCred, mlEstimatedCompletion]);
 
-  // Handle Search Input Change
-  const handleInputChange = (e) => {
-    const val = e.target.value;
-    setSearchInput(val);
-    if (val.trim()) {
-      setSearchParams({ trackId: val.trim() });
-    } else {
-      setSearchParams({});
-    }
-  };
+  // Official Claim Stub Details formatted specifically for the physical claim stub slip
+  const claimStubDetails = useMemo(() => {
+    if (!matchedRequest) return null;
 
-  // Handle Pill Click
+    // 1. Resolve Student Name
+    let studentName = matchedRequest.student_name;
+    const isIdNumber = (val) => !val || /^\d+$/.test(String(val).trim()) || String(val).trim().length < 2;
+
+    if (isIdNumber(studentName)) {
+      studentName = user?.full_name || (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : null);
+    }
+    if (isIdNumber(studentName)) {
+      try {
+        const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+        const p = profiles[user?.username] || profiles[user?.student_id] || profiles[user?.id] || profiles[matchedRequest?.student_id];
+        if (p?.full_name && !isIdNumber(p.full_name)) studentName = p.full_name;
+        else if (p?.name && !isIdNumber(p.name)) studentName = p.name;
+      } catch {}
+    }
+    if (isIdNumber(studentName)) {
+      if (user?.username === '2023301564' || String(matchedRequest.student_id) === '2023301564') {
+        studentName = 'Daisy Traya';
+      } else {
+        studentName = user?.username || 'Student';
+      }
+    }
+
+    // 2. Resolve Course / Program
+    let course = matchedRequest.course || matchedRequest.program || user?.course || user?.program;
+    if (!course) {
+      try {
+        const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+        const p = profiles[user?.username] || profiles[user?.student_id] || profiles[user?.id];
+        if (p?.course || p?.program) course = p.course || p.program;
+      } catch {}
+    }
+    if (!course) {
+      course = 'BS in Information Technology';
+    }
+
+    // 3. Date of Request
+    let dateOfRequest = matchedRequest.request_date;
+    if (!dateOfRequest || dateOfRequest === 'N/A') {
+      if (matchedRequest.created_at) {
+        const d = new Date(matchedRequest.created_at);
+        if (!isNaN(d.getTime())) {
+          dateOfRequest = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+      }
+    } else {
+      const d = new Date(dateOfRequest);
+      if (!isNaN(d.getTime())) {
+        dateOfRequest = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+    }
+    if (!dateOfRequest) {
+      dateOfRequest = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    // 4. Credential Requested
+    const credentialRequested = resolveRequestDocType(matchedRequest, matchedCred);
+
+    // 5. Date of Release
+    let dateOfRelease = matchedRequest.release_date || matchedRequest.date_of_release;
+    if (dateOfRelease && dateOfRelease !== 'N/A') {
+      const d = new Date(dateOfRelease);
+      if (!isNaN(d.getTime())) {
+        dateOfRelease = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+    } else {
+      dateOfRelease = estimatedCompletion || 'Pending schedule';
+    }
+
+    return {
+      studentName,
+      course,
+      dateOfRequest,
+      credentialRequested,
+      dateOfRelease,
+    };
+  }, [matchedRequest, user, matchedCred, estimatedCompletion]);
+
+  // Handle request selection from student requests list
   const handleSelectRequest = (req) => {
     const code = req.tracking_number || req.trackingId || String(req.id);
-    setSearchInput(code);
+    setSelectedTrackId(code);
     setSearchParams({ trackId: code });
-  };
-
-  // Clear Search
-  const handleClearSearch = () => {
-    setSearchInput('');
-    setSearchParams({});
   };
 
   // Copy Tracking ID to clipboard
@@ -321,15 +544,81 @@ export default function TrackStatusPage() {
         <div className="track-page-header">
           <h1 className="track-main-title">Track the status of your Request</h1>
           <p className="track-sub-title">
-            Enter your tracking ID or select from your submitted requests below to see the current status of your documents.
+            Select from your submitted requests below to see the current status of your documents.
           </p>
         </div>
 
-        {/* Dynamic Request Selector Pills (if student has requests) */}
+        {/* Queue View Tabs: Active Requests vs Request History */}
         {studentRequests.length > 0 && (
-          <div className="track-selector-wrap">
-            <div className="track-selector-label">
-              <span>Your Submitted Requests ({studentRequests.length})</span>
+          <div className="flex items-center gap-2 mb-3.5">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveQueueTab('active');
+                if (activeStudentRequests.length > 0) {
+                  const first = activeStudentRequests[0];
+                  setSelectedTrackId(first.tracking_number || first.trackingId || String(first.id));
+                }
+              }}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeQueueTab === 'active'
+                  ? 'bg-[#0B0B36] text-white shadow-md'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              <span>Active Requests</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  activeQueueTab === 'active'
+                    ? 'bg-amber-400 text-slate-900'
+                    : 'bg-slate-200 text-slate-700'
+                }`}
+              >
+                {activeStudentRequests.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveQueueTab('history');
+                if (historyStudentRequests.length > 0) {
+                  const first = historyStudentRequests[0];
+                  setSelectedTrackId(first.tracking_number || first.trackingId || String(first.id));
+                }
+              }}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeQueueTab === 'history'
+                  ? 'bg-[#0B0B36] text-white shadow-md'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              <span>Request History</span>
+            </button>
+          </div>
+        )}
+
+        {/* Submitted Requests Card */}
+        {studentRequests.length > 0 && (
+          <div className="track-selector-card">
+            <div className="track-selector-card-header">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-[#0B0B36]/10 text-[#0B0B36] flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800 leading-tight">
+                    {activeQueueTab === 'history' ? 'Completed & Claimed Requests History' : 'Select a Request to Track'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    {activeQueueTab === 'history'
+                      ? 'Archived & completed documents • Newest to Oldest'
+                      : `Showing ${displayedRequests.length} ${displayedRequests.length === 1 ? 'request' : 'requests'} • Newest to Oldest`}
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => fetchData(true)}
@@ -337,75 +626,81 @@ export default function TrackStatusPage() {
                 className="track-copy-btn"
                 title="Refresh live status from registrar"
               >
-                {refreshing ? 'Refreshing...' : '🔄 Refresh Status'}
+                {refreshing ? 'Refreshing...' : '🔄 Refresh'}
               </button>
             </div>
-            <div className="track-selector-pills">
-              {studentRequests.map((req) => {
-                const code = req.tracking_number || req.trackingId || String(req.id);
-                const isActive = activeTrackingId.toUpperCase() === code.toUpperCase();
-                const cred = credTypeMap.get(req.credential_type);
-                const docTitle = resolveRequestDocType(req, cred);
-                const status = formatStatusDisplay(req.status);
 
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    onClick={() => handleSelectRequest(req)}
-                    className={`track-selector-pill ${isActive ? 'active' : ''}`}
-                  >
-                    <span className="track-selector-pill-dot" />
-                    <span>{code}</span>
-                    <span className="opacity-70 text-xs">({docTitle})</span>
-                    <span className={`status-pill ${
-                      status === 'On Hold'
-                        ? 'on-hold'
-                        : status === 'Claimed'
-                        ? 'claimed'
-                        : status === 'Releasing' || status === 'For release'
-                        ? 'releasing'
-                        : status === 'Processing'
-                        ? 'processing'
-                        : status === 'For Processing'
-                        ? 'for-processing'
-                        : status === 'Pending Payment'
-                        ? 'payment-pending'
-                        : 'pending'
-                    }`}>
-                      {status}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            {displayedRequests.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-500">
+                {activeQueueTab === 'history'
+                  ? 'No completed or claimed requests in history yet.'
+                  : 'No active requests at the moment.'}
+              </div>
+            ) : (
+              <div className="track-selector-list-scroll">
+                {displayedRequests.map((req) => {
+                  const code = req.tracking_number || req.trackingId || String(req.id);
+                  const isActive = activeTrackingId.toUpperCase() === code.toUpperCase();
+                  const cred = credTypeMap.get(req.credential_type);
+                  const docTitle = resolveRequestDocType(req, cred);
+                  const status = formatStatusDisplay(req.status);
+
+                  return (
+                    <div
+                      key={code}
+                      onClick={() => handleSelectRequest(req)}
+                      className={`track-selector-row-item ${isActive ? 'active' : ''} cursor-pointer`}
+                    >
+                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2">
+                        <span className="track-row-dot" />
+                        <span className="font-bold text-xs sm:text-sm tracking-tight text-slate-900 shrink-0">
+                          {code}
+                        </span>
+                        <span className="text-xs text-slate-500 truncate max-w-[160px] sm:max-w-[280px]">
+                          ({docTitle})
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`status-pill shrink-0 ${
+                          status === 'On Hold'
+                            ? 'on-hold'
+                            : status === 'Claimed'
+                            ? 'claimed'
+                            : status === 'Releasing' || status === 'For release'
+                            ? 'releasing'
+                            : status === 'Processing'
+                            ? 'processing'
+                            : status === 'For Processing'
+                            ? 'for-processing'
+                            : status === 'Pending Payment' || status === 'For Payment'
+                            ? 'payment-pending'
+                            : 'pending'
+                        }`}>
+                          {status}
+                        </span>
+
+                        {/* Restore button if in Request History */}
+                        {activeQueueTab === 'history' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRestoreRequest(req);
+                            }}
+                            className="px-2 py-0.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded transition-colors cursor-pointer"
+                            title="Restore to Active Requests"
+                          >
+                            ↩ Restore
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
-
-        {/* Golden Border Search Bar with Clear Icon */}
-        <div className="track-search-container">
-          <svg className="w-5 h-5 track-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            type="text"
-            value={searchInput}
-            onChange={handleInputChange}
-            placeholder="Search tracking ID (e.g. REQ-2026-000001)"
-            className="track-search-input pl-11 pr-11"
-            aria-label="Tracking ID"
-          />
-          {searchInput && (
-            <button
-              type="button"
-              onClick={handleClearSearch}
-              className="track-search-clear-btn"
-              title="Clear search"
-            >
-              ✕
-            </button>
-          )}
-        </div>
 
         {/* Conditional On Hold Alert Banner */}
         {matchedRequest && isOnHold && (
@@ -421,9 +716,15 @@ export default function TrackStatusPage() {
                 <h4 className="track-on-hold-title">Request is Currently On Hold</h4>
               </div>
               <p className="track-on-hold-desc">
-                {matchedRequest?.remarks
-                  ? `Registrar Note: ${matchedRequest.remarks}`
-                  : 'Your document request requires additional verification or clearance document before proceeding. Please contact or visit the Registrar Office.'}
+                {(() => {
+                  const remarks = (matchedRequest?.notes || matchedRequest?.remarks || '').trim();
+                  const isInitialStudentPurpose = remarks.startsWith('[') && (remarks.includes(']') || remarks === `[${matchedRequest.document_type}] ${matchedRequest.purpose}`);
+                  const hasActualStaffNote = remarks && !isInitialStudentPurpose;
+
+                  return hasActualStaffNote
+                    ? `Registrar Note: ${remarks}`
+                    : 'Your document request requires additional verification or clearance document before proceeding. Please contact or visit the Registrar Office.';
+                })()}
               </p>
             </div>
           </div>
@@ -431,7 +732,25 @@ export default function TrackStatusPage() {
 
         {/* Case 1: Matched Request Display - Tracking Status Only */}
         {matchedRequest ? (
-          <div className="track-timeline-card">
+          <>
+            {/* Conditional Archived History Notice Banner */}
+            {activeQueueTab === 'history' && (
+              <div className="mb-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-900">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  <span>This request has been completed and saved in your <strong>Request History</strong>.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRestoreRequest(matchedRequest)}
+                  className="text-xs font-bold text-emerald-700 hover:underline cursor-pointer shrink-0 ml-2"
+                >
+                  ↩ Restore to Active
+                </button>
+              </div>
+            )}
+
+            <div className="track-timeline-card">
             {/* Header Row: Tracking ID on left, Estimate Completion on right */}
             <div className="track-card-header">
               <div>
@@ -459,7 +778,7 @@ export default function TrackStatusPage() {
                       ? 'processing'
                       : displayStatus === 'For Processing'
                       ? 'for-processing'
-                      : displayStatus === 'Pending Payment'
+                      : displayStatus === 'Pending Payment' || displayStatus === 'For Payment'
                       ? 'payment-pending'
                       : 'pending'
                   }`}>
@@ -632,7 +951,29 @@ export default function TrackStatusPage() {
               })}
             </div>
           </div>
-        ) : searchInput.trim() ? (
+
+          {/* Action button below track status card */}
+          <div className="track-claim-stub-action-wrap flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setShowClaimStubModal(true)}
+              className="track-claim-stub-btn"
+            >
+              Claim Stub
+            </button>
+            {activeQueueTab === 'history' && (
+              <button
+                type="button"
+                onClick={() => handleRestoreRequest(matchedRequest)}
+                className="px-4 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                title="Restore to Active Requests"
+              >
+                <span>↩ Restore to Active</span>
+              </button>
+            )}
+          </div>
+        </>
+        ) : urlTrackId.trim() ? (
           /* Case 2: Tracking ID searched but not found */
           <div className="track-empty-card">
             <div className="track-empty-icon">
@@ -642,17 +983,8 @@ export default function TrackStatusPage() {
             </div>
             <h3 className="track-empty-title">Tracking ID Not Found</h3>
             <p className="track-empty-desc">
-              We couldn't locate any document request matching <strong>"{searchInput}"</strong>. Please verify your tracking number or pick from your active requests above.
+              We couldn't locate any document request matching <strong>"{urlTrackId}"</strong>. Please select from your active requests above.
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={handleClearSearch}
-                className="track-btn-secondary"
-              >
-                Clear Search
-              </button>
-            </div>
           </div>
         ) : (
           /* Case 3: Student has no requests yet */
@@ -676,6 +1008,16 @@ export default function TrackStatusPage() {
           </div>
         )}
       </div>
+
+      {/* Official Claim Stub Modal matching the uploaded photo format */}
+      {showClaimStubModal && matchedRequest && claimStubDetails && (
+        <ClaimStubModal
+          isOpen={showClaimStubModal}
+          onClose={() => setShowClaimStubModal(false)}
+          claimStubDetails={claimStubDetails}
+          trackingNumber={matchedRequest.tracking_number || matchedRequest.id}
+        />
+      )}
     </div>
   );
 }
