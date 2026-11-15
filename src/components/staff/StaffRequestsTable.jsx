@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import useToast from '../../hooks/useToast';
+import TablePagination from '../common/TablePagination';
+
+const PAGE_SIZE = 10;
 
 export default function StaffRequestsTable({
   loading,
@@ -26,8 +29,22 @@ export default function StaffRequestsTable({
   onToggleSelectAll = null,
 }) {
   const toast = useToast();
-  const [showAll, setShowAll] = useState(false);
-  const visibleRequests = showAll ? filteredRequests : filteredRequests.slice(0, 10);
+  const [currentPage, setCurrentPage] = useState(1);
+  const tableContainerRef = useRef(null);
+  const [lockedMinHeight, setLockedMinHeight] = useState(null);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRequests.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const visibleRequests = filteredRequests.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
+
+  useEffect(() => {
+    if (totalPages > 1 && visibleRequests.length === PAGE_SIZE && tableContainerRef.current) {
+      setLockedMinHeight(tableContainerRef.current.offsetHeight);
+    }
+  }, [totalPages, visibleRequests.length]);
   const showCheckboxCol = enableSelection && isSelectionMode;
   const colSpanCount = (showAssignedStaff ? 8 : 7) + (showCheckboxCol ? 1 : 0);
 
@@ -44,7 +61,7 @@ export default function StaffRequestsTable({
   };
 
   return (
-    <div className="staff-list-card">
+    <div className="staff-list-card" style={{ overflowAnchor: 'none' }}>
       <div className="staff-list-header flex items-center justify-between flex-wrap gap-2">
         <div>
           <div className="flex items-center gap-2.5">
@@ -93,7 +110,11 @@ export default function StaffRequestsTable({
         </div>
       )}
 
-      <div className="table-responsive">
+      <div
+        ref={tableContainerRef}
+        className="table-responsive"
+        style={totalPages > 1 && lockedMinHeight ? { minHeight: `${lockedMinHeight}px` } : undefined}
+      >
         <table className="staff-data-table">
           <thead>
             <tr>
@@ -262,27 +283,14 @@ export default function StaffRequestsTable({
         </table>
       </div>
 
-      {!loading && !error && filteredRequests.length > 10 && (
-        <div className="table-see-more-wrap">
-          <button
-            type="button"
-            onClick={() => setShowAll((prev) => !prev)}
-            className="table-see-more-btn"
-          >
-            <span>
-              {showAll ? 'See Less' : 'See More'}
-            </span>
-            <svg
-              className={`w-4 h-4 transition-transform ${showAll ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2.5}
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-        </div>
+      {!loading && !error && (
+        <TablePagination
+          currentPage={safePage}
+          totalItems={filteredRequests.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+          accentColor="blue"
+        />
       )}
     </div>
   );

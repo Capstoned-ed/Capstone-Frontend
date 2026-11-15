@@ -297,12 +297,19 @@ export function isNotificationForUser(notification, user) {
       notification.target_name
     );
 
-    if (hasSpecificTarget) {
+    // Assigned-request notifications must always match a specific target
+    if (notification.event_type === 'REQUEST_ASSIGNED' && !hasSpecificTarget) {
+      return false;
+    }
+
+    if (hasSpecificTarget && !(role === 'registrar' && notification.event_type === 'PAYMENT_SUBMITTED')) {
       const candidates = new Set();
       const addCandidate = (val) => {
         if (val !== undefined && val !== null) {
           const s = String(val).trim().toLowerCase();
-          if (s) candidates.add(s);
+          if (s && s !== 'staff' && s !== 'registrar' && s !== 'admin') {
+            candidates.add(s);
+          }
         }
       };
       addCandidate(user.username);
@@ -322,13 +329,8 @@ export function isNotificationForUser(notification, user) {
       if (targetUser && candidates.has(targetUser)) {
         matched = true;
       }
-      if (targetName) {
-        for (const c of candidates) {
-          if (c === targetName || (c.length >= 3 && (targetName.includes(c) || c.includes(targetName)))) {
-            matched = true;
-            break;
-          }
-        }
+      if (targetName && candidates.has(targetName)) {
+        matched = true;
       }
 
       if (!matched) {

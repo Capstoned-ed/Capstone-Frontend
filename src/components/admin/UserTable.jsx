@@ -1,10 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import usersApi from '../../api/users';
 import { ROLES } from '../../constants/roles';
+import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
 import UserEditModal from './UserEditModal';
 import UserDeleteDialog from './UserDeleteDialog';
+import TablePagination from '../common/TablePagination';
 import '../../styles/admin/UserTable.css';
+
+const PAGE_SIZE = 10;
 
 export default function UserTable({
   users: propUsers,
@@ -13,8 +18,10 @@ export default function UserTable({
   onUserUpdated: propOnUserUpdated,
   onUserDeactivated: propOnUserDeactivated,
   onRetry: propOnRetry,
+  overviewOnly = false,
 }) {
   const toast = useToast();
+  const navigate = useNavigate();
   const [internalUsers, setInternalUsers] = useState([]);
   const [internalLoading, setInternalLoading] = useState(true);
   const [internalError, setInternalError] = useState(null);
@@ -28,8 +35,11 @@ export default function UserTable({
   const [editingUser, setEditingUser] = useState(null);
   const [deactivatingUser, setDeactivatingUser] = useState(null);
   const [actionLoadingId, setActionLoadingId] = useState(null);
-  const [showAllUsers, setShowAllUsers] = useState(false);
+  const tableScrollRef = useRef(null);
+  const [lockedMinHeight, setLockedMinHeight] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [roleFilter, setRoleFilter] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchUsers = useCallback(async () => {
     if (propOnRetry) {
@@ -131,12 +141,38 @@ export default function UserTable({
   };
 
   // ONLY Admin, Registrar, and Staff accounts (exclude students from Staff & Role Management table)
+  const normalizedQuery = searchQuery.trim().toLowerCase();
   const staffAndAdminUsers = users
     .filter((user) => user.role !== ROLES.STUDENT)
-    .filter((user) => (roleFilter === 'ALL' ? true : user.role === roleFilter));
+    .filter((user) => (roleFilter === 'ALL' ? true : user.role === roleFilter))
+    .filter((user) => {
+      if (!normalizedQuery) return true;
+      const haystacks = [
+        formatDisplayName(user),
+        user.username,
+        user.email,
+        user.role,
+      ]
+        .filter(Boolean)
+        .map((v) => String(v).toLowerCase());
+      return haystacks.some((val) => val.includes(normalizedQuery));
+    });
+
+  const effectivePageSize = overviewOnly ? 5 : PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(staffAndAdminUsers.length / effectivePageSize));
+  const safePage = overviewOnly ? 1 : Math.min(currentPage, totalPages);
+  const paginatedUsers = overviewOnly
+    ? staffAndAdminUsers.slice(0, 5)
+    : staffAndAdminUsers.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  useEffect(() => {
+    if (!overviewOnly && totalPages > 1 && paginatedUsers.length === PAGE_SIZE && tableScrollRef.current) {
+      setLockedMinHeight(tableScrollRef.current.offsetHeight);
+    }
+  }, [overviewOnly, totalPages, paginatedUsers.length]);
 
   return (
-    <div className="user-table-card">
+    <div className="user-table-card" style={{ overflowAnchor: 'none' }}>
       {/* Card Header Bar (Light Blue/Periwinkle matching the photo) */}
       <div className="user-table-header-bar flex flex-wrap items-center justify-between gap-3">
         {/* Left Title & Shield Icon */}
@@ -148,11 +184,48 @@ export default function UserTable({
           </div>
           <div>
             <h3 className="user-table-card-title">
-              Staff, Registrar &amp; Role Management
+              {overviewOnly
+                ? 'Staff, Registrar & Role Overview'
+                : 'Staff, Registrar & Role Management'}
             </h3>
             <p className="user-table-card-desc">
-              Assign roles and access levels for Registrar, Staff, and Administrator
+              {overviewOnly
+                ? 'Overview of Registrar, Staff, and Administrator accounts and roles'
+                : 'Assign roles and access levels for Registrar, Staff, and Administrator'}
             </p>
+            <div className="relative mt-2.5 max-w-xs sm:max-w-sm">
+              <svg
+                className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Search staff by name, ID, or email..."
+                className="w-full pl-9 pr-8 py-1.5 text-xs bg-white border border-blue-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCurrentPage(1);
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                  aria-label="Clear staff search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -169,7 +242,7 @@ export default function UserTable({
               type="button"
               onClick={() => {
                 setRoleFilter(tab.key);
-                setShowAllUsers(false);
+                setCurrentPage(1);
               }}
               className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
                 roleFilter === tab.key
@@ -217,7 +290,11 @@ export default function UserTable({
 
       {/* Staff & Admin Data Table */}
       {!loading && !error && (
-        <div className="user-table-scroll">
+        <div
+          ref={tableScrollRef}
+          className="user-table-scroll"
+          style={totalPages > 1 && lockedMinHeight ? { minHeight: `${lockedMinHeight}px` } : undefined}
+        >
           <table className="user-table-element">
             <thead>
               <tr className="user-table-thead-tr">
@@ -225,18 +302,18 @@ export default function UserTable({
                 <th className="user-table-th">Email</th>
                 <th className="user-table-th">Current Role</th>
                 <th className="user-table-th">Status</th>
-                <th className="user-table-th">Actions</th>
+                {!overviewOnly && <th className="user-table-th">Actions</th>}
               </tr>
             </thead>
             <tbody className="user-table-tbody">
               {staffAndAdminUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="user-table-empty-cell">
+                  <td colSpan={overviewOnly ? 4 : 5} className="user-table-empty-cell">
                     No staff or administrator accounts found.
                   </td>
                 </tr>
               ) : (
-                (showAllUsers ? staffAndAdminUsers : staffAndAdminUsers.slice(0, 10)).map((user) => {
+                paginatedUsers.map((user) => {
                   const displayName = formatDisplayName(user);
 
                   return (
@@ -305,70 +382,79 @@ export default function UserTable({
                       </td>
 
                       {/* Actions: [Change Role] & [Deactivate / Activate] */}
-                      <td className="user-table-cell">
-                        <div className="action-btn-group">
-                          {/* Change Role Button (Solid Blue) */}
-                          <button
-                            type="button"
-                            onClick={() => setEditingUser(user)}
-                            className="btn-change-role"
-                          >
-                            Change Role
-                          </button>
+                      {!overviewOnly && (
+                        <td className="user-table-cell">
+                          <div className="action-btn-group">
+                            {/* Update / Change Role Button (Solid Blue) */}
+                            <button
+                              type="button"
+                              onClick={() => setEditingUser(user)}
+                              className="btn-change-role"
+                            >
+                              Update / Change Role
+                            </button>
 
-                          {/* Deactivate Button (Red Outline) or Activate */}
-                          {user.is_active ? (
-                            <button
-                              type="button"
-                              onClick={() => setDeactivatingUser(user)}
-                              className="btn-deactivate"
-                            >
-                              Deactivate
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleReactivate(user)}
-                              disabled={actionLoadingId === user.id}
-                              className="btn-activate"
-                            >
-                              {actionLoadingId === user.id ? (
-                                <div className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-                              ) : null}
-                              <span>Activate</span>
-                            </button>
-                          )}
-                        </div>
-                      </td>
+                            {/* Deactivate Button (Red Outline) or Activate */}
+                            {user.is_active ? (
+                              <button
+                                type="button"
+                                onClick={() => setDeactivatingUser(user)}
+                                className="btn-deactivate"
+                              >
+                                Deactivate
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleReactivate(user)}
+                                disabled={actionLoadingId === user.id}
+                                className="btn-activate"
+                              >
+                                {actionLoadingId === user.id ? (
+                                  <div className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                                ) : null}
+                                <span>Activate</span>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })
               )}
             </tbody>
           </table>
-          {staffAndAdminUsers.length > 10 && (
-            <div className="table-see-more-wrap">
-              <button
-                type="button"
-                onClick={() => setShowAllUsers((prev) => !prev)}
-                className="table-see-more-btn"
-              >
-                <span>
-                  {showAllUsers ? 'See Less' : 'See More'}
-                </span>
-                <svg
-                  className={`w-4 h-4 transition-transform ${showAllUsers ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            </div>
-          )}
         </div>
+      )}
+
+      {!loading && !error && (
+        overviewOnly ? (
+          <div className="px-6 py-3.5 border-t border-slate-100 bg-white flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-500 font-medium">
+              Showing <span className="font-bold text-slate-700">{paginatedUsers.length}</span> of{' '}
+              <span className="font-bold text-slate-700">{staffAndAdminUsers.length}</span>
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate(ROUTES.ADMIN.USERS)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-[#0B0B36] text-white hover:bg-indigo-950 transition-colors cursor-pointer"
+            >
+              <span>See All</span>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <TablePagination
+            currentPage={safePage}
+            totalItems={staffAndAdminUsers.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+            accentColor="blue"
+          />
+        )
       )}
 
       {/* Modals */}

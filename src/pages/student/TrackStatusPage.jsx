@@ -15,7 +15,6 @@ import {
   REQUEST_STATUS,
   normalizeToBackendStatus,
   formatStatusDisplay,
-  isClaimedStatus,
 } from '../../constants/workflowStatuses';
 import '../../styles/student/TrackStatusPage.css';
 
@@ -60,6 +59,12 @@ function calculateReleaseDate(createdAt, processingDays = 5) {
   if (isNaN(d.getTime())) return 'Pending schedule';
   d.setDate(d.getDate() + (Number(processingDays) || 5));
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+export function isClaimedStatus(r) {
+  if (!r) return false;
+  const raw = typeof r === 'object' ? r.status : r;
+  return normalizeToBackendStatus(raw) === REQUEST_STATUS.RELEASED;
 }
 
 export default function TrackStatusPage() {
@@ -171,34 +176,49 @@ export default function TrackStatusPage() {
     };
   }, []);
 
-  // Student's Requests List (filtered for this student, sorted strictly from NEWEST to OLDEST)
+  // Student's Requests List (strictly isolated to this student, sorted strictly from NEWEST to OLDEST)
   const studentRequests = useMemo(() => {
     const currentUserId = user?.userId || user?.id;
     const currentStudentId = user?.student_id || user?.username;
+    const fullName =
+      user?.full_name ||
+      [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim();
+
+    if (!currentUserId && !currentStudentId) return [];
 
     const list = rawRequests.filter((r) => {
-      if (!currentUserId && !currentStudentId) return true;
       if (r.user && currentUserId && String(r.user) === String(currentUserId)) return true;
-      if (r.student_id && currentStudentId && String(r.student_id) === String(currentStudentId)) return true;
-      if (r.student_name && user?.username && r.student_name.toLowerCase().includes(user.username.toLowerCase())) return true;
-      if (r.student_name && user?.full_name && r.student_name.toLowerCase().includes(user.full_name.toLowerCase())) return true;
-      if (r.student_name && user?.first_name && r.student_name.toLowerCase().includes(user.first_name.toLowerCase())) return true;
+      if (
+        r.student_id &&
+        currentStudentId &&
+        String(r.student_id).trim().toLowerCase() === String(currentStudentId).trim().toLowerCase()
+      ) {
+        return true;
+      }
+      if (
+        !r.user &&
+        !r.student_id &&
+        r.student_name &&
+        fullName &&
+        r.student_name.trim().toLowerCase() === fullName.toLowerCase()
+      ) {
+        return true;
+      }
       return false;
     });
 
-    const targetList = list.length > 0 ? list : rawRequests;
-
     // Sort strictly from newest to oldest (descending date)
-    return [...targetList].sort(sortRequestsNewestFirst);
+    return [...list].sort(sortRequestsNewestFirst);
   }, [rawRequests, user]);
 
   // Split student requests into Active vs History
+  // Automatically move Claimed / Released requests directly to History!
   const activeStudentRequests = useMemo(() => {
-    return studentRequests.filter((r) => !isRequestArchived(r, archivedMap));
+    return studentRequests.filter((r) => !isClaimedStatus(r) && !isRequestArchived(r, archivedMap));
   }, [studentRequests, archivedMap]);
 
   const historyStudentRequests = useMemo(() => {
-    return studentRequests.filter((r) => isRequestArchived(r, archivedMap));
+    return studentRequests.filter((r) => isClaimedStatus(r) || isRequestArchived(r, archivedMap));
   }, [studentRequests, archivedMap]);
 
   // Displayed requests in the selector based on active tab
@@ -208,6 +228,22 @@ export default function TrackStatusPage() {
     }
     return activeStudentRequests;
   }, [activeQueueTab, historyStudentRequests, activeStudentRequests]);
+
+  // Automatically switch to 'history' tab if selected/URL track ID is a claimed/history request,
+  // or if student only has completed/claimed requests in history
+  useEffect(() => {
+    if (urlTrackId) {
+      const isHist = historyStudentRequests.some((r) => {
+        const c = (r.tracking_number || r.trackingId || String(r.id)).toUpperCase();
+        return c === urlTrackId.trim().toUpperCase();
+      });
+      if (isHist) {
+        setActiveQueueTab('history');
+      }
+    } else if (!loading && activeStudentRequests.length === 0 && historyStudentRequests.length > 0 && activeQueueTab === 'active') {
+      setActiveQueueTab('history');
+    }
+  }, [urlTrackId, historyStudentRequests, activeStudentRequests.length, loading, activeQueueTab]);
 
   // Mark request as Done (archived to history)
   const handleMarkDone = (req) => {
@@ -583,7 +619,7 @@ export default function TrackStatusPage() {
             {displayedRequests.length === 0 ? (
               <div className="p-6 text-center text-xs text-slate-500">
                 {activeQueueTab === 'history'
-                  ? 'No archived requests in history yet. When a claimed request is marked as Done, it will appear here.'
+                  ? 'No completed or claimed requests in history yet.'
                   : 'No active requests at the moment.'}
               </div>
             ) : (
@@ -601,16 +637,16 @@ export default function TrackStatusPage() {
                       onClick={() => handleSelectRequest(req)}
                       className={`track-selector-row-item ${isActive ? 'active' : ''} cursor-pointer`}
                     >
-                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2">
+                      <div className="flex items-center flex-wrap gap-2 sm:gap-3 min-w-0 w-full sm:w-auto sm:pr-2">
                         <span className="track-row-dot" />
-                        <span className="font-bold text-xs sm:text-sm tracking-tight text-slate-900 shrink-0">
+                        <span className="font-bold text-xs sm:text-sm tracking-tight text-slate-900 break-all sm:break-normal sm:shrink-0">
                           {code}
                         </span>
-                        <span className="text-xs text-slate-500 truncate max-w-[160px] sm:max-w-[280px]">
+                        <span className="text-xs text-slate-500 truncate max-w-full sm:max-w-[280px]">
                           ({docTitle})
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0 pl-4 sm:pl-0">
                         <span className={`status-pill shrink-0 ${getStatusPillClass(req.status)}`}>
                           {status}
                         </span>
@@ -629,7 +665,6 @@ export default function TrackStatusPage() {
                             ✓ Done
                           </button>
                         )}
-
                         {/* Restore button if in Request History */}
                         {activeQueueTab === 'history' && (
                           <button
@@ -749,10 +784,10 @@ export default function TrackStatusPage() {
             <div className="track-timeline-card">
             {/* Header Row: Tracking ID on left, Estimate Completion on right */}
             <div className="track-card-header">
-              <div>
+              <div className="min-w-0 w-full sm:w-auto">
                 <span className="track-card-lbl">Official Tracking ID</span>
-                <div className="flex items-center gap-2.5 mt-1">
-                  <span className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 mt-1">
+                  <span className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight break-all sm:break-normal">
                     {matchedRequest.tracking_number || matchedRequest.trackingId || matchedRequest.id}
                   </span>
                   <button
@@ -778,7 +813,7 @@ export default function TrackStatusPage() {
                   )}
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-left sm:text-right w-full sm:w-auto pt-2 sm:pt-0 border-t border-slate-200/70 sm:border-t-0">
                 <div className="track-card-est-title">Estimated Release</div>
                 <div className="track-card-est-date">{estimatedCompletion}</div>
               </div>

@@ -9,6 +9,7 @@ import requestsApi, {
   sortRequestsNewestFirst,
   resolveRequestDocType,
   getStaffAssignments,
+  saveStaffAssignments,
   isRequestAssignedToUser,
   getStaffAssignmentTimestamps,
   recordStaffAssignmentTimestamp,
@@ -17,6 +18,7 @@ import requestsApi, {
   isRequestArchived,
   ASSIGNMENTS_KEY,
   ASSIGNMENT_TIMESTAMPS_KEY,
+  preserveDocTagInRemarks,
 } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
@@ -429,11 +431,14 @@ export default function StaffRequestsPage() {
         assignments[`status_${r.tracking_number}`] ||
         assignments[`status_${String(r.tracking_number)}`];
 
+      const isNonPending = (s) => s && String(s).trim().toUpperCase() !== 'PENDING';
       const effectiveRawStatus =
+        (isNonPending(matchedStored?.status) ? matchedStored.status : null) ||
+        (isNonPending(r.status) ? r.status : null) ||
         assignedByRegistrarStatus ||
-        (matchedStored?.status && String(matchedStored.status).toUpperCase() !== 'PENDING'
-          ? matchedStored.status
-          : r.status || 'Pending');
+        matchedStored?.status ||
+        r.status ||
+        'Pending';
 
       return {
         rawId: r.rawId || r.id,
@@ -656,6 +661,17 @@ export default function StaffRequestsPage() {
 
       if (statusToSet) {
         patch.status = statusToSet;
+        setAssignments((prev) => {
+          const next = { ...prev };
+          [targetId, item.id, item.rawId, trackingNo]
+            .filter(Boolean)
+            .forEach((key) => {
+              next[`status_${key}`] = statusToSet;
+              next[`status_${String(key)}`] = statusToSet;
+            });
+          saveStaffAssignments(next);
+          return next;
+        });
       }
 
       if (releasingDate) {
@@ -698,7 +714,7 @@ export default function StaffRequestsPage() {
         const backendStatus = BACKEND_STATUS_MAP[statusToSet] || statusToSet;
         requestsApi.transition(targetId, {
           status: backendStatus,
-          remarks: note || `Batch updated by staff`,
+          remarks: preserveDocTagInRemarks(item, note || 'Batch updated by staff'),
         }).catch(() => {});
       }
     }
@@ -825,7 +841,7 @@ export default function StaffRequestsPage() {
       ...tsMap,
     }));
     setAssignments(updatedAssignments);
-    localStorage.setItem(ASSIGNMENTS_KEY, JSON.stringify(updatedAssignments));
+    saveStaffAssignments(updatedAssignments);
 
     const selectedKeys = new Set(
       selectedRequestsList.flatMap((r) => [
@@ -964,7 +980,7 @@ export default function StaffRequestsPage() {
         updated[String(trackingNo)] = staffName;
       }
       setAssignments(updated);
-      localStorage.setItem(ASSIGNMENTS_KEY, JSON.stringify(updated));
+      saveStaffAssignments(updated);
 
       // 5. Update status and stored request
       const currentStatus = item.status || 'Pending';
@@ -1047,6 +1063,21 @@ export default function StaffRequestsPage() {
     const nowIso = new Date(nowTime).toISOString();
     recordRequestActivityTimestamp(updatedReq, nowTime);
     setActivityTimestamps(getRequestActivityTimestamps());
+
+    if (updatedReq?.status) {
+      setAssignments((prev) => {
+        const next = { ...prev };
+        [updatedReq.id, updatedReq.rawId, updatedReq.tracking_number]
+          .filter(Boolean)
+          .forEach((key) => {
+            next[`status_${key}`] = updatedReq.status;
+            next[`status_${String(key)}`] = updatedReq.status;
+          });
+        saveStaffAssignments(next);
+        return next;
+      });
+    }
+
     setRawRequests((prev) =>
       prev.map((r) =>
         String(r.id) === String(updatedReq.rawId) ||
@@ -1137,7 +1168,7 @@ export default function StaffRequestsPage() {
         try {
           await requestsApi.transition(targetRawId, {
             status: backendStatus,
-            remarks: notes || selectedRequest.remarks || '',
+            remarks: preserveDocTagInRemarks(selectedRequest, notes || selectedRequest.remarks || ''),
           });
         } catch (apiErr) {
           console.warn('Backend transition notice:', apiErr);
@@ -1146,8 +1177,8 @@ export default function StaffRequestsPage() {
       }
 
       // Sync assignment map as well
+      const updatedAssignments = { ...assignments };
       if (staffName) {
-        const updatedAssignments = { ...assignments };
         if (targetId) {
           updatedAssignments[targetId] = staffName;
           updatedAssignments[String(targetId)] = staffName;
@@ -1156,9 +1187,17 @@ export default function StaffRequestsPage() {
           updatedAssignments[trackingNo] = staffName;
           updatedAssignments[String(trackingNo)] = staffName;
         }
-        setAssignments(updatedAssignments);
-        saveStaffAssignments(updatedAssignments);
       }
+      if (effectiveStatus) {
+        [targetId, selectedRequest.id, selectedRequest.rawId, trackingNo]
+          .filter(Boolean)
+          .forEach((key) => {
+            updatedAssignments[`status_${key}`] = effectiveStatus;
+            updatedAssignments[`status_${String(key)}`] = effectiveStatus;
+          });
+      }
+      setAssignments(updatedAssignments);
+      saveStaffAssignments(updatedAssignments);
 
       updateStoredRequest(trackingNo || selectedRequest.id || targetId, fullPatch, {
         fallbackItem: { ...selectedRequest, ...fullPatch, updated_at: nowIso },
@@ -1261,7 +1300,8 @@ export default function StaffRequestsPage() {
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
         credentialTypes={credentialTypes}
-        requestStatuses={REQUEST_STATUSES}
+        requestStatuses={REQUEST_STATUSES.filter((st) => st !== 'Claimed')}
+        showStatusFilter={activeTab !== 'history'}
       />
 
       {activeTab === 'active' ? (

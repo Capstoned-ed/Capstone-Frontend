@@ -60,7 +60,8 @@ apiClient.interceptors.response.use(
     const refreshToken = localStorage.getItem('refresh_token');
     if (!refreshToken) {
       try {
-        localStorage.clear();
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
         sessionStorage.clear();
       } catch {}
       if (window.location.pathname !== ROUTES.LOGIN) {
@@ -104,7 +105,8 @@ apiClient.interceptors.response.use(
     } catch (refreshError) {
       processQueue(refreshError, null);
       try {
-        localStorage.clear();
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
         sessionStorage.clear();
       } catch {}
       if (window.location.pathname !== ROUTES.LOGIN) {

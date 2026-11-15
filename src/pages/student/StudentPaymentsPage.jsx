@@ -139,22 +139,36 @@ export default function StudentPaymentsPage() {
     return map;
   }, [credentialTypes]);
 
-  // Filter requests for current student
+  // Filter requests for current student (strictly isolated to this student)
   const studentRequests = useMemo(() => {
     const currentUserId = user?.userId || user?.id;
     const currentStudentId = user?.student_id || user?.username;
+    const fullName =
+      user?.full_name ||
+      [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim();
 
-    const list = rawRequests.filter((r) => {
-      if (!currentUserId && !currentStudentId) return true;
+    if (!currentUserId && !currentStudentId) return [];
+
+    return rawRequests.filter((r) => {
       if (r.user && currentUserId && String(r.user) === String(currentUserId)) return true;
-      if (r.student_id && currentStudentId && String(r.student_id) === String(currentStudentId)) return true;
-      if (r.student_name && user?.username && r.student_name.toLowerCase().includes(user.username.toLowerCase())) return true;
-      if (r.student_name && user?.full_name && r.student_name.toLowerCase().includes(user.full_name.toLowerCase())) return true;
-      if (r.student_name && user?.first_name && r.student_name.toLowerCase().includes(user.first_name.toLowerCase())) return true;
+      if (
+        r.student_id &&
+        currentStudentId &&
+        String(r.student_id).trim().toLowerCase() === String(currentStudentId).trim().toLowerCase()
+      ) {
+        return true;
+      }
+      if (
+        !r.user &&
+        !r.student_id &&
+        r.student_name &&
+        fullName &&
+        r.student_name.trim().toLowerCase() === fullName.toLowerCase()
+      ) {
+        return true;
+      }
       return false;
     });
-
-    return list.length > 0 ? list : rawRequests;
   }, [rawRequests, user]);
 
   // ONLY requests where staff or admin has confirmed the request or the status is "for payment"
@@ -233,12 +247,19 @@ export default function StudentPaymentsPage() {
   };
 
   // Split confirmed requests into Active Payments vs Payment History
+  // Automatically move verified/approved payments (or manually archived ones) to History!
+  const isHistoryPaymentItem = (req) => {
+    if (isPaymentArchived(req, archivedPaymentsMap)) return true;
+    const { isPaymentVerified } = categorizeRequest(req);
+    return isPaymentVerified;
+  };
+
   const activeConfirmedRequests = useMemo(() => {
-    return confirmedRequests.filter((req) => !isPaymentArchived(req, archivedPaymentsMap));
+    return confirmedRequests.filter((req) => !isHistoryPaymentItem(req));
   }, [confirmedRequests, archivedPaymentsMap]);
 
   const historyConfirmedRequests = useMemo(() => {
-    return confirmedRequests.filter((req) => isPaymentArchived(req, archivedPaymentsMap));
+    return confirmedRequests.filter((req) => isHistoryPaymentItem(req));
   }, [confirmedRequests, archivedPaymentsMap]);
 
   // Counts for filter tabs (calculated strictly on active confirmed requests)
@@ -595,7 +616,7 @@ export default function StudentPaymentsPage() {
                   {/* Proof of Payment Details Banner (if attached) */}
                   {hasProofSubmitted && proof && (
                     <div className="payment-proof-banner">
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3 min-w-0">
                         {proof.receiptImage && (
                           <img
                             src={proof.receiptImage}
@@ -603,11 +624,11 @@ export default function StudentPaymentsPage() {
                             className="payment-proof-preview"
                           />
                         )}
-                        <div>
+                        <div className="min-w-0">
                           <h4 className="text-xs font-extrabold text-blue-950">
                             Cashier Receipt Photo Uploaded
                           </h4>
-                          <p className="text-[11px] text-slate-600 mt-0.5">
+                          <p className="text-[11px] text-slate-600 mt-0.5 break-words">
                             O.R. No: <strong className="font-mono text-slate-900">{proof.receiptReferenceNumber || 'Receipt'}</strong> • Amount: <strong>{proof.amount || assessedFee}</strong> • Mode: <strong>{proof.submissionType === 'PERSONAL' ? 'Window Submission' : 'Online Upload'}</strong>
                           </p>
                           <p className="text-[11px] text-blue-700 font-bold mt-0.5">
@@ -619,7 +640,7 @@ export default function StudentPaymentsPage() {
                       <button
                         type="button"
                         onClick={() => handleOpenUploadModal(req)}
-                        className="text-xs font-bold text-indigo-700 hover:text-indigo-950 underline cursor-pointer shrink-0"
+                        className="text-xs font-bold text-indigo-700 hover:text-indigo-950 underline cursor-pointer shrink-0 self-start sm:self-center"
                       >
                         Re-upload / Change Photo
                       </button>
@@ -677,7 +698,7 @@ export default function StudentPaymentsPage() {
                         <button
                           type="button"
                           onClick={() => handleOpenUploadModal(req, 'PERSONAL')}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+                          className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
                           title="Confirm face-to-face cashier payment (FTF)"
                         >
                           <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
