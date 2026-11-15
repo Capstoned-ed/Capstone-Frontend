@@ -1,11 +1,266 @@
+import { jwtDecode } from 'jwt-decode';
 import apiClient from './client';
+import credentialTypesApi from './credentialTypes';
 import { saveStoredNotification } from './notifications';
 import { saveClearanceAttachment, getClearanceAttachment } from './clearances';
 import { getStoredPaymentProof } from './payments';
 
+export function getActiveUserId(user = null) {
+  if (user?.id) return String(user.id);
+  if (user?.user_id) return String(user.user_id);
+  if (typeof window === 'undefined') return 'anon';
+  try {
+    const token = localStorage.getItem('access_token');
+    if (!token) return 'anon';
+    const decoded = jwtDecode(token);
+    return String(decoded.user_id || decoded.id || 'anon');
+  } catch {
+    return 'anon';
+  }
+}
+
+export function getRequestsStorageKey(user = null) {
+  const uid = getActiveUserId(user);
+  return uid !== 'anon' ? `requests_${uid}` : 'regquest_submitted_requests';
+}
+
 export const STORAGE_KEY = 'regquest_submitted_requests';
 export const STUDENT_REQUESTS_KEY = 'student_my_requests';
 export const PROCESSED_ACTIONS_KEY = 'regquest_processed_actions';
+export const ASSIGNMENTS_KEY = 'regquest_staff_assignments';
+export const ASSIGNMENT_TIMESTAMPS_KEY = 'regquest_staff_assignment_timestamps';
+
+export function getStaffAssignments() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(ASSIGNMENTS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveStaffAssignments(map) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(ASSIGNMENTS_KEY, JSON.stringify(map));
+    window.dispatchEvent(new Event('regquest_assignments_updated'));
+    window.dispatchEvent(new Event('regquest_requests_updated'));
+  } catch (err) {
+    console.error('Failed to save staff assignments to localStorage:', err);
+  }
+}
+
+export const ACTIVITY_TIMESTAMPS_KEY = 'regquest_activity_timestamps';
+
+export function getRequestActivityTimestamps() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(ACTIVITY_TIMESTAMPS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function recordRequestActivityTimestamp(idOrItem, timestamp = Date.now()) {
+  if (typeof window === 'undefined' || !idOrItem) return;
+  try {
+    const map = getRequestActivityTimestamps();
+    const ts = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime();
+    if (isNaN(ts) || ts <= 0) return;
+
+    const keys = [];
+    if (typeof idOrItem === 'object') {
+      keys.push(idOrItem.id, idOrItem.rawId, idOrItem.tracking_number, idOrItem.trackingId);
+    } else {
+      keys.push(idOrItem);
+    }
+
+    keys.filter(Boolean).forEach((k) => {
+      map[String(k).trim()] = ts;
+    });
+
+    localStorage.setItem(ACTIVITY_TIMESTAMPS_KEY, JSON.stringify(map));
+    window.dispatchEvent(new Event('regquest_activity_updated'));
+  } catch (err) {
+    console.warn('Failed to record request activity timestamp:', err);
+  }
+}
+
+export function getStaffAssignmentTimestamps() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(ASSIGNMENT_TIMESTAMPS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function recordStaffAssignmentTimestamp(idOrItem, timestamp = Date.now()) {
+  if (typeof window === 'undefined' || !idOrItem) return;
+  try {
+    const map = getStaffAssignmentTimestamps();
+    const ts = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime();
+    if (isNaN(ts) || ts <= 0) return;
+
+    const keys = [];
+    if (typeof idOrItem === 'object') {
+      keys.push(idOrItem.id, idOrItem.rawId, idOrItem.tracking_number, idOrItem.trackingId);
+    } else {
+      keys.push(idOrItem);
+    }
+
+    keys.filter(Boolean).forEach((k) => {
+      map[String(k).trim()] = ts;
+    });
+
+    localStorage.setItem(ASSIGNMENT_TIMESTAMPS_KEY, JSON.stringify(map));
+    recordRequestActivityTimestamp(idOrItem, ts);
+    window.dispatchEvent(new Event('regquest_assignments_updated'));
+  } catch (err) {
+    console.warn('Failed to record staff assignment timestamp:', err);
+  }
+}
+
+export function isRequestAssignedToUser(request, currentUser, assignmentsMap = null, usersList = []) {
+  if (!request || !currentUser) return false;
+
+  const assignments = assignmentsMap || getStaffAssignments();
+
+  const reqKeys = [
+    request.id,
+    request.tracking_number,
+    request.rawId,
+    request.trackingId,
+    request.raw?.id,
+    request.raw?.tracking_number,
+    request.raw?.rawId,
+  ].filter((v) => v !== undefined && v !== null).map(String);
+
+  // 1. Build list of candidate identifiers for current user
+  const candidates = new Set();
+  const addCandidate = (val) => {
+    if (val !== undefined && val !== null) {
+      const s = String(val).trim().toLowerCase();
+      if (
+        s &&
+        s !== 'staff' &&
+        s !== 'admin' &&
+        s !== 'registrar' &&
+        s !== 'user' &&
+        s !== 'undefined' &&
+        s !== 'null'
+      ) {
+        candidates.add(s);
+      }
+    }
+  };
+
+  if (currentUser.username) {
+    const u = String(currentUser.username).trim().toLowerCase();
+    if (u) candidates.add(u);
+  }
+  if (currentUser.full_name) {
+    const f = String(currentUser.full_name).trim().toLowerCase();
+    if (f) candidates.add(f);
+  }
+  const fullNameFromFirstLast = [currentUser.first_name, currentUser.last_name]
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+    .toLowerCase();
+  if (fullNameFromFirstLast) {
+    candidates.add(fullNameFromFirstLast);
+  }
+  if (currentUser.id !== undefined && currentUser.id !== null) {
+    candidates.add(String(currentUser.id).trim().toLowerCase());
+  }
+  if (currentUser.userId !== undefined && currentUser.userId !== null) {
+    candidates.add(String(currentUser.userId).trim().toLowerCase());
+  }
+
+  if (Array.isArray(usersList) && usersList.length > 0) {
+    const matched = usersList.find(
+      (u) =>
+        (u.id && String(u.id) === String(currentUser.id || currentUser.userId)) ||
+        (u.username &&
+          currentUser.username &&
+          String(u.username).toLowerCase() === String(currentUser.username).toLowerCase())
+    );
+    if (matched) {
+      if (matched.username) candidates.add(String(matched.username).trim().toLowerCase());
+      const mName = [matched.first_name, matched.last_name]
+        .filter(Boolean)
+        .join(' ')
+        .trim()
+        .toLowerCase();
+      if (mName) candidates.add(mName);
+      if (matched.id) candidates.add(String(matched.id).trim().toLowerCase());
+    }
+  }
+
+  // 2. Check if explicitly claimed by this specific user in local storage
+  try {
+    const claimedRaw = typeof window !== 'undefined' ? localStorage.getItem('regquest_claimed_requests') : null;
+    if (claimedRaw) {
+      const claimedMap = JSON.parse(claimedRaw);
+      for (const k of reqKeys) {
+        if (claimedMap[k]) {
+          const val = String(claimedMap[k]).trim().toLowerCase();
+          if (candidates.has(val)) {
+            return true;
+          }
+        }
+      }
+    }
+  } catch {}
+
+  // 3. Check assignments mapping (by key)
+  let assignedVal = null;
+  for (const k of reqKeys) {
+    const kStr = String(k).trim();
+    if (assignments[kStr] !== undefined && assignments[kStr] !== null && assignments[kStr] !== '') {
+      assignedVal = assignments[kStr];
+      break;
+    }
+    if (assignments[k] !== undefined && assignments[k] !== null && assignments[k] !== '') {
+      assignedVal = assignments[k];
+      break;
+    }
+  }
+
+  // 4. Fallback to properties on the request itself
+  if (assignedVal === null || assignedVal === undefined || assignedVal === '') {
+    assignedVal =
+      request.assigned_staff ||
+      request.assigned_to ||
+      request.assignedStaff ||
+      request.raw?.assigned_staff ||
+      request.raw?.assigned_to ||
+      '';
+  }
+
+  if (!assignedVal) return false;
+
+  let assignedStr = '';
+  if (typeof assignedVal === 'object') {
+    assignedStr = String(assignedVal.name || assignedVal.username || assignedVal.id || '').trim().toLowerCase();
+  } else {
+    assignedStr = String(assignedVal).trim().toLowerCase();
+  }
+
+  if (!assignedStr || assignedStr === 'unassigned' || assignedStr === 'none' || assignedStr === 'null') {
+    return false;
+  }
+
+  for (const candidate of candidates) {
+    if (assignedStr === candidate) return true;
+  }
+
+  return false;
+}
 
 // Cross-tab broadcast channel for instant real-time requests sync across Student, Staff, and Admin
 let requestsBroadcastChannel = null;
@@ -30,9 +285,11 @@ if (typeof window !== 'undefined') {
     if (
       event.key === STORAGE_KEY ||
       event.key === STUDENT_REQUESTS_KEY ||
-      event.key === 'regquest_stored_requests'
+      event.key === 'regquest_stored_requests' ||
+      event.key === ASSIGNMENTS_KEY
     ) {
       window.dispatchEvent(new CustomEvent('regquest_requests_updated'));
+      window.dispatchEvent(new CustomEvent('regquest_assignments_updated'));
     }
   });
 }
@@ -178,10 +435,14 @@ export function isValidRequest(item) {
     (!studentName || studentName === 'Student' || studentName === 'N/A') &&
     (!studentId || studentId === 'N/A')
   ) {
-    // If it's a legitimate request with a valid tracking number (e.g. REQ-2026-... or RQ-...), it is legitimate
+    // If it's a legitimate request with a valid tracking number, it is legitimate
     const isRealReq = Boolean(
       item.tracking_number &&
-      (/^REQ-\d{4}-\d+$/i.test(item.tracking_number) || /^RQ-\d+/i.test(item.tracking_number))
+      (
+        /^[A-Z0-9]+-\d{2}-\d{2}-\d{2}-/i.test(item.tracking_number) ||
+        /^REQ-\d{4}-\d+$/i.test(item.tracking_number) ||
+        /^RQ-\d+/i.test(item.tracking_number)
+      )
     );
     if (!isRealReq) {
       return false;
@@ -203,19 +464,69 @@ export function isValidRequest(item) {
 
 /**
  * Safely parse a timestamp (milliseconds) from any request object.
+ * Inspects recorded activity timestamps, recent updates, and creation dates
+ * so newly updated or newly created requests sort directly to the very top.
  */
 export function getRequestTimestamp(r) {
   if (!r) return 0;
-  if (r.created_at) {
-    const t = new Date(r.created_at).getTime();
-    if (!isNaN(t) && t > 0) return t;
+
+  const keys = [r.tracking_number, r.id, r.rawId, r.trackingId].filter(Boolean).map((k) => String(k).trim());
+
+  const activityMap = getRequestActivityTimestamps();
+  let activityTime = 0;
+  for (const k of keys) {
+    if (activityMap[k]) {
+      const num = Number(activityMap[k]);
+      if (!isNaN(num) && num > activityTime) {
+        activityTime = num;
+      }
+    }
   }
-  const dStr = r.request_date || r.date;
-  if (dStr && dStr !== 'N/A') {
-    const t = new Date(dStr).getTime();
-    if (!isNaN(t) && t > 0) return t;
+
+  const assignTimestamps = getStaffAssignmentTimestamps();
+  let assignTime = 0;
+  for (const k of keys) {
+    if (assignTimestamps[k]) {
+      const num = Number(assignTimestamps[k]);
+      if (!isNaN(num) && num > assignTime) {
+        assignTime = num;
+      }
+    }
   }
-  return 0;
+
+  const candidates = [
+    activityTime,
+    assignTime,
+    r.updated_at,
+    r.updatedAt,
+    r.last_updated,
+    r.assigned_at,
+    r.accepted_at,
+    r.created_at,
+    r.request_date && r.request_date !== 'N/A' ? r.request_date : null,
+    r.date && r.date !== 'N/A' ? r.date : null,
+  ];
+
+  let maxTime = 0;
+  for (const c of candidates) {
+    if (!c) continue;
+    let t = 0;
+    if (typeof c === 'number') {
+      t = c;
+    } else if (typeof c === 'string' && /^\d{10,}$/.test(c.trim())) {
+      t = Number(c.trim());
+    } else {
+      const parsed = new Date(c).getTime();
+      if (!isNaN(parsed) && parsed > 0) {
+        t = parsed;
+      }
+    }
+    if (t > maxTime) {
+      maxTime = t;
+    }
+  }
+
+  return maxTime;
 }
 
 /**
@@ -243,39 +554,65 @@ export function sortRequestsNewestFirst(a, b) {
 export function resolveRequestDocType(r, cred = null) {
   if (!r) return 'Document Request';
 
-  // 1. Check if remarks contain an explicit document tag, e.g. "[Certification - GPA]"
+  const isInvalidDocName = (name) => {
+    if (!name) return true;
+    const norm = String(name).trim().toLowerCase();
+    return (
+      norm === '' ||
+      norm === 'document' ||
+      norm === 'document request' ||
+      norm === 'walk-in ftf' ||
+      norm === 'walk-in' ||
+      norm === 'walkin' ||
+      norm === 'ftf'
+    );
+  };
+
+  // 1. If r.document_type is explicitly set to a valid document name, prioritize it directly!
+  if (!isInvalidDocName(r.document_type)) {
+    return r.document_type;
+  }
+
+  // 2. Check if remarks contain an explicit document tag, e.g. "[Evaluation & TOR]" or "[Certification - GPA]"
+  // (prioritize before credential_type_details.name so multi-document or sub-document requests aren't masked by primary cred type)
   const remarks = String(r.remarks || r.purpose || '').trim();
   const bracketMatch = remarks.match(/\[(.*?)\]/);
   if (bracketMatch && bracketMatch[1] && bracketMatch[1].trim()) {
-    return bracketMatch[1].trim();
+    const candidate = bracketMatch[1].trim();
+    if (
+      !isInvalidDocName(candidate) &&
+      !candidate.toLowerCase().includes('staff') &&
+      !candidate.toLowerCase().includes('walk-in') &&
+      !candidate.toLowerCase().includes('ftf')
+    ) {
+      return candidate;
+    }
   }
 
-  // 2. Check for specific keywords in remarks that indicate exact certification sub-document
+  // 3. Credential type details object
+  if (!isInvalidDocName(r.credential_type_details?.name)) {
+    return r.credential_type_details.name;
+  }
+
+  // 4. Matched CredentialType model from database
+  if (!isInvalidDocName(cred?.name)) {
+    return cred.name;
+  }
+
+  // 5. Check for specific keywords in remarks that indicate exact certification sub-document
   const remLower = remarks.toLowerCase();
   if (remLower.includes('gpa')) return 'Certification - GPA';
   if (remLower.includes('earned unit') || remLower.includes('earned units')) return 'Certification - Earned Units';
   if (remLower.includes('endorsement')) return 'Certification - Endorsement';
   if (remLower.includes('subjects w/ grades') || remLower.includes('subject w/ grade')) return 'Certification - Subjects w/ grades';
-  if (remLower.includes('authentication') || remLower.includes('auth')) return 'Authentication';
-
-  // 3. If r.document_type is explicitly set and not a placeholder or default 'CAR' when remarks suggest otherwise
-  if (r.document_type && r.document_type !== 'Document' && r.document_type !== 'Document Request') {
-    return r.document_type;
-  }
-
-  // 4. Credential type details object
-  if (r.credential_type_details?.name) {
-    return r.credential_type_details.name;
-  }
-
-  // 5. Matched CredentialType model
-  if (cred?.name) {
-    return cred.name;
-  }
+  if (remLower.includes('authentication') || /\bauth\b/.test(remLower)) return 'Authentication';
+  if (remLower.includes('transcript') || /\btor\b/.test(remLower)) return 'Transcript of Records (TOR)';
+  if (remLower.includes('dismissal')) return 'Honorable Dismissal';
+  if (remLower.includes('evaluation')) return 'Evaluation';
 
   // 6. Standard USTP fallbacks for DB ids 1 to 5
   const credTypeFallbacks = {
-    1: 'Transcript of records (TOR)',
+    1: 'Transcript of Records (TOR)',
     2: 'Honorable Dismissal',
     3: 'Evaluation',
     4: 'CAR',
@@ -309,13 +646,29 @@ export function purgeCorruptRequests() {
             const date = item.created_at || item.request_date || item.date;
             if (!date || date === 'N/A') return false;
             if ((!sName || sName === 'Student' || sName === 'N/A') && (!sId || sId === 'N/A')) {
-              const isBackend = item.tracking_number && /^REQ-\d{4}-\d+$/i.test(item.tracking_number);
+              const isBackend = item.tracking_number && (
+                /^[A-Z0-9]+-\d{2}-\d{2}-\d{2}-/i.test(item.tracking_number) ||
+                /^REQ-\d{4}-\d+$/i.test(item.tracking_number) ||
+                /^RQ-\d+/i.test(item.tracking_number)
+              );
               if (!isBackend) return false;
             }
             return true;
           });
 
-          if (cleaned.length !== list.length) {
+          // Sanitize any existing records where document_type was erroneously saved or overridden as 'Walk-in FTF'
+          cleaned.forEach((item) => {
+            const dt = String(item.document_type || '').trim().toLowerCase();
+            if (dt === 'walk-in ftf' || dt === 'walk-in' || dt === 'walkin' || dt === 'ftf') {
+              const fallbackDoc = item.credential_type_details?.name || resolveRequestDocType(item);
+              if (fallbackDoc && !/walk-in|ftf/i.test(fallbackDoc)) {
+                item.document_type = fallbackDoc;
+                changed = true;
+              }
+            }
+          });
+
+          if (cleaned.length !== list.length || changed) {
             localStorage.setItem(key, JSON.stringify(cleaned));
             changed = true;
           }
@@ -337,36 +690,34 @@ if (typeof window !== 'undefined') {
 /**
  * Retrieve stored/submitted requests across student, staff, and admin.
  */
-export function getStoredRequests() {
+export function getStoredRequests(user = null) {
   try {
     purgeCorruptRequests();
+    const uid = getActiveUserId(user);
+    const userKey = getRequestsStorageKey(user);
 
-    const primary = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    const student = JSON.parse(localStorage.getItem(STUDENT_REQUESTS_KEY) || '[]');
-    const legacy = JSON.parse(localStorage.getItem('regquest_stored_requests') || '[]');
+    const primary = JSON.parse(localStorage.getItem(userKey) || '[]');
+    const fallback = uid === 'anon' ? JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') : [];
 
     const map = new Map();
-    [...primary, ...student, ...legacy].forEach((item) => {
+    [...primary, ...fallback].forEach((item) => {
       if (!isValidRequest(item)) return;
+      // If user ID is known, ensure item belongs to this user
+      if (uid !== 'anon') {
+        const itemUid = item.user ? String(item.user) : (item.student_id ? String(item.student_id) : null);
+        if (itemUid && itemUid !== uid) {
+          return;
+        }
+      }
+      const dt = String(item.document_type || '').trim().toLowerCase();
+      if (dt === 'walk-in ftf' || dt === 'walk-in' || dt === 'walkin' || dt === 'ftf') {
+        item.document_type = item.credential_type_details?.name || resolveRequestDocType(item);
+      }
       const key = item.tracking_number || item.trackingId || item.id;
       if (key && !map.has(key)) {
         map.set(key, item);
       }
     });
-
-    // Clean up any corrupt, dummy, or invalid items from localStorage permanently
-    const cleanPrimary = primary.filter(isValidRequest);
-    if (cleanPrimary.length !== primary.length) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanPrimary));
-    }
-    const cleanStudent = student.filter(isValidRequest);
-    if (cleanStudent.length !== student.length) {
-      localStorage.setItem(STUDENT_REQUESTS_KEY, JSON.stringify(cleanStudent));
-    }
-    const cleanLegacy = legacy.filter(isValidRequest);
-    if (cleanLegacy.length !== legacy.length) {
-      localStorage.setItem('regquest_stored_requests', JSON.stringify(cleanLegacy));
-    }
 
     return Array.from(map.values()).sort(sortRequestsNewestFirst);
   } catch (err) {
@@ -379,9 +730,9 @@ export function getStoredRequests() {
  * Save a newly submitted request into localStorage so it is instantly visible to Admin and Staff,
  * and dynamically trigger notifications for both student and staff/admin.
  */
-export function saveStoredRequest(requestItem) {
+export function saveStoredRequest(requestItem, user = null) {
   try {
-    const existing = getStoredRequests();
+    const existing = getStoredRequests(user);
     const key = requestItem.tracking_number || requestItem.trackingId || requestItem.id;
     const filtered = existing.filter((item) => {
       const itemKey = item.tracking_number || item.trackingId || item.id;
@@ -403,10 +754,9 @@ export function saveStoredRequest(requestItem) {
       }
     }
 
+    const storageKey = getRequestsStorageKey(user || requestItem.user);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      localStorage.setItem(STUDENT_REQUESTS_KEY, JSON.stringify(updated));
-      localStorage.setItem('regquest_stored_requests', JSON.stringify(updated));
+      localStorage.setItem(storageKey, JSON.stringify(updated));
     } catch (quotaErr) {
       console.warn('LocalStorage quota reached, saving trimmed request without bulky base64:', quotaErr);
       const trimmed = updated.map((item) => ({
@@ -415,11 +765,15 @@ export function saveStoredRequest(requestItem) {
         photo_preview: item.photo_preview?.length > 10000 ? null : item.photo_preview,
       }));
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
-        localStorage.setItem(STUDENT_REQUESTS_KEY, JSON.stringify(trimmed));
-        localStorage.setItem('regquest_stored_requests', JSON.stringify(trimmed));
+        localStorage.setItem(storageKey, JSON.stringify(trimmed));
       } catch {}
     }
+
+    // Always record activity timestamp so this request instantly sorts to the top
+    const nowTime = Date.now();
+    candidateIds.forEach((cid) => {
+      recordRequestActivityTimestamp(cid, nowTime);
+    });
 
     const trackingCode = requestItem.tracking_number || requestItem.trackingId || requestItem.id || 'REQ';
     const docTitle = requestItem.document_type || requestItem.credential_type_details?.name || 'Document';
@@ -515,14 +869,18 @@ export function updateStoredRequest(idOrTracking, patch, options = {}) {
 
     // If the request originated from the backend API and was not in localStorage yet,
     // upsert it so status, clearance verification, and payment confirmation persist locally!
-    if (!targetMatched && (options.fallbackItem || patch?.tracking_number || String(idOrTracking || '').startsWith('REQ-'))) {
+    const isLikelyTracking = (
+      String(idOrTracking || '').startsWith('REQ-') ||
+      /^[A-Z0-9]+-\d{2}-\d{2}-\d{2}-/i.test(String(idOrTracking || ''))
+    );
+    if (!targetMatched && (options.fallbackItem || patch?.tracking_number || isLikelyTracking)) {
       const base = options.fallbackItem || {};
       previousStatus = base.status || 'Pending';
       const resolvedTracking =
         patch?.tracking_number ||
         base.tracking_number ||
         base.trackingId ||
-        (String(idOrTracking || '').startsWith('REQ-') ? String(idOrTracking) : String(base.id || idOrTracking));
+        (isLikelyTracking ? String(idOrTracking) : String(base.id || idOrTracking));
 
       targetMatched = {
         ...base,
@@ -538,10 +896,9 @@ export function updateStoredRequest(idOrTracking, patch, options = {}) {
       updated.unshift(targetMatched);
     }
 
+    const storageKey = getRequestsStorageKey(options?.user);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      localStorage.setItem(STUDENT_REQUESTS_KEY, JSON.stringify(updated));
-      localStorage.setItem('regquest_stored_requests', JSON.stringify(updated));
+      localStorage.setItem(storageKey, JSON.stringify(updated));
     } catch (quotaErr) {
       console.warn('LocalStorage quota reached on update, saving trimmed request:', quotaErr);
       const trimmed = updated.map((item) => ({
@@ -551,11 +908,15 @@ export function updateStoredRequest(idOrTracking, patch, options = {}) {
         receipt_image: item.receipt_image?.length > 10000 ? null : item.receipt_image,
       }));
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
-        localStorage.setItem(STUDENT_REQUESTS_KEY, JSON.stringify(trimmed));
-        localStorage.setItem('regquest_stored_requests', JSON.stringify(trimmed));
+        localStorage.setItem(storageKey, JSON.stringify(trimmed));
       } catch {}
     }
+
+    // Always record activity timestamp so this request instantly sorts to the top
+    const nowTime = Date.now();
+    candidateIds.forEach((cid) => {
+      recordRequestActivityTimestamp(cid, nowTime);
+    });
 
     // Exactly ONE notification per real status change (sent to the student).
     // Callers that send their own tailored message pass { silentNotify: true }.
@@ -602,20 +963,36 @@ export const requestsApi = {
    * Fetch list of all credential requests (for Admin / Staff / Student).
    * Combines backend database requests with submitted frontend requests.
    */
-  list: async (params = {}) => {
+  list: async (params = {}, user = null) => {
     let backendResults = [];
     try {
       const response = await apiClient.get('/api/requests/', { params });
       const rawList = Array.isArray(response.data) ? response.data : (response.data?.results || []);
-      backendResults = rawList.map((b) => ({
-        ...b,
-        document_type: b.document_type || resolveRequestDocType(b),
-      }));
+      backendResults = rawList.map((b) => {
+        const latestBackendPayment = Array.isArray(b.payments) && b.payments.length > 0 ? b.payments[0] : null;
+        return {
+          ...b,
+          document_type: b.document_type || resolveRequestDocType(b),
+          payment_status: b.payment_status || latestBackendPayment?.status || null,
+          or_number: b.or_number || latestBackendPayment?.receipt_reference_number || '',
+          receipt_image: b.receipt_image || latestBackendPayment?.receipt_image || null,
+          payment_proof: b.payment_proof || (latestBackendPayment ? {
+            id: latestBackendPayment.id,
+            requestId: b.id,
+            trackingNumber: b.tracking_number,
+            amount: latestBackendPayment.amount,
+            receiptReferenceNumber: latestBackendPayment.receipt_reference_number,
+            receiptImage: latestBackendPayment.receipt_image,
+            status: latestBackendPayment.status,
+            remarks: latestBackendPayment.remarks,
+          } : null),
+        };
+      });
     } catch (err) {
       console.warn('requestsApi.list backend returned error, using local requests:', err);
     }
 
-    const localRequests = getStoredRequests();
+    const localRequests = getStoredRequests(user);
     if (!localRequests.length) {
       return backendResults.filter(isValidRequest).sort(sortRequestsNewestFirst);
     }
@@ -638,13 +1015,18 @@ export const requestsApi = {
       } else {
         const backendItem = combined[index];
         const locStatusUpper = String(loc.status || '').trim().toUpperCase();
-        // Always prefer local status if locally updated (or non-pending), since backend transitions may lag or fail
-        const preferredStatus =
-          (loc.updated_at && loc.status) || (loc.status && locStatusUpper !== 'PENDING')
-            ? loc.status
-            : (backendItem.status && String(backendItem.status).toUpperCase() !== 'PENDING'
-                ? backendItem.status
-                : (loc.status || backendItem.status));
+        const backendStatusUpper = String(backendItem.status || '').trim().toUpperCase();
+        const locTime = loc.updated_at ? new Date(loc.updated_at).getTime() : 0;
+        const backendTime = backendItem.updated_at ? new Date(backendItem.updated_at).getTime() : 0;
+
+        let preferredStatus = backendItem.status || loc.status;
+        if (loc.status && locStatusUpper !== 'PENDING' && backendStatusUpper === 'PENDING') {
+          preferredStatus = loc.status;
+        } else if (backendItem.status && backendStatusUpper !== 'PENDING' && locStatusUpper === 'PENDING') {
+          preferredStatus = backendItem.status;
+        } else if (loc.status && locTime > backendTime) {
+          preferredStatus = loc.status;
+        }
 
         combined[index] = {
           ...backendItem,
@@ -662,6 +1044,10 @@ export const requestsApi = {
           date_of_release: loc.date_of_release || loc.release_date || backendItem.date_of_release,
           release_date: loc.release_date || loc.date_of_release || backendItem.release_date,
           verified_by_name: loc.verified_by_name || backendItem.verified_by_name || null,
+          assigned_staff: loc.assigned_staff || backendItem.assigned_staff || null,
+          assigned_at: loc.assigned_at || backendItem.assigned_at || null,
+          accepted_at: loc.accepted_at || backendItem.accepted_at || null,
+          updated_at: loc.updated_at || backendItem.updated_at || loc.updatedAt || backendItem.updatedAt || null,
           clearance_preview: loc.clearance_preview || backendItem.clearance_preview,
           clearance_id: loc.clearance_id || backendItem.clearance_id || null,
           clearance_is_pdf: loc.clearance_is_pdf ?? backendItem.clearance_is_pdf ?? false,
@@ -686,6 +1072,19 @@ export const requestsApi = {
       .filter(isValidRequest)
       .map((item) => {
         let enriched = { ...item };
+        if (Array.isArray(enriched.payments) && enriched.payments.length > 0) {
+          const latestPay = enriched.payments[0];
+          if (!enriched.payment_status && latestPay?.status) {
+            enriched.payment_status =
+              latestPay.status === 'PENDING' ? 'PAYMENT_SUBMITTED' : latestPay.status;
+          }
+          if (!enriched.or_number && latestPay?.receipt_reference_number) {
+            enriched.or_number = latestPay.receipt_reference_number;
+          }
+          if (!enriched.assessed_amount && latestPay?.amount) {
+            enriched.assessed_amount = latestPay.amount;
+          }
+        }
         if (!enriched.clearance_preview || (!enriched.clearance_preview.startsWith('data:') && !enriched.clearance_preview.startsWith('blob:'))) {
           const clRec = getClearanceAttachment([
             enriched.tracking_number,
@@ -699,6 +1098,27 @@ export const requestsApi = {
             enriched.clearance_is_pdf = Boolean(clRec.meta?.isPdf || clRec.dataUrl.startsWith('data:application/pdf'));
             enriched.clearance_file_name = clRec.meta?.fileName || enriched.clearance_file_name || 'Clearance Document';
             enriched.clearance_status = enriched.clearance_status || 'PENDING';
+          }
+        }
+
+        // Validate if enriched.payment_proof actually belongs to this specific request
+        if (enriched.payment_proof) {
+          const recTracking = String(enriched.payment_proof.trackingNumber || '').trim().toUpperCase();
+          const recReqId = String(enriched.payment_proof.requestId || '').trim().toUpperCase();
+          const thisTracking = String(enriched.tracking_number || enriched.trackingId || '').trim().toUpperCase();
+          const thisId = String(enriched.id || enriched.rawId || '').trim().toUpperCase();
+
+          const belongs =
+            (recTracking && (recTracking === thisTracking || recTracking === thisId)) ||
+            (recReqId && (recReqId === thisTracking || recReqId === thisId));
+
+          if (!belongs) {
+            enriched.payment_proof = null;
+            if (enriched.payment_status === 'PAYMENT_SUBMITTED') {
+              enriched.payment_status = null;
+            }
+            enriched.or_number = '';
+            enriched.receipt_image = null;
           }
         }
 
@@ -748,13 +1168,16 @@ export const requestsApi = {
   /**
    * Transition request status (e.g. PAYMENT_VERIFIED -> PROCESSING -> READY_FOR_RELEASE)
    */
-  transition: async (id, payload) => {
+  transition: async (id, payload, { throwOnError = false } = {}) => {
     let resData = null;
     try {
       const response = await apiClient.patch(`/api/requests/${id}/transition/`, payload);
       resData = response.data;
     } catch (apiErr) {
       console.warn('Backend transition notice:', apiErr);
+      if (throwOnError) {
+        throw apiErr;
+      }
     }
     return resData || { id, ...payload };
   },
@@ -763,8 +1186,7 @@ export const requestsApi = {
    * Fetch all credential types.
    */
   getCredentialTypes: async () => {
-    const response = await apiClient.get('/api/credential-types/');
-    return Array.isArray(response.data) ? response.data : (response.data?.results || []);
+    return credentialTypesApi.list();
   },
 
   /**
@@ -855,6 +1277,7 @@ export function isConfirmedForPayment(req) {
   if (
     paymentStatus === 'VERIFIED' ||
     paymentStatus === 'PAYMENT_SUBMITTED' ||
+    (Array.isArray(req.payments) && req.payments.some((p) => p?.status === 'VERIFIED' || p?.status === 'PENDING')) ||
     s === 'FOR PROCESSING' ||
     s === 'FOR_PROCESSING' ||
     s === 'PROCESSING' ||
@@ -874,3 +1297,160 @@ export function isConfirmedForPayment(req) {
 
   return false;
 }
+
+/**
+ * Request History & Archival Management
+ * When a document is claimed by the student, staff can remove it from active queue
+ * and archive it into the Request History.
+ */
+export const ARCHIVED_REQUESTS_KEY = 'regquest_archived_requests';
+
+export function getArchivedRequestsMap() {
+  try {
+    return JSON.parse(localStorage.getItem(ARCHIVED_REQUESTS_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+export function isRequestArchived(req, archivedMap = null) {
+  if (!req) return false;
+  if (req.is_archived || req.archived_to_history) return true;
+  const map = archivedMap || getArchivedRequestsMap();
+  const keys = [req.id, req.rawId, req.tracking_number, req.trackingId]
+    .filter((k) => k !== undefined && k !== null && String(k).trim() !== '')
+    .map((k) => String(k).trim());
+  return keys.some((k) => Boolean(map[k]));
+}
+
+export function setRequestArchived(idOrTracking, isArchived = true, user = null, options = {}) {
+  try {
+    const map = getArchivedRequestsMap();
+    const fallback = options?.fallbackItem || {};
+    const candidateIds = [
+      idOrTracking,
+      fallback.id,
+      fallback.rawId,
+      fallback.tracking_number,
+      fallback.trackingId,
+    ]
+      .filter((v) => v !== undefined && v !== null && String(v).trim() !== '')
+      .map((v) => String(v).trim());
+
+    if (isArchived) {
+      const info = {
+        archived_at: new Date().toISOString(),
+        archived_by: user?.full_name || user?.username || 'Staff',
+      };
+      candidateIds.forEach((k) => {
+        map[k] = info;
+      });
+    } else {
+      candidateIds.forEach((k) => {
+        delete map[k];
+      });
+    }
+
+    localStorage.setItem(ARCHIVED_REQUESTS_KEY, JSON.stringify(map));
+
+    // Also update stored request so it persists in the object itself
+    updateStoredRequest(idOrTracking, {
+      is_archived: isArchived,
+      archived_at: isArchived ? new Date().toISOString() : null,
+      archived_by: isArchived ? (user?.full_name || user?.username || 'Staff') : null,
+    }, options);
+
+    window.dispatchEvent(new Event('regquest_archived_updated'));
+    window.dispatchEvent(new Event('regquest_requests_updated'));
+    return true;
+  } catch (err) {
+    console.error('Failed to setRequestArchived:', err);
+    return false;
+  }
+}
+
+export function preserveDocTagInRemarks(requestOrRemarks, newRemarks = '') {
+  const rawNew = String(newRemarks || '').trim();
+  if (rawNew.startsWith('[')) return rawNew;
+
+  let docTag = '';
+  const existingRemarks =
+    typeof requestOrRemarks === 'string'
+      ? requestOrRemarks
+      : String(requestOrRemarks?.remarks || requestOrRemarks?.purpose || '');
+
+  const match = existingRemarks.trim().match(/^(\[[^\]]+\])/);
+  if (match && match[1]) {
+    const tagLower = match[1].toLowerCase();
+    if (!tagLower.includes('staff') && !tagLower.includes('walk-in') && !tagLower.includes('ftf')) {
+      docTag = match[1];
+    }
+  }
+
+  if (!docTag && requestOrRemarks && typeof requestOrRemarks === 'object') {
+    const docName = String(requestOrRemarks.document_type || '').trim();
+    if (
+      docName &&
+      !/^(document|document request|walk-in|walkin|ftf)$/i.test(docName)
+    ) {
+      docTag = `[${docName}]`;
+    }
+  }
+
+  if (docTag) {
+    return rawNew ? `${docTag} ${rawNew}` : docTag;
+  }
+  return rawNew;
+}
+
+const DOC_CODE_RULES = [
+  { match: (s) => /transcript|tor/i.test(s), code: '1' },
+  { match: (s) => /honorable|dismissal|hd/i.test(s), code: '2' },
+  { match: (s) => /evaluation|eval/i.test(s), code: '5' },
+  { match: (s) => /authentication|auth/i.test(s), code: '6' },
+  { match: (s) => /car/i.test(s), code: '4F' },
+  { match: (s) => /gpa/i.test(s), code: '4B' },
+  { match: (s) => /officially\s*enrolled|enrolled|coe/i.test(s), code: '4A' },
+  { match: (s) => /earned\s*units|earned|units/i.test(s), code: '4D' },
+  { match: (s) => /grades|subject/i.test(s), code: '4G' },
+  { match: (s) => /cert/i.test(s), code: '4' },
+];
+
+export function resolveDocCodes(docNames = []) {
+  const list = Array.isArray(docNames) ? docNames : [docNames];
+  const codes = [];
+  list.forEach((name) => {
+    if (!name) return;
+    const str = String(name).trim();
+    for (const rule of DOC_CODE_RULES) {
+      if (rule.match(str)) {
+        if (!codes.includes(rule.code)) {
+          codes.push(rule.code);
+        }
+        break;
+      }
+    }
+  });
+  return codes.length > 0 ? codes.join('') : '1';
+}
+
+export function generateTrackingNumberFallback({
+  course = 'IT',
+  studentId = '',
+  docCode = '1',
+  sequence = 1,
+} = {}) {
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const dateStr = `${yy}-${mm}-${dd}`;
+
+  const rawId = String(studentId || 'STUDENT').trim();
+  const trimmedId = rawId.length > 2 ? rawId.slice(2) : rawId;
+  const seqStr = String(sequence || 1).padStart(3, '0');
+  const cleanCourse = String(course || 'IT').trim().toUpperCase();
+
+  return `${cleanCourse}-${dateStr}-${trimmedId}-${docCode}-${seqStr}`;
+}
+

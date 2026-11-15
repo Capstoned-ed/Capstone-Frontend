@@ -555,6 +555,14 @@
   color: #0f172a;
 }
 
+.btn-approve-req {
+  @apply inline-flex items-center px-2.5 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer border-0;
+}
+
+.btn-reject-req {
+  @apply inline-flex items-center px-2.5 py-1.5 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-bold transition-colors cursor-pointer;
+}
+
 .process-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1024,6 +1032,14 @@
 .staff-btn-update:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.table-see-more-wrap {
+  @apply mt-4 pt-3 border-t border-slate-100 flex items-center justify-center;
+}
+
+.table-see-more-btn {
+  @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold text-[#0A0A7C] bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 transition-all cursor-pointer;
 }
 
 @keyframes fadeIn {

@@ -14,6 +14,7 @@ export default function CredentialTypeTable({
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [showAll, setShowAll] = useState(false);
 
   const formatCurrency = (amount) => {
     const val = Number(amount) || 0;
@@ -147,7 +148,7 @@ export default function CredentialTypeTable({
                 </td>
               </tr>
             ) : (
-              filteredTypes.map((type) => (
+              (showAll ? filteredTypes : filteredTypes.slice(0, 10)).map((type) => (
                 <tr key={type.id} className="credentials-row">
                   {/* Short Code */}
                   <td className="credentials-td">
@@ -229,6 +230,26 @@ export default function CredentialTypeTable({
           </tbody>
         </table>
       </div>
+      {!loading && filteredTypes.length > 10 && (
+        <div className="table-see-more-wrap">
+          <button
+            type="button"
+            onClick={() => setShowAll((prev) => !prev)}
+            className="table-see-more-btn"
+          >
+            <span>{showAll ? 'See Less' : 'See More'}</span>
+            <svg
+              className={`w-4 h-4 transition-transform ${showAll ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.5}
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -25,6 +25,30 @@ export const authApi = {
     });
     return response.data;
   },
+
+  requestPasswordReset: async (email) => {
+    const response = await apiClient.post('/api/auth/password-reset/request/', {
+      email,
+    });
+    return response.data;
+  },
+
+  verifyPasswordResetOtp: async (email, otp) => {
+    const response = await apiClient.post('/api/auth/password-reset/verify/', {
+      email,
+      otp,
+    });
+    return response.data;
+  },
+
+  confirmPasswordReset: async (email, otp, newPassword) => {
+    const response = await apiClient.post('/api/auth/password-reset/confirm/', {
+      email,
+      otp,
+      new_password: newPassword,
+    });
+    return response.data;
+  },
 };
 
 export default authApi;

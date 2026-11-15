@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import useToast from '../../hooks/useToast';
 import { useAuth } from '../../hooks/useAuth';
-import requestsApi, { updateStoredRequest, logProcessedAction } from '../../api/requests';
+import apiClient from '../../api/client';
+import requestsApi, { updateStoredRequest, logProcessedAction, setRequestArchived, recordRequestActivityTimestamp, preserveDocTagInRemarks } from '../../api/requests';
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import { saveStoredNotification } from '../../api/notifications';
 import { getStoredPaymentProof, verifyStoredPaymentProof } from '../../api/payments';
 import PrintRequestFormModal from '../student/PrintRequestFormModal';
+import ClaimStubModal from '../common/ClaimStubModal';
 
 export default function ProcessRequestModal({
   isOpen,
@@ -34,12 +36,38 @@ export default function ProcessRequestModal({
   const [showInlineClearance, setShowInlineClearance] = useState(false);
   const [clearanceDoc, setClearanceDoc] = useState(null);
   const [loadingClearance, setLoadingClearance] = useState(false);
-  const [clearanceStatus, setClearanceStatus] = useState(() => {
-    const raw = requestItem?.clearance_status;
+  const resolveInitialClearanceStatus = (item) => {
+    const raw = item?.clearance_status;
     if (raw === 'VERIFIED' || raw === 'APPROVED') return 'VERIFIED';
     if (raw === 'REJECTED' || raw === 'NOT_VERIFIED') return 'REJECTED';
-    return requestItem?.clearance_preview || requestItem?.clearance_id ? 'PENDING' : 'NOT_ATTACHED';
-  });
+    const st = String(item?.status || '').trim().toUpperCase();
+    const isPastPending = Boolean(
+      item?.is_confirmed ||
+      item?.confirmed_for_payment ||
+      [
+        'REQUIREMENTS_VERIFICATION',
+        'PAYMENT_PENDING',
+        'PENDING PAYMENT',
+        'FOR PAYMENT',
+        'FOR_PAYMENT',
+        'PAYMENT_VERIFIED',
+        'FOR PROCESSING',
+        'FOR_PROCESSING',
+        'PROCESSING',
+        'READY_FOR_RELEASE',
+        'RELEASING',
+        'FOR RELEASE',
+        'RELEASED',
+        'CLAIMED',
+      ].includes(st)
+    );
+    if (isPastPending) return 'VERIFIED';
+    return item?.clearance_preview || item?.clearance_id ? 'PENDING' : 'NOT_ATTACHED';
+  };
+
+  const [clearanceStatus, setClearanceStatus] = useState(() =>
+    resolveInitialClearanceStatus(requestItem)
+  );
 
   // Payment Assessment Fields (matching staff modal)
   const defaultStaffName = user?.full_name || (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : user?.username) || 'Admin';
@@ -51,6 +79,7 @@ export default function ProcessRequestModal({
   });
   const [verifiedByName, setVerifiedByName] = useState(defaultStaffName);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [showClaimStubModal, setShowClaimStubModal] = useState(false);
   const [isOrderConfirmed, setIsOrderConfirmed] = useState(() => {
     const s = String(requestItem?.status || '').toUpperCase();
     return Boolean(
@@ -100,6 +129,44 @@ export default function ProcessRequestModal({
     requestItem?.receipt_image ||
     null;
 
+  const [receiptBlobUrl, setReceiptBlobUrl] = useState(null);
+  const displayReceiptImage = receiptBlobUrl || activeReceiptImage;
+
+  useEffect(() => {
+    let ignore = false;
+    let objectUrl = null;
+
+    if (!isOpen || !activeReceiptImage) {
+      setReceiptBlobUrl(null);
+      return;
+    }
+
+    if (activeReceiptImage.startsWith('data:') || activeReceiptImage.startsWith('blob:')) {
+      setReceiptBlobUrl(null);
+      return;
+    }
+
+    (async () => {
+      try {
+        const res = await apiClient.get(activeReceiptImage, { responseType: 'blob' });
+        if (!ignore && res?.data) {
+          objectUrl = URL.createObjectURL(res.data);
+          setReceiptBlobUrl(objectUrl);
+        }
+      } catch (err) {
+        console.warn('Failed to load authenticated receipt preview:', err);
+        if (!ignore) setReceiptBlobUrl(null);
+      }
+    })();
+
+    return () => {
+      ignore = true;
+      if (objectUrl) {
+        try { URL.revokeObjectURL(objectUrl); } catch {}
+      }
+    };
+  }, [isOpen, activeReceiptImage]);
+
   const hasReceiptUploaded = Boolean(activeReceiptImage);
 
   const activeOrNumber = (
@@ -111,29 +178,84 @@ export default function ProcessRequestModal({
 
   const hasOrNumber = Boolean(activeOrNumber);
 
-  const canConfirmPayment = Boolean(hasReceiptUploaded && hasOrNumber);
+  const canConfirmPayment = Boolean(hasOrNumber || hasReceiptUploaded);
 
-  const normalizeStatus = (val) => (val === 'Pending Payment' ? 'For Payment' : val);
+  const isAlreadyPastPayment = [
+    'FOR PROCESSING',
+    'FOR_PROCESSING',
+    'PROCESSING',
+    'RELEASING',
+    'READY_FOR_RELEASE',
+    'CLAIMED',
+    'RELEASED',
+  ].includes(String(localStatus || requestItem?.status || '').toUpperCase());
 
-  useEffect(() => {
-    if (newStatus) setLocalStatus(normalizeStatus(newStatus));
-  }, [newStatus]);
+  const isClearanceVerified = Boolean(
+    clearanceStatus === 'VERIFIED' ||
+    clearanceStatus === 'APPROVED' ||
+    requestItem?.clearance_status === 'VERIFIED' ||
+    requestItem?.clearance_status === 'APPROVED' ||
+    isAlreadyPastPayment
+  );
 
-  const handleManualStatusChange = (val) => {
+  const isPaymentVerified = Boolean(
+    paymentStatus === 'VERIFIED' ||
+    requestItem?.payment_status === 'VERIFIED' ||
+    isAlreadyPastPayment
+  );
+
+  const canOverrideStatus = Boolean(isClearanceVerified && isPaymentVerified);
+
+  const normalizeStatus = (val) => {
+    if (val === 'For Payment' || val === 'FOR PAYMENT' || val === 'FOR_PAYMENT') return 'Pending Payment';
+    return val;
+  };
+
+  const setStatusDirectly = (val) => {
     const cleanVal = normalizeStatus(val);
     setLocalStatus(cleanVal);
     setNewStatus(cleanVal);
   };
 
+  const handleManualStatusChange = (val) => {
+    if (!canOverrideStatus) {
+      if (!isClearanceVerified) {
+        toast.warning('Cannot change status: Please verify student clearance first.');
+      } else {
+        toast.warning('Cannot change status: Payment must be verified first.');
+      }
+      return;
+    }
+    setStatusDirectly(val);
+  };
+
+  useEffect(() => {
+    if (newStatus) setLocalStatus(normalizeStatus(newStatus));
+  }, [newStatus]);
+
+  const claimStubDetails = useMemo(() => {
+    if (!requestItem) return null;
+    const reqDateFormatted = requestItem.request_date || (requestItem.created_at ? new Date(requestItem.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
+    const relDateFormatted = dateOfRelease || requestItem.date_of_release || requestItem.release_date || '—';
+    return {
+      studentName: requestItem.student_name,
+      course: requestItem.course || requestItem.program || '—',
+      dateOfRequest: reqDateFormatted,
+      credentialRequested: `${requestItem.document_type || 'Document'} (${requestItem.copies || 1} ${requestItem.copies > 1 ? 'copies' : 'copy'})`,
+      dateOfRelease: relDateFormatted,
+    };
+  }, [requestItem, dateOfRelease]);
+
   const statusOptions = useMemo(() => {
     const base = [
       'Pending',
-      'For Payment',
+      'Pending Payment',
       'For Processing',
       'Processing',
       'Releasing',
       'Claimed',
       'On Hold',
+      'Rejected',
     ];
     const currentVal = normalizeStatus(localStatus || newStatus);
     if (currentVal && !base.includes(currentVal)) base.push(currentVal);
@@ -147,16 +269,7 @@ export default function ProcessRequestModal({
     if (!requestItem) return;
 
     setNotes('');
-    const rawClearance = requestItem?.clearance_status;
-    if (rawClearance === 'VERIFIED' || rawClearance === 'APPROVED') {
-      setClearanceStatus('VERIFIED');
-    } else if (rawClearance === 'REJECTED' || rawClearance === 'NOT_VERIFIED') {
-      setClearanceStatus('REJECTED');
-    } else {
-      setClearanceStatus(
-        requestItem?.clearance_preview || requestItem?.clearance_id ? 'PENDING' : 'NOT_ATTACHED'
-      );
-    }
+    setClearanceStatus(resolveInitialClearanceStatus(requestItem));
     setLocalStatus(requestItem?.status || 'Pending');
     setNewStatus(requestItem?.status || 'Pending');
 
@@ -230,11 +343,10 @@ export default function ProcessRequestModal({
         if (!ignore && resolved) {
           setClearanceDoc(resolved);
           if (resolved.cleanup) cleanupFn = resolved.cleanup;
-          const currentClearance = requestItem?.clearance_status || rawClearance;
+          const fallbackStatus = resolveInitialClearanceStatus(requestItem);
           setClearanceStatus((prev) => {
             if (prev === 'VERIFIED' || prev === 'REJECTED') return prev;
-            if (currentClearance === 'VERIFIED' || currentClearance === 'APPROVED') return 'VERIFIED';
-            if (currentClearance === 'REJECTED' || currentClearance === 'NOT_VERIFIED') return 'REJECTED';
+            if (fallbackStatus === 'VERIFIED' || fallbackStatus === 'REJECTED') return fallbackStatus;
             return 'PENDING';
           });
         }
@@ -269,9 +381,12 @@ export default function ProcessRequestModal({
       }
     }
 
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+    recordRequestActivityTimestamp(requestItem, nowTime);
     updateStoredRequest(
       targetId,
-      { clearance_status: statusToSet },
+      { clearance_status: statusToSet, updated_at: nowIso },
       { fallbackItem: requestItem, silentNotify: true }
     );
 
@@ -279,6 +394,7 @@ export default function ProcessRequestModal({
       onUpdated({
         ...requestItem,
         clearance_status: statusToSet,
+        updated_at: nowIso,
       });
     }
 
@@ -305,7 +421,7 @@ export default function ProcessRequestModal({
   };
 
   const handleConfirmAssessmentAndIssuePayment = async () => {
-    if (clearanceStatus !== 'VERIFIED' && clearanceStatus !== 'APPROVED') {
+    if (!isClearanceVerified) {
       toast.warning('Please verify the student clearance first before confirming the request.');
       return;
     }
@@ -315,10 +431,14 @@ export default function ProcessRequestModal({
     const docName = requestItem.document_type || 'Requested Credential';
     const cleanAmount = assessedAmount.trim() || '₱100.00';
 
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+    recordRequestActivityTimestamp(requestItem, nowTime);
+
     const patch = {
-      status: 'For Payment',
+      status: 'Pending Payment',
       rawStatus: 'PAYMENT_PENDING',
-      batch_status: 'For Payment',
+      batch_status: 'Pending Payment',
       clearance_status: 'VERIFIED',
       assessed_amount: cleanAmount,
       amount: cleanAmount,
@@ -329,11 +449,12 @@ export default function ProcessRequestModal({
       payment_date: '',
       is_confirmed: true,
       confirmed_for_payment: true,
+      updated_at: nowIso,
     };
 
-    requestItem.status = 'For Payment';
+    requestItem.status = 'Pending Payment';
     requestItem.rawStatus = 'PAYMENT_PENDING';
-    requestItem.batch_status = 'For Payment';
+    requestItem.batch_status = 'Pending Payment';
     requestItem.clearance_status = 'VERIFIED';
     requestItem.assessed_amount = cleanAmount;
     requestItem.amount = cleanAmount;
@@ -345,17 +466,41 @@ export default function ProcessRequestModal({
 
     updateStoredRequest(targetId, patch, { fallbackItem: requestItem, silentNotify: true });
 
-    handleManualStatusChange('For Payment');
+    setStatusDirectly('Pending Payment');
     setIsOrderConfirmed(true);
 
-    if (requestItem.rawId && typeof requestItem.rawId === 'number') {
+    const isBackendId = Boolean(requestItem.rawId) && !String(requestItem.rawId).startsWith('TRK-') && !String(requestItem.rawId).startsWith('REQ-');
+    if (isBackendId) {
+      const opRemarks = preserveDocTagInRemarks(
+        requestItem,
+        `Clearance verified by ${verifiedByName}. Assessed amount: ${cleanAmount}. Date of release: ${dateOfRelease}.`
+      );
       try {
-        await requestsApi.transition(requestItem.rawId, {
-          status: 'PAYMENT_PENDING',
-          remarks: `Clearance verified by ${verifiedByName}. Assessed amount: ${cleanAmount}. Date of release: ${dateOfRelease}.`,
-        });
+        await requestsApi.transition(
+          requestItem.rawId,
+          {
+            status: 'PAYMENT_PENDING',
+            remarks: opRemarks,
+          },
+          { throwOnError: true }
+        );
       } catch (apiErr) {
-        console.warn('Backend transition notice:', apiErr);
+        try {
+          await requestsApi.transition(
+            requestItem.rawId,
+            { status: 'REQUIREMENTS_VERIFICATION', remarks: opRemarks },
+            { throwOnError: true }
+          );
+        } catch {}
+        try {
+          await requestsApi.transition(
+            requestItem.rawId,
+            { status: 'PAYMENT_PENDING', remarks: opRemarks },
+            { throwOnError: true }
+          );
+        } catch (err2) {
+          console.warn('Backend transition notice:', apiErr, err2);
+        }
       }
     }
 
@@ -382,7 +527,7 @@ export default function ProcessRequestModal({
       trackingNumber: trackingCode,
       documentType: docName,
       action: `Assessed payment (${cleanAmount}) & confirmed request`,
-      status: 'For Payment',
+      status: 'Pending Payment',
     });
 
     if (onUpdated) {
@@ -392,7 +537,81 @@ export default function ProcessRequestModal({
       });
     }
 
-    toast.success(`Request confirmed! Status updated to "For Payment". Student notified to pay ${cleanAmount}.`);
+    toast.success(`Request confirmed! Status updated to "Pending Payment". Student notified to pay ${cleanAmount}.`);
+  };
+
+  const handleRejectRequest = async () => {
+    const targetId = requestItem.id || requestItem.rawId;
+    const trackingCode = requestItem.tracking_number || requestItem.trackingId || requestItem.id;
+    const reason = notes.trim() || 'Request requirements incomplete or rejected.';
+
+    try {
+      setLoading(true);
+      if (typeof targetId === 'number') {
+        await requestsApi.transition(targetId, {
+          status: 'REJECTED',
+          remarks: reason,
+        }).catch(() => {});
+      }
+
+      const nowTime = Date.now();
+      const nowIso = new Date(nowTime).toISOString();
+      recordRequestActivityTimestamp(requestItem, nowTime);
+
+      const rejectPatch = {
+        status: 'Rejected',
+        rawStatus: 'REJECTED',
+        batch_status: 'Rejected',
+        remarks: reason,
+        rejected_by: user?.full_name || user?.username || 'Staff/Registrar',
+        rejected_at: nowIso,
+        updated_at: nowIso,
+      };
+
+      updateStoredRequest(targetId, rejectPatch, { fallbackItem: requestItem });
+
+      logProcessedAction({
+        actor: user?.username,
+        actorName: user?.full_name || user?.username,
+        actorId: user?.id,
+        actorRole: user?.role || 'staff',
+        targetName: requestItem.student_name,
+        targetId: requestItem.student_id || trackingCode,
+        trackingNumber: trackingCode,
+        documentType: requestItem.document_type,
+        action: `Request rejected: ${reason}`,
+        status: 'Rejected',
+      });
+
+      saveStoredNotification({
+        event_type: 'REQUEST_STATUS_CHANGED',
+        title: 'Request Rejected',
+        message: `Your request ${trackingCode} for ${requestItem.document_type || 'credential'} was rejected. Reason: ${reason}`,
+        related_object_type: 'CredentialRequest',
+        related_object_id: trackingCode,
+        target_role: 'student',
+        target_roles: ['student'],
+        target_user_id: requestItem.user || null,
+        target_username: requestItem.student_id || requestItem.student_name || null,
+        target_student_id: requestItem.student_id || null,
+      });
+
+      setStatusDirectly('Rejected');
+      if (onUpdated) {
+        onUpdated({
+          ...requestItem,
+          ...rejectPatch,
+        });
+      }
+
+      toast.error(`Request ${trackingCode} marked as Rejected.`);
+      onClose();
+    } catch (err) {
+      console.warn('Reject error:', err);
+      toast.error('Failed to reject request.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleVerifyPayment = async (actionToSet = 'VERIFIED') => {
@@ -400,28 +619,32 @@ export default function ProcessRequestModal({
     const trackingCode = requestItem.tracking_number || requestItem.id;
 
     if (actionToSet === 'PENDING') {
+      const nowIso = new Date().toISOString();
       setPaymentStatus('PENDING');
-      requestItem.status = 'For Payment';
+      requestItem.status = 'Pending Payment';
       requestItem.rawStatus = 'PAYMENT_PENDING';
-      requestItem.batch_status = 'For Payment';
+      requestItem.batch_status = 'Pending Payment';
       requestItem.payment_status = 'PENDING';
+      requestItem.updated_at = nowIso;
       updateStoredRequest(
         targetId,
         {
           payment_status: 'PENDING',
-          status: 'For Payment',
+          status: 'Pending Payment',
           rawStatus: 'PAYMENT_PENDING',
+          updated_at: nowIso,
         },
         { fallbackItem: requestItem, silentNotify: true }
       );
-      handleManualStatusChange('For Payment');
+      setStatusDirectly('Pending Payment');
       if (onUpdated) {
         onUpdated({
           ...requestItem,
-          status: 'For Payment',
+          status: 'Pending Payment',
           rawStatus: 'PAYMENT_PENDING',
-          batch_status: 'For Payment',
+          batch_status: 'Pending Payment',
           payment_status: 'PENDING',
+          updated_at: nowIso,
         });
       }
       toast.info('Payment verification reset to pending.');
@@ -430,12 +653,12 @@ export default function ProcessRequestModal({
 
     const isVerified = actionToSet === 'VERIFIED';
 
-    if (isVerified && (!hasReceiptUploaded || !hasOrNumber)) {
-      toast.warning('Cannot confirm payment: Official receipt upload and O.R. Number are required.');
+    if (isVerified && (!hasReceiptUploaded && !hasOrNumber)) {
+      toast.warning('Cannot confirm payment: Official receipt upload or O.R. Number is required.');
       return;
     }
 
-    const finalOrNumber = activeOrNumber;
+    const finalOrNumber = activeOrNumber || 'Paid at USTP Cashier (FTF)';
 
     verifyStoredPaymentProof(
       [requestItem.tracking_number, requestItem.id, requestItem.rawId],
@@ -446,8 +669,12 @@ export default function ProcessRequestModal({
     );
 
     setPaymentStatus(isVerified ? 'VERIFIED' : 'REJECTED');
-    const updatedStatus = isVerified ? 'For Processing' : 'For Payment';
-    handleManualStatusChange(updatedStatus);
+    const updatedStatus = isVerified ? 'For Processing' : 'Pending Payment';
+    setStatusDirectly(updatedStatus);
+
+    const nowTime = Date.now();
+    const nowIso = new Date(nowTime).toISOString();
+    recordRequestActivityTimestamp(requestItem, nowTime);
 
     const paymentPatch = {
       status: updatedStatus,
@@ -458,6 +685,7 @@ export default function ProcessRequestModal({
       receipt_reference_number: finalOrNumber,
       receipt_image: activeReceiptImage,
       payment_date: new Date().toISOString().split('T')[0],
+      updated_at: nowIso,
     };
 
     requestItem.status = updatedStatus;
@@ -465,6 +693,7 @@ export default function ProcessRequestModal({
     requestItem.batch_status = updatedStatus;
     requestItem.payment_status = isVerified ? 'VERIFIED' : 'REJECTED';
     requestItem.or_number = finalOrNumber;
+    requestItem.updated_at = nowIso;
 
     updateStoredRequest(targetId, paymentPatch, { fallbackItem: requestItem, silentNotify: true });
 
@@ -475,16 +704,38 @@ export default function ProcessRequestModal({
       });
     }
 
-    if (requestItem.rawId && typeof requestItem.rawId === 'number') {
+    const isBackendId = Boolean(requestItem.rawId) && !String(requestItem.rawId).startsWith('TRK-') && !String(requestItem.rawId).startsWith('REQ-');
+    if (isBackendId) {
+      const payRemarks = preserveDocTagInRemarks(
+        requestItem,
+        isVerified
+          ? `Official Receipt verified (OR: ${finalOrNumber}). Verified by ${user?.username || 'Admin'}.`
+          : 'Payment proof rejected.'
+      );
+      const targetPayStatus = isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING';
       try {
-        await requestsApi.transition(requestItem.rawId, {
-          status: isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING',
-          remarks: isVerified
-            ? `Official Receipt verified (OR: ${finalOrNumber}). Verified by ${user?.username || 'Admin'}.`
-            : 'Payment proof rejected.',
-        });
+        await requestsApi.transition(
+          requestItem.rawId,
+          {
+            status: targetPayStatus,
+            remarks: payRemarks,
+          },
+          { throwOnError: true }
+        );
       } catch (apiErr) {
-        console.warn('Backend transition payment notice:', apiErr);
+        if (isVerified) {
+          for (const step of ['REQUIREMENTS_VERIFICATION', 'PAYMENT_PENDING', 'PAYMENT_VERIFIED']) {
+            try {
+              await requestsApi.transition(
+                requestItem.rawId,
+                { status: step, remarks: payRemarks },
+                { throwOnError: true }
+              );
+            } catch {}
+          }
+        } else {
+          console.warn('Backend transition payment notice:', apiErr);
+        }
       }
     }
 
@@ -555,9 +806,9 @@ export default function ProcessRequestModal({
     }
   };
 
-  const handleOpenReceipt = (receiptUrl) => {
+  const handleOpenReceipt = async (receiptUrl) => {
     try {
-      const activeUrl = receiptUrl || activeReceiptImage;
+      const activeUrl = receiptUrl || displayReceiptImage;
       if (!activeUrl) {
         toast.warning('No receipt image available to open.');
         return;
@@ -570,6 +821,16 @@ export default function ProcessRequestModal({
         for (let i = 0; i < binary.length; i++) array.push(binary.charCodeAt(i));
         const blob = new Blob([new Uint8Array(array)], { type: mime });
         window.open(URL.createObjectURL(blob), '_blank');
+        return;
+      }
+      if (activeUrl.startsWith('blob:')) {
+        window.open(activeUrl, '_blank');
+        return;
+      }
+      if (activeUrl.startsWith('http') || activeUrl.startsWith('/')) {
+        const res = await apiClient.get(activeUrl, { responseType: 'blob' });
+        const blobUrl = URL.createObjectURL(res.data);
+        window.open(blobUrl, '_blank');
         return;
       }
       window.open(activeUrl, '_blank');
@@ -587,17 +848,64 @@ export default function ProcessRequestModal({
 
     try {
       const targetId = requestItem.rawId || requestItem.id;
-      if (requestItem.rawId && typeof requestItem.rawId === 'number') {
+      if (!canOverrideStatus && localStatus !== (requestItem.status || 'Pending')) {
+        toast.warning(
+          !isClearanceVerified
+            ? 'Manual status override is locked: Please verify student clearance first.'
+            : 'Manual status override is locked: Payment must be verified first.'
+        );
+        setLoading(false);
+        return;
+      }
+
+      const isBackendId = Boolean(requestItem.rawId) && !String(requestItem.rawId).startsWith('TRK-') && !String(requestItem.rawId).startsWith('REQ-');
+      if (isBackendId) {
         const backendStatus = BACKEND_STATUS_MAP[localStatus] || localStatus;
+        const transitionRemarks = preserveDocTagInRemarks(requestItem, notes || requestItem.remarks || '');
         try {
-          await requestsApi.transition(requestItem.rawId, {
-            status: backendStatus,
-            remarks: notes || requestItem.remarks || '',
-          });
+          await requestsApi.transition(
+            requestItem.rawId,
+            {
+              status: backendStatus,
+              remarks: transitionRemarks,
+            },
+            { throwOnError: true }
+          );
         } catch (apiErr) {
-          console.warn('Backend transition notice:', apiErr);
+          // If backend rejects jumping across intermediate workflow steps, walk the pipeline up to backendStatus
+          const pipeline = [
+            'REQUIREMENTS_VERIFICATION',
+            'PAYMENT_PENDING',
+            'PAYMENT_VERIFIED',
+            'PROCESSING',
+            'READY_FOR_RELEASE',
+            'RELEASED',
+          ];
+          const targetIdx = pipeline.indexOf(backendStatus);
+          if (targetIdx !== -1) {
+            for (let i = 0; i <= targetIdx; i++) {
+              try {
+                await requestsApi.transition(
+                  requestItem.rawId,
+                  {
+                    status: pipeline[i],
+                    remarks: transitionRemarks,
+                  },
+                  { throwOnError: true }
+                );
+              } catch {
+                // Step already passed or not applicable from current backend state
+              }
+            }
+          } else {
+            console.warn('Backend transition notice:', apiErr);
+          }
         }
       }
+
+      const nowTime = Date.now();
+      const nowIso = new Date(nowTime).toISOString();
+      recordRequestActivityTimestamp(requestItem, nowTime);
 
       const finalPatch = {
         status: localStatus,
@@ -612,10 +920,11 @@ export default function ProcessRequestModal({
         confirmed_for_payment: isOrderConfirmed,
         payment_status: paymentStatus,
         or_number: activeOrNumber || requestItem.or_number || '',
+        updated_at: nowIso,
       };
 
       updateStoredRequest(requestItem.id || targetId, finalPatch, {
-        fallbackItem: requestItem,
+        fallbackItem: { ...requestItem, ...finalPatch, updated_at: nowIso },
       });
 
       logProcessedAction({
@@ -644,6 +953,94 @@ export default function ProcessRequestModal({
       console.error('Failed to transition request:', err);
       const detail = err.response?.data?.detail || err.response?.data?.message || err.message || 'Status transition failed.';
       toast.error(detail);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMoveToHistory = () => {
+    const targetId = requestItem.id || requestItem.rawId || requestItem.tracking_number;
+    setRequestArchived(targetId, true, user, { fallbackItem: requestItem });
+    logProcessedAction({
+      actor: user?.username,
+      actorName: user?.full_name || user?.username,
+      actorId: user?.id,
+      actorRole: user?.role || 'staff',
+      targetName: requestItem.student_name,
+      targetId: requestItem.student_id || targetId,
+      trackingNumber: requestItem.tracking_number || targetId,
+      documentType: requestItem.document_type,
+      action: 'Document claimed by student: Moved request to History',
+      status: 'Claimed',
+    });
+    if (onUpdated) {
+      onUpdated({ ...requestItem, is_archived: true, status: 'Claimed' });
+    }
+    toast.success(`Request ${requestItem.tracking_number || targetId} marked as Done and moved to Request History.`);
+    onClose();
+  };
+
+  const handleClaimAndMoveToHistory = async () => {
+    const targetId = requestItem.id || requestItem.rawId;
+    const trackingCode = requestItem.tracking_number || requestItem.trackingId || requestItem.id;
+
+    try {
+      setLoading(true);
+      if (typeof targetId === 'number') {
+        await requestsApi.transition(targetId, {
+          status: 'RELEASED',
+          remarks: preserveDocTagInRemarks(requestItem, notes || 'Document claimed by student at registrar window.'),
+        }).catch(() => {});
+      }
+
+      const claimPatch = {
+        status: 'Claimed',
+        rawStatus: 'RELEASED',
+        batch_status: 'Claimed',
+        remarks: notes || requestItem.remarks || 'Document claimed by student.',
+        is_archived: true,
+        archived_at: new Date().toISOString(),
+        archived_by: user?.full_name || user?.username || 'Staff',
+      };
+
+      updateStoredRequest(targetId, claimPatch, { fallbackItem: requestItem });
+      setRequestArchived(targetId, true, user, { fallbackItem: requestItem });
+
+      logProcessedAction({
+        actor: user?.username,
+        actorName: user?.full_name || user?.username,
+        actorId: user?.id,
+        actorRole: user?.role || 'staff',
+        targetName: requestItem.student_name,
+        targetId: requestItem.student_id || trackingCode,
+        trackingNumber: trackingCode,
+        documentType: requestItem.document_type,
+        action: 'Marked Claimed & moved to History',
+        status: 'Claimed',
+      });
+
+      saveStoredNotification({
+        event_type: 'DOCUMENT_CLAIMED',
+        title: 'Document Claimed Successfully',
+        message: `Your requested credential (${requestItem.document_type}) has been officially claimed and released. Thank you!`,
+        related_object_type: 'CredentialRequest',
+        related_object_id: trackingCode,
+        target_role: 'student',
+        target_roles: ['student'],
+        target_user_id: requestItem.user || null,
+        target_username: requestItem.student_id || requestItem.student_name || null,
+        target_student_id: requestItem.student_id || null,
+      });
+
+      if (onUpdated) {
+        onUpdated({ ...requestItem, ...claimPatch });
+      }
+
+      toast.success(`Request ${trackingCode} marked as Claimed & Done (moved to Request History)!`);
+      onClose();
+    } catch (err) {
+      console.error('Failed to claim and archive:', err);
+      toast.error('Failed to process request release.');
     } finally {
       setLoading(false);
     }
@@ -829,22 +1226,12 @@ export default function ProcessRequestModal({
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {clearanceStatus === 'VERIFIED' || clearanceStatus === 'APPROVED' ? (
-                          <>
-                            <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-xs rounded-lg flex items-center gap-1.5">
-                              <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                              </svg>
-                              <span>Clearance Verified</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleVerifyClearance('PENDING')}
-                              className="px-2 py-1.5 text-[11px] font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-rose-200"
-                              title="Undo clearance verification"
-                            >
-                              Undo
-                            </button>
-                          </>
+                          <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-xs rounded-lg flex items-center gap-1.5">
+                            <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span>Clearance Verified</span>
+                          </div>
                         ) : clearanceStatus === 'REJECTED' || clearanceStatus === 'NOT_VERIFIED' ? (
                           <>
                             <div className="px-3 py-1.5 bg-rose-50 border border-rose-300 text-rose-800 font-bold text-xs rounded-lg flex items-center gap-1.5">
@@ -931,20 +1318,11 @@ export default function ProcessRequestModal({
                   <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
                     <span className="text-slate-600">No clearance attached.</span>
                     {clearanceStatus === 'VERIFIED' || clearanceStatus === 'APPROVED' ? (
-                      <div className="flex items-center gap-2">
-                        <div className="px-3 py-1 bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-xs rounded-lg flex items-center gap-1.5">
-                          <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>Clearance Verified</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleVerifyClearance('PENDING')}
-                          className="px-2 py-1 text-[11px] font-semibold text-slate-500 hover:text-rose-600 rounded-lg cursor-pointer transition-colors"
-                        >
-                          Undo
-                        </button>
+                      <div className="px-3 py-1 bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-xs rounded-lg flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>Clearance Verified</span>
                       </div>
                     ) : (
                       <button
@@ -1035,14 +1413,21 @@ export default function ProcessRequestModal({
 
                 <div className="mt-3.5 pt-3 border-t border-indigo-100 flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    {isOrderConfirmed && (
+                    {isOrderConfirmed ? (
                       <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
                         <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
-                        <span>Request Confirmed (For Payment)</span>
+                        <span>Request Confirmed (Pending Payment)</span>
                       </span>
-                    )}
+                    ) : !isClearanceVerified ? (
+                      <span className="text-xs font-semibold text-amber-700 flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span>Verify clearance above to unlock confirmation</span>
+                      </span>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -1056,7 +1441,14 @@ export default function ProcessRequestModal({
                       </svg>
                       <span>Preview Form</span>
                     </button>
-                    {isOrderConfirmed ? (
+                    {localStatus === 'Rejected' || requestItem?.status === 'Rejected' ? (
+                      <div className="px-3.5 py-2 bg-rose-50 border border-rose-300 text-rose-800 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs">
+                        <svg className="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        <span>Request Rejected</span>
+                      </div>
+                    ) : isOrderConfirmed ? (
                       <div className="px-3.5 py-2 bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs">
                         <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -1064,16 +1456,39 @@ export default function ProcessRequestModal({
                         <span>Request Confirmed</span>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={handleConfirmAssessmentAndIssuePayment}
-                        className="px-4 py-2 bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
-                      >
-                        <span>Confirm Request & Order of Payment</span>
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                        </svg>
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleRejectRequest}
+                          className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+                          title="Reject this request"
+                        >
+                          <svg className="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          <span>Reject Request</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!isClearanceVerified}
+                          onClick={handleConfirmAssessmentAndIssuePayment}
+                          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                            isClearanceVerified
+                              ? 'bg-indigo-900 hover:bg-indigo-950 text-white shadow-md cursor-pointer'
+                              : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
+                          }`}
+                          title={
+                            !isClearanceVerified
+                              ? 'Please verify student clearance first before confirming the request.'
+                              : 'Confirm request and order of payment'
+                          }
+                        >
+                          <span>Confirm Request & Order of Payment</span>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                          </svg>
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -1116,7 +1531,7 @@ export default function ProcessRequestModal({
                     <div className="flex items-center gap-3">
                       {hasReceiptUploaded ? (
                         <img
-                          src={activeReceiptImage}
+                          src={displayReceiptImage}
                           alt="Official Receipt"
                           className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0 cursor-pointer"
                           onClick={() => setShowInlineReceipt((p) => !p)}
@@ -1147,7 +1562,7 @@ export default function ProcessRequestModal({
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleOpenReceipt(activeReceiptImage)}
+                            onClick={() => handleOpenReceipt(displayReceiptImage)}
                             className="px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 hover:bg-slate-50 rounded-lg text-slate-700 cursor-pointer flex items-center gap-1"
                             title="Open official receipt in a new tab"
                           >
@@ -1164,7 +1579,7 @@ export default function ProcessRequestModal({
                       <div className="pt-2 border-t border-slate-200">
                         <div className="max-h-72 overflow-auto rounded-lg bg-slate-950 p-2 flex items-center justify-center">
                           <img
-                            src={activeReceiptImage}
+                            src={displayReceiptImage}
                             alt="Official Receipt"
                             className="max-h-64 object-contain rounded"
                           />
@@ -1224,11 +1639,7 @@ export default function ProcessRequestModal({
                         }`}
                         title={
                           !hasReceiptUploaded && !hasOrNumber
-                            ? 'Cannot confirm payment: No receipt uploaded and no O.R. number yet'
-                            : !hasReceiptUploaded
-                            ? 'Cannot confirm payment: No receipt uploaded yet'
-                            : !hasOrNumber
-                            ? 'Cannot confirm payment: Please enter the O.R. Number'
+                            ? 'Cannot confirm payment: Please enter the O.R. Number or upload receipt'
                             : 'Confirm and verify payment'
                         }
                       >
@@ -1248,11 +1659,7 @@ export default function ProcessRequestModal({
                         }`}
                         title={
                           !hasReceiptUploaded && !hasOrNumber
-                            ? 'Cannot confirm payment: No receipt uploaded and no O.R. number yet'
-                            : !hasReceiptUploaded
-                            ? 'Cannot confirm payment: No receipt uploaded yet'
-                            : !hasOrNumber
-                            ? 'Cannot confirm payment: Please enter the O.R. Number'
+                            ? 'Cannot confirm payment: Please enter the O.R. Number or upload receipt'
                             : 'Confirm and verify payment'
                         }
                       >
@@ -1282,12 +1689,38 @@ export default function ProcessRequestModal({
 
               {/* Manual Status Override */}
               <div className="staff-form-group pt-2">
-                <label className="staff-form-label">Manual Status Override</label>
+                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+                  <label className="staff-form-label mb-0">Manual Status Override</label>
+                  {!canOverrideStatus && (
+                    <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 flex items-center gap-1 shadow-2xs">
+                      <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      <span>
+                        {!isClearanceVerified
+                          ? 'Locked: Clearance not yet verified'
+                          : 'Locked: Payment not yet verified'}
+                      </span>
+                    </span>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <select
                     value={localStatus || newStatus || 'Pending'}
                     onChange={(e) => handleManualStatusChange(e.target.value)}
-                    className="staff-select-input"
+                    disabled={!canOverrideStatus}
+                    className={`staff-select-input ${
+                      !canOverrideStatus
+                        ? 'opacity-60 bg-slate-100 cursor-not-allowed border-slate-300 text-slate-500'
+                        : ''
+                    }`}
+                    title={
+                      !isClearanceVerified
+                        ? 'Manual status override is locked: Please verify student clearance first.'
+                        : !isPaymentVerified
+                        ? 'Manual status override is locked: Payment must be verified first.'
+                        : 'Select status to override'
+                    }
                   >
                     {statusOptions.map((st) => (
                       <option key={st} value={st}>{st}</option>
@@ -1301,20 +1734,84 @@ export default function ProcessRequestModal({
                     className="staff-notes-input"
                   />
                 </div>
+                {!canOverrideStatus && (
+                  <p className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1">
+                    <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                    <span>
+                      {!isClearanceVerified
+                        ? 'Manual status override cannot be changed until clearance is verified.'
+                        : 'Manual status override cannot be changed until student payment is verified.'}
+                    </span>
+                  </p>
+                )}
               </div>
 
             </div>
 
             {/* Sticky Footer */}
-            <div className="staff-process-footer">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={loading}
-                className="staff-btn-back"
-              >
-                <span>Close</span>
-              </button>
+            <div className="staff-process-footer flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={loading}
+                  className="staff-btn-back"
+                >
+                  <span>Close</span>
+                </button>
+
+                {/* If already Claimed, offer Done */}
+                {(localStatus === 'Claimed' || requestItem?.status === 'Claimed') && (
+                  <button
+                    type="button"
+                    onClick={handleMoveToHistory}
+                    disabled={loading}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
+                    title="Document claimed: Mark as Done and move to Request History"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>Done</span>
+                  </button>
+                )}
+
+                {/* If Releasing / For release, offer quick Mark Claimed & Done */}
+                {(localStatus === 'Releasing' || localStatus === 'For release' || requestItem?.status === 'Releasing' || requestItem?.status === 'For release') && (
+                  <button
+                    type="button"
+                    onClick={handleClaimAndMoveToHistory}
+                    disabled={loading}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
+                    title="Mark document as claimed by student and complete as Done"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>Claimed & Done</span>
+                  </button>
+                )}
+
+                {/* Print Claim Stub button (available once payment is confirmed / for processing / releasing / claimed) */}
+                {(paymentStatus === 'VERIFIED' || isOrderConfirmed || localStatus === 'For Processing' || localStatus === 'Releasing' || localStatus === 'Claimed') && (
+                  <button
+                    type="button"
+                    onClick={() => setShowClaimStubModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shadow-sm transition-all cursor-pointer"
+                    title="Print or download official Claim Stub slip for the student"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zM7 9V5a2 2 0 012-2h6a2 2 0 012 2v4" />
+                    </svg>
+                    <span>Print Claim Stub</span>
+                  </button>
+                )}
+              </div>
+
               <button
                 type="submit"
                 disabled={loading}
@@ -1339,6 +1836,16 @@ export default function ProcessRequestModal({
           verified_by_name: verifiedByName,
         }}
       />
+
+      {/* Official Claim Stub Modal (issued once payment is settled) */}
+      {showClaimStubModal && (
+        <ClaimStubModal
+          isOpen={showClaimStubModal}
+          onClose={() => setShowClaimStubModal(false)}
+          claimStubDetails={claimStubDetails}
+          trackingNumber={requestItem?.tracking_number || requestItem?.id}
+        />
+      )}
     </>
   );
 }

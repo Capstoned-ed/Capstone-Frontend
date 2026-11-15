@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import usersApi from '../../api/users';
 import { ROLES } from '../../constants/roles';
 import useToast from '../../hooks/useToast';
 import UserEditModal from './UserEditModal';
 import UserDeleteDialog from './UserDeleteDialog';
+import TablePagination from '../common/TablePagination';
 import '../../styles/admin/UserTable.css';
+
+const PAGE_SIZE = 10;
 
 export default function UserTable({
   users: propUsers,
@@ -28,6 +31,11 @@ export default function UserTable({
   const [editingUser, setEditingUser] = useState(null);
   const [deactivatingUser, setDeactivatingUser] = useState(null);
   const [actionLoadingId, setActionLoadingId] = useState(null);
+  const tableScrollRef = useRef(null);
+  const [lockedMinHeight, setLockedMinHeight] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [roleFilter, setRoleFilter] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchUsers = useCallback(async () => {
     if (propOnRetry) {
@@ -128,13 +136,38 @@ export default function UserTable({
       .join(' ');
   };
 
-  // ONLY Admin and Staff accounts (exclude students from Staff & Role Management table)
-  const staffAndAdminUsers = users.filter((user) => user.role !== ROLES.STUDENT);
+  // ONLY Admin, Registrar, and Staff accounts (exclude students from Staff & Role Management table)
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const staffAndAdminUsers = users
+    .filter((user) => user.role !== ROLES.STUDENT)
+    .filter((user) => (roleFilter === 'ALL' ? true : user.role === roleFilter))
+    .filter((user) => {
+      if (!normalizedQuery) return true;
+      const haystacks = [
+        formatDisplayName(user),
+        user.username,
+        user.email,
+        user.role,
+      ]
+        .filter(Boolean)
+        .map((v) => String(v).toLowerCase());
+      return haystacks.some((val) => val.includes(normalizedQuery));
+    });
+
+  const totalPages = Math.max(1, Math.ceil(staffAndAdminUsers.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedUsers = staffAndAdminUsers.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  useEffect(() => {
+    if (totalPages > 1 && paginatedUsers.length === PAGE_SIZE && tableScrollRef.current) {
+      setLockedMinHeight(tableScrollRef.current.offsetHeight);
+    }
+  }, [totalPages, paginatedUsers.length]);
 
   return (
-    <div className="user-table-card">
+    <div className="user-table-card" style={{ overflowAnchor: 'none' }}>
       {/* Card Header Bar (Light Blue/Periwinkle matching the photo) */}
-      <div className="user-table-header-bar">
+      <div className="user-table-header-bar flex flex-wrap items-center justify-between gap-3">
         {/* Left Title & Shield Icon */}
         <div className="user-table-header-left">
           <div className="w-8 h-8 text-[#3B82F6] flex items-center justify-center flex-shrink-0">
@@ -144,12 +177,71 @@ export default function UserTable({
           </div>
           <div>
             <h3 className="user-table-card-title">
-              Staff &amp; Role Management
+              Staff, Registrar &amp; Role Management
             </h3>
             <p className="user-table-card-desc">
-              Set roles and access levels for registrar staff
+              Assign roles and access levels for Registrar, Staff, and Administrator
             </p>
+            <div className="relative mt-2.5 max-w-xs sm:max-w-sm">
+              <svg
+                className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Search staff by name, ID, or email..."
+                className="w-full pl-9 pr-8 py-1.5 text-xs bg-white border border-blue-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCurrentPage(1);
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                  aria-label="Clear staff search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
+        </div>
+
+        {/* Role Filter Pills */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {[
+            { key: 'ALL', label: 'All Roles' },
+            { key: ROLES.REGISTRAR, label: 'Registrar' },
+            { key: ROLES.STAFF, label: 'Staff' },
+            { key: ROLES.ADMIN, label: 'Administrator' },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => {
+                setRoleFilter(tab.key);
+                setCurrentPage(1);
+              }}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
+                roleFilter === tab.key
+                  ? 'bg-[#0B0B36] text-white shadow-sm'
+                  : 'bg-white/80 text-slate-600 hover:bg-white border border-slate-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -187,7 +279,11 @@ export default function UserTable({
 
       {/* Staff & Admin Data Table */}
       {!loading && !error && (
-        <div className="user-table-scroll">
+        <div
+          ref={tableScrollRef}
+          className="user-table-scroll"
+          style={totalPages > 1 && lockedMinHeight ? { minHeight: `${lockedMinHeight}px` } : undefined}
+        >
           <table className="user-table-element">
             <thead>
               <tr className="user-table-thead-tr">
@@ -206,7 +302,7 @@ export default function UserTable({
                   </td>
                 </tr>
               ) : (
-                staffAndAdminUsers.map((user) => {
+                paginatedUsers.map((user) => {
                   const displayName = formatDisplayName(user);
 
                   return (
@@ -232,17 +328,32 @@ export default function UserTable({
                       {/* Current Role (matching color pills) */}
                       <td className="user-table-cell">
                         {user.role === ROLES.ADMIN ? (
-                          <span className="role-badge role-badge-admin">
-                            Administrator
-                          </span>
+                          <div>
+                            <span className="role-badge role-badge-admin">
+                              Administrator
+                            </span>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              Manage accounts, roles, settings &amp; reports
+                            </div>
+                          </div>
                         ) : user.role === ROLES.STAFF ? (
-                          <span className="role-badge role-badge-staff">
-                            Staff
-                          </span>
+                          <div>
+                            <span className="role-badge role-badge-staff">
+                              Staff
+                            </span>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              Process requests, prepare docs &amp; update status
+                            </div>
+                          </div>
                         ) : (
-                          <span className="role-badge role-badge-registrar">
-                            Registrar
-                          </span>
+                          <div>
+                            <span className="role-badge role-badge-registrar">
+                              Registrar
+                            </span>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              Review &amp; approve/reject credential requests
+                            </div>
+                          </div>
                         )}
                       </td>
 
@@ -262,13 +373,13 @@ export default function UserTable({
                       {/* Actions: [Change Role] & [Deactivate / Activate] */}
                       <td className="user-table-cell">
                         <div className="action-btn-group">
-                          {/* Change Role Button (Solid Blue) */}
+                          {/* Update / Change Role Button (Solid Blue) */}
                           <button
                             type="button"
                             onClick={() => setEditingUser(user)}
                             className="btn-change-role"
                           >
-                            Change Role
+                            Update / Change Role
                           </button>
 
                           {/* Deactivate Button (Red Outline) or Activate */}
@@ -302,6 +413,16 @@ export default function UserTable({
             </tbody>
           </table>
         </div>
+      )}
+
+      {!loading && !error && (
+        <TablePagination
+          currentPage={safePage}
+          totalItems={staffAndAdminUsers.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+          accentColor="blue"
+        />
       )}
 
       {/* Modals */}

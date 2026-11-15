@@ -5,7 +5,23 @@ import { useAuth } from '../../hooks/useAuth';
 import { ROLES } from '../../constants/roles';
 import UserTable from '../../components/admin/UserTable';
 import StudentTableCard from '../../components/admin/StudentTableCard';
+import CourseSelectDropdown, { USTP_COURSE_CODE_MAP } from '../../components/admin/CourseSelectDropdown';
 import '../../styles/admin/UserManagementPage.css';
+
+const capitalizeNameWords = (val) =>
+  String(val ?? '').replace(/(^|\s)([a-z\u00e0-\u024f\u1e00-\u1eff])/g, (_, sep, ch) => sep + ch.toUpperCase());
+const isValidName = (val) => /^[a-zA-Z\u00C0-\u024F\u1E00-\u1EFF\s]+$/.test(val.trim());
+const getNameError = (val, label = 'Name') => {
+  if (!val) return '';
+  return /[^a-zA-Z\u00C0-\u024F\u1E00-\u1EFF\s]/.test(val)
+    ? `${label} must not contain numbers or special characters.`
+    : '';
+};
+const isValidNumericId = (val) => /^\d+$/.test(val.trim());
+const getNumericIdError = (val, label = 'ID Number') => {
+  if (!val) return '';
+  return /\D/.test(val) ? `${label} must contain numbers only.` : '';
+};
 
 export default function UserManagementPage() {
   const toast = useToast();
@@ -17,17 +33,30 @@ export default function UserManagementPage() {
   // Add User Form State
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [addUserLoading, setAddUserLoading] = useState(false);
-  const [addUserName, setAddUserName] = useState('');
+  const [addUserFirstName, setAddUserFirstName] = useState('');
+  const [addUserFirstNameError, setAddUserFirstNameError] = useState('');
+  const [addUserLastName, setAddUserLastName] = useState('');
+  const [addUserLastNameError, setAddUserLastNameError] = useState('');
   const [addUserIdInput, setAddUserIdInput] = useState('');
+  const [addUserIdError, setAddUserIdError] = useState('');
   const [addUserEmail, setAddUserEmail] = useState('');
+  const [addUserContactNumber, setAddUserContactNumber] = useState('');
+  const [addUserContactError, setAddUserContactError] = useState('');
   const [addUserRole, setAddUserRole] = useState(ROLES.STAFF);
 
   // Add Student Form State
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
   const [addStudentLoading, setAddStudentLoading] = useState(false);
-  const [studentFullName, setStudentFullName] = useState('');
+  const [studentFirstName, setStudentFirstName] = useState('');
+  const [studentFirstNameError, setStudentFirstNameError] = useState('');
+  const [studentLastName, setStudentLastName] = useState('');
+  const [studentLastNameError, setStudentLastNameError] = useState('');
   const [studentIdInput, setStudentIdInput] = useState('');
+  const [studentIdError, setStudentIdError] = useState('');
   const [studentEmail, setStudentEmail] = useState('');
+  const [studentBirthDate, setStudentBirthDate] = useState('');
+  const [studentContactNumber, setStudentContactNumber] = useState('');
+  const [studentContactError, setStudentContactError] = useState('');
   const [studentProgram, setStudentProgram] = useState('');
   const [studentYearLevel, setStudentYearLevel] = useState('1st year');
 
@@ -67,9 +96,12 @@ export default function UserManagementPage() {
             first_name: firstName,
             last_name: lastName,
             full_name: fullName,
-            program: u.program || p?.program || 'B.S in Information Technology',
+            program: u.course_name || u.program || p?.program || p?.course_name || 'B.S in Information Technology',
             year_level: u.year_level || p?.year_level || '1st year',
             student_id: u.student_id || p?.student_id || u.username,
+            birth_date: u.birth_date || u.birthdate || p?.birth_date || p?.birthdate || '',
+            birthdate: u.birthdate || u.birth_date || p?.birthdate || p?.birth_date || '',
+            contact_number: u.contact_number || p?.contact_number || '',
           };
         });
 
@@ -154,9 +186,15 @@ export default function UserManagementPage() {
 
   // Add User Handlers
   const handleAddUserReset = () => {
-    setAddUserName('');
+    setAddUserFirstName('');
+    setAddUserFirstNameError('');
+    setAddUserLastName('');
+    setAddUserLastNameError('');
     setAddUserIdInput('');
+    setAddUserIdError('');
     setAddUserEmail('');
+    setAddUserContactNumber('');
+    setAddUserContactError('');
     setAddUserRole(ROLES.STAFF);
     setIsAddUserOpen(false);
   };
@@ -164,28 +202,60 @@ export default function UserManagementPage() {
   const handleAddUserSubmit = async (e) => {
     e.preventDefault();
 
-    if (!addUserName.trim()) {
-      toast.error('Please enter a full name.');
+    if (!addUserFirstName.trim()) {
+      setAddUserFirstNameError('Please enter a first name.');
+      toast.error('Please enter a first name.');
+      return;
+    }
+    if (!isValidName(addUserFirstName)) {
+      const msg = 'First Name must not contain numbers or special characters.';
+      setAddUserFirstNameError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!addUserLastName.trim()) {
+      setAddUserLastNameError('Please enter a last name.');
+      toast.error('Please enter a last name.');
+      return;
+    }
+    if (!isValidName(addUserLastName)) {
+      const msg = 'Last Name must not contain numbers or special characters.';
+      setAddUserLastNameError(msg);
+      toast.error(msg);
       return;
     }
     if (!addUserIdInput.trim()) {
+      setAddUserIdError('Please enter an ID number.');
       toast.error('Please enter an ID number.');
+      return;
+    }
+    if (!isValidNumericId(addUserIdInput)) {
+      const msg = 'ID Number must contain numbers only.';
+      setAddUserIdError(msg);
+      toast.error(msg);
       return;
     }
     if (!addUserEmail.trim()) {
       toast.error('Please enter a valid email address.');
       return;
     }
+    if (addUserContactNumber.trim() && !isValidNumericId(addUserContactNumber)) {
+      const msg = 'Contact Number must contain numbers only.';
+      setAddUserContactError(msg);
+      toast.error(msg);
+      return;
+    }
 
     setAddUserLoading(true);
 
     try {
-      const nameParts = addUserName.trim().split(/\s+/);
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
+      const firstName = capitalizeNameWords(addUserFirstName.trim());
+      const lastName = capitalizeNameWords(addUserLastName.trim());
+      const fullName = `${firstName} ${lastName}`.trim();
 
       const finalIdNumber = addUserIdInput.trim();
 
+      const contactNo = addUserContactNumber.trim();
       const payload = {
         username: finalIdNumber,
         email: addUserEmail.trim().toLowerCase(),
@@ -193,6 +263,7 @@ export default function UserManagementPage() {
         role: addUserRole,
         first_name: firstName,
         last_name: lastName,
+        ...(contactNo ? { contact_number: contactNo } : {}),
       };
 
       const res = await usersApi.create(payload);
@@ -200,27 +271,30 @@ export default function UserManagementPage() {
         ...res,
         first_name: firstName,
         last_name: lastName,
-        full_name: addUserName.trim(),
+        full_name: fullName,
         username: finalIdNumber,
         employee_id: finalIdNumber,
         id_number: finalIdNumber,
+        contact_number: contactNo,
       };
 
-      // Patch first_name and last_name via usersApi.update because UserCreateSerializer
+      // Patch first_name, last_name, and contact_number via usersApi.update because UserCreateSerializer
       // in Django backend only validates ['username', 'email', 'password', 'role'],
-      // whereas UserUpdateSerializer accepts ['first_name', 'last_name', 'email', 'role', 'is_active']
-      if (res?.id && (firstName || lastName)) {
+      // whereas UserUpdateSerializer accepts ['first_name', 'last_name', 'email', 'role', 'contact_number', 'is_active']
+      if (res?.id && (firstName || lastName || contactNo)) {
         try {
           const patched = await usersApi.update(res.id, {
             first_name: firstName,
             last_name: lastName,
+            ...(contactNo ? { contact_number: contactNo } : {}),
           });
           newUser = {
             ...newUser,
             ...patched,
             first_name: firstName,
             last_name: lastName,
-            full_name: addUserName.trim(),
+            full_name: fullName,
+            contact_number: contactNo,
           };
         } catch (patchErr) {
           console.warn('Could not patch user name:', patchErr);
@@ -234,6 +308,51 @@ export default function UserManagementPage() {
         localStorage.setItem('regquest_users_cache', JSON.stringify([newUser, ...filtered]));
       } catch (e) {
         console.warn('Could not cache user profile:', e);
+      }
+
+      // Persist active email in staff/student profile so it appears in their profile immediately
+      try {
+        const emailLower = addUserEmail.trim().toLowerCase();
+        if (addUserRole === ROLES.STUDENT) {
+          const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+          const pData = {
+            id: newUser.id,
+            username: finalIdNumber,
+            student_id: finalIdNumber,
+            first_name: firstName,
+            last_name: lastName,
+            full_name: fullName,
+            email: emailLower,
+            program: 'B.S. in Information Technology',
+            year_level: '1st year',
+          };
+          profiles[finalIdNumber] = { ...(profiles[finalIdNumber] || {}), ...pData };
+          if (newUser.id) profiles[String(newUser.id)] = { ...(profiles[String(newUser.id)] || {}), ...pData };
+          localStorage.setItem('regquest_student_profiles', JSON.stringify(profiles));
+        } else {
+          const staffProfiles = JSON.parse(localStorage.getItem('regquest_staff_profiles') || '{}');
+          const sData = {
+            id: newUser.id,
+            username: finalIdNumber,
+            employee_id: finalIdNumber,
+            first_name: firstName,
+            last_name: lastName,
+            full_name: fullName,
+            email: emailLower,
+            contact_number: contactNo,
+            phone: contactNo,
+            role: addUserRole,
+          };
+          staffProfiles[finalIdNumber] = { ...(staffProfiles[finalIdNumber] || {}), ...sData };
+          if (newUser.id) staffProfiles[String(newUser.id)] = { ...(staffProfiles[String(newUser.id)] || {}), ...sData };
+          localStorage.setItem('regquest_staff_profiles', JSON.stringify(staffProfiles));
+        }
+
+        window.dispatchEvent(new CustomEvent('regquest_profile_updated', {
+          detail: { username: finalIdNumber, email: emailLower, full_name: fullName }
+        }));
+      } catch (profileErr) {
+        console.warn('Could not cache role profile:', profileErr);
       }
 
       // Record creation date so new account never receives historical notifications
@@ -252,7 +371,7 @@ export default function UserManagementPage() {
           id: `act-${Date.now()}`,
           actor: (currentAdmin?.username || 'admin').toLowerCase(),
           actorName: currentAdmin?.full_name || currentAdmin?.username || 'Administrator',
-          targetName: addUserName.trim(),
+          targetName: fullName,
           targetId: finalIdNumber,
           role: addUserRole,
           action: `Account Provisioned (${addUserRole.toUpperCase()}) - Default Password: ID`,
@@ -263,7 +382,7 @@ export default function UserManagementPage() {
         localStorage.setItem('regquest_account_activity', JSON.stringify(activity.slice(0, 50)));
       } catch {}
 
-      toast.success(`User "${addUserName}" (${addUserRole}) provisioned with password: ${finalIdNumber}`);
+      toast.success(`User "${fullName}" (${addUserRole}) account provisioned successfully.`);
       handleUserCreated(newUser);
       handleAddUserReset();
     } catch (err) {
@@ -282,9 +401,16 @@ export default function UserManagementPage() {
 
   // Add Student Handlers
   const handleAddStudentReset = () => {
-    setStudentFullName('');
+    setStudentFirstName('');
+    setStudentFirstNameError('');
+    setStudentLastName('');
+    setStudentLastNameError('');
     setStudentIdInput('');
+    setStudentIdError('');
     setStudentEmail('');
+    setStudentBirthDate('');
+    setStudentContactNumber('');
+    setStudentContactError('');
     setStudentProgram('');
     setStudentYearLevel('1st year');
     setIsAddStudentOpen(false);
@@ -293,27 +419,72 @@ export default function UserManagementPage() {
   const handleAddStudentSubmit = async (e) => {
     e.preventDefault();
 
-    if (!studentFullName.trim()) {
-      toast.error("Please enter the student's full name.");
+    if (!studentFirstName.trim()) {
+      setStudentFirstNameError("Please enter the student's first name.");
+      toast.error("Please enter the student's first name.");
+      return;
+    }
+    if (!isValidName(studentFirstName)) {
+      const msg = 'First Name must not contain numbers or special characters.';
+      setStudentFirstNameError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!studentLastName.trim()) {
+      setStudentLastNameError("Please enter the student's last name.");
+      toast.error("Please enter the student's last name.");
+      return;
+    }
+    if (!isValidName(studentLastName)) {
+      const msg = 'Last Name must not contain numbers or special characters.';
+      setStudentLastNameError(msg);
+      toast.error(msg);
       return;
     }
     if (!studentIdInput.trim()) {
+      setStudentIdError('Please enter the Student ID.');
       toast.error('Please enter the Student ID.');
+      return;
+    }
+    if (!isValidNumericId(studentIdInput)) {
+      const msg = 'Student ID must contain numbers only.';
+      setStudentIdError(msg);
+      toast.error(msg);
       return;
     }
     if (!studentEmail.trim()) {
       toast.error('Please enter a valid active email address.');
       return;
     }
+    if (!studentBirthDate) {
+      toast.error("Please select the student's birthdate.");
+      return;
+    }
+    if (!studentContactNumber.trim()) {
+      setStudentContactError('Please enter a contact number.');
+      toast.error('Please enter a contact number.');
+      return;
+    }
+    if (!isValidNumericId(studentContactNumber)) {
+      const msg = 'Contact Number must contain numbers only.';
+      setStudentContactError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!studentProgram) {
+      toast.error('Please select a course for the student.');
+      return;
+    }
 
     setAddStudentLoading(true);
 
     try {
-      const nameParts = studentFullName.trim().split(/\s+/);
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
+      const firstName = capitalizeNameWords(studentFirstName.trim());
+      const lastName = capitalizeNameWords(studentLastName.trim());
+      const fullName = `${firstName} ${lastName}`.trim();
 
       const finalStudentId = studentIdInput.trim();
+      const courseCode = USTP_COURSE_CODE_MAP[studentProgram] || 'IT';
 
       const payload = {
         username: finalStudentId,
@@ -322,6 +493,11 @@ export default function UserManagementPage() {
         role: ROLES.STUDENT,
         first_name: firstName,
         last_name: lastName,
+        course_name: studentProgram.trim(),
+        course_code: courseCode,
+        birth_date: studentBirthDate || null,
+        contact_number: studentContactNumber.trim(),
+        year_level: studentYearLevel,
       };
 
       const res = await usersApi.create(payload);
@@ -329,30 +505,42 @@ export default function UserManagementPage() {
         ...res,
         first_name: firstName,
         last_name: lastName,
-        full_name: studentFullName.trim(),
+        full_name: fullName,
         student_id: finalStudentId,
-        program: studentProgram.trim() || 'B.S in Information Technology',
+        program: studentProgram.trim(),
+        course: studentProgram.trim(),
+        course_name: studentProgram.trim(),
+        course_code: courseCode,
         year_level: studentYearLevel,
+        birth_date: studentBirthDate,
+        birthdate: studentBirthDate,
+        contact_number: studentContactNumber.trim(),
       };
 
-      // Patch first_name and last_name via usersApi.update because UserCreateSerializer
-      // in Django backend only validates ['username', 'email', 'password', 'role'],
-      // whereas UserUpdateSerializer accepts ['first_name', 'last_name', 'email', 'role', 'is_active']
-      if (res?.id && (firstName || lastName)) {
+      // Patch profile fields via usersApi.update to ensure course & names are saved in database
+      if (res?.id) {
         try {
           const patched = await usersApi.update(res.id, {
             first_name: firstName,
             last_name: lastName,
+            course_name: studentProgram.trim(),
+            course_code: courseCode,
+            birth_date: studentBirthDate || null,
+            contact_number: studentContactNumber.trim(),
+            year_level: studentYearLevel,
           });
           newStudent = {
             ...newStudent,
             ...patched,
             first_name: firstName,
             last_name: lastName,
-            full_name: studentFullName.trim(),
+            full_name: fullName,
+            program: studentProgram.trim(),
+            course_name: studentProgram.trim(),
+            course_code: courseCode,
           };
         } catch (patchErr) {
-          console.warn('Could not patch student name in database:', patchErr);
+          console.warn('Could not patch student name/course in database:', patchErr);
         }
       }
 
@@ -365,9 +553,15 @@ export default function UserManagementPage() {
           student_id: finalStudentId,
           first_name: firstName,
           last_name: lastName,
-          full_name: studentFullName.trim(),
-          program: studentProgram.trim() || 'B.S in Information Technology',
+          full_name: fullName,
+          program: studentProgram.trim(),
+          course: studentProgram.trim(),
+          course_name: studentProgram.trim(),
+          course_code: courseCode,
           year_level: studentYearLevel,
+          birth_date: studentBirthDate,
+          birthdate: studentBirthDate,
+          contact_number: studentContactNumber.trim(),
           email: studentEmail.trim().toLowerCase(),
         };
         profiles[finalStudentId] = pData;
@@ -393,7 +587,7 @@ export default function UserManagementPage() {
           id: `act-${Date.now()}`,
           actor: (currentAdmin?.username || 'admin').toLowerCase(),
           actorName: currentAdmin?.full_name || currentAdmin?.username || 'Administrator',
-          targetName: studentFullName.trim(),
+          targetName: fullName,
           targetId: finalStudentId,
           role: 'student',
           action: 'Student Account Provisioned - Default Password: ID',
@@ -404,7 +598,7 @@ export default function UserManagementPage() {
         localStorage.setItem('regquest_account_activity', JSON.stringify(activity.slice(0, 50)));
       } catch {}
 
-      toast.success(`Student "${studentFullName}" provisioned with password: ${finalStudentId}`);
+      toast.success(`Student "${fullName}" account provisioned successfully.`);
       handleUserCreated(newStudent);
       handleAddStudentReset();
     } catch (err) {
@@ -423,11 +617,16 @@ export default function UserManagementPage() {
 
   // Metric Stats Calculations
   const totalUsers = users.length;
-  const staffMembers = users.filter(
-    (u) => u.role === ROLES.STAFF || u.role === ROLES.REGISTRAR
-  ).length;
+  const registrars = users.filter((u) => u.role === ROLES.REGISTRAR).length;
+  const staffMembers = users.filter((u) => u.role === ROLES.STAFF).length;
   const administrators = users.filter((u) => u.role === ROLES.ADMIN).length;
   const students = users.filter((u) => u.role === ROLES.STUDENT).length;
+
+  const roleDescriptionMap = {
+    [ROLES.REGISTRAR]: 'Review and approve/reject credential requests.',
+    [ROLES.STAFF]: 'Process approved requests, prepare documents, and update request statuses.',
+    [ROLES.ADMIN]: 'Manage user accounts, assign roles, system settings, reports, and monitor overall system activities.',
+  };
 
   const stats = [
     {
@@ -437,6 +636,16 @@ export default function UserManagementPage() {
       icon: (
         <svg className="user-stat-icon text-slate-600" fill="currentColor" viewBox="0 0 24 24">
           <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+        </svg>
+      ),
+    },
+    {
+      title: 'Registrar',
+      value: registrars,
+      pillClass: 'user-stat-pill-indigo',
+      icon: (
+        <svg className="user-stat-icon text-[#6366F1]" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
         </svg>
       ),
     },
@@ -513,27 +722,62 @@ export default function UserManagementPage() {
               Add New User
             </h3>
 
-            <div className="add-user-grid-4">
+            <div className="add-student-grid-2">
               <div>
                 <input
                   type="text"
-                  placeholder="Full Name"
-                  value={addUserName}
-                  onChange={(e) => setAddUserName(e.target.value)}
+                  placeholder="First Name"
+                  value={addUserFirstName}
+                  onChange={(e) => {
+                    const val = capitalizeNameWords(e.target.value);
+                    setAddUserFirstName(val);
+                    setAddUserFirstNameError(getNameError(val, 'First Name'));
+                  }}
                   required
-                  className="add-user-input"
+                  className={`add-user-input ${addUserFirstNameError ? '!border-red-500 focus:!border-red-500' : ''}`}
                 />
+                {addUserFirstNameError && (
+                  <p className="text-xs text-red-600 mt-1 font-medium">{addUserFirstNameError}</p>
+                )}
               </div>
 
               <div>
                 <input
                   type="text"
+                  placeholder="Last Name"
+                  value={addUserLastName}
+                  onChange={(e) => {
+                    const val = capitalizeNameWords(e.target.value);
+                    setAddUserLastName(val);
+                    setAddUserLastNameError(getNameError(val, 'Last Name'));
+                  }}
+                  required
+                  className={`add-user-input ${addUserLastNameError ? '!border-red-500 focus:!border-red-500' : ''}`}
+                />
+                {addUserLastNameError && (
+                  <p className="text-xs text-red-600 mt-1 font-medium">{addUserLastNameError}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="add-student-grid-2">
+              <div>
+                <input
+                  type="text"
+                  inputMode="numeric"
                   placeholder="ID Number"
                   value={addUserIdInput}
-                  onChange={(e) => setAddUserIdInput(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAddUserIdInput(val);
+                    setAddUserIdError(getNumericIdError(val, 'ID Number'));
+                  }}
                   required
-                  className="add-user-input"
+                  className={`add-user-input ${addUserIdError ? '!border-red-500 focus:!border-red-500' : ''}`}
                 />
+                {addUserIdError && (
+                  <p className="text-xs text-red-600 mt-1 font-medium">{addUserIdError}</p>
+                )}
               </div>
 
               <div>
@@ -546,6 +790,26 @@ export default function UserManagementPage() {
                   className="add-user-input"
                 />
               </div>
+            </div>
+
+            <div className="add-student-grid-2">
+              <div>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Contact No. (e.g. 09123456789)"
+                  value={addUserContactNumber}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAddUserContactNumber(val);
+                    setAddUserContactError(getNumericIdError(val, 'Contact Number'));
+                  }}
+                  className={`add-user-input ${addUserContactError ? '!border-red-500 focus:!border-red-500' : ''}`}
+                />
+                {addUserContactError && (
+                  <p className="text-xs text-red-600 mt-1 font-medium">{addUserContactError}</p>
+                )}
+              </div>
 
               <div>
                 <select
@@ -553,11 +817,16 @@ export default function UserManagementPage() {
                   onChange={(e) => setAddUserRole(e.target.value)}
                   className="add-user-select"
                 >
+                  <option value={ROLES.REGISTRAR}>Registrar</option>
                   <option value={ROLES.STAFF}>Staff</option>
                   <option value={ROLES.ADMIN}>Administrator</option>
-                  <option value={ROLES.REGISTRAR}>Registrar</option>
                 </select>
               </div>
+            </div>
+
+            <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 flex items-center gap-2">
+              <span className="font-bold text-slate-800 capitalize">{addUserRole} Role:</span>
+              <span>{roleDescriptionMap[addUserRole]}</span>
             </div>
 
             <p className="add-user-hint">
@@ -628,27 +897,62 @@ export default function UserManagementPage() {
               </div>
             </div>
 
-            <div className="add-student-grid-3">
+            <div className="add-student-grid-2">
               <div>
                 <input
                   type="text"
-                  placeholder="Full Name"
-                  value={studentFullName}
-                  onChange={(e) => setStudentFullName(e.target.value)}
+                  placeholder="First Name"
+                  value={studentFirstName}
+                  onChange={(e) => {
+                    const val = capitalizeNameWords(e.target.value);
+                    setStudentFirstName(val);
+                    setStudentFirstNameError(getNameError(val, 'First Name'));
+                  }}
                   required
-                  className="add-student-input"
+                  className={`add-student-input ${studentFirstNameError ? '!border-red-500 focus:!border-red-500' : ''}`}
                 />
+                {studentFirstNameError && (
+                  <p className="text-xs text-red-600 mt-1 font-medium">{studentFirstNameError}</p>
+                )}
               </div>
 
               <div>
                 <input
                   type="text"
+                  placeholder="Last Name"
+                  value={studentLastName}
+                  onChange={(e) => {
+                    const val = capitalizeNameWords(e.target.value);
+                    setStudentLastName(val);
+                    setStudentLastNameError(getNameError(val, 'Last Name'));
+                  }}
+                  required
+                  className={`add-student-input ${studentLastNameError ? '!border-red-500 focus:!border-red-500' : ''}`}
+                />
+                {studentLastNameError && (
+                  <p className="text-xs text-red-600 mt-1 font-medium">{studentLastNameError}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="add-student-grid-2">
+              <div>
+                <input
+                  type="text"
+                  inputMode="numeric"
                   placeholder="Student ID (e.g. 2023123456)"
                   value={studentIdInput}
-                  onChange={(e) => setStudentIdInput(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setStudentIdInput(val);
+                    setStudentIdError(getNumericIdError(val, 'Student ID'));
+                  }}
                   required
-                  className="add-student-input"
+                  className={`add-student-input ${studentIdError ? '!border-red-500 focus:!border-red-500' : ''}`}
                 />
+                {studentIdError && (
+                  <p className="text-xs text-red-600 mt-1 font-medium">{studentIdError}</p>
+                )}
               </div>
 
               <div>
@@ -665,13 +969,48 @@ export default function UserManagementPage() {
 
             <div className="add-student-grid-2">
               <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Birthdate
+                </label>
                 <input
-                  type="text"
-                  placeholder="Course (e.g. B.S in Information Technology)"
-                  value={studentProgram}
-                  onChange={(e) => setStudentProgram(e.target.value)}
+                  type="date"
+                  value={studentBirthDate}
+                  max={new Date().toISOString().split('T')[0]}
+                  onChange={(e) => setStudentBirthDate(e.target.value)}
                   required
                   className="add-student-input"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Contact Number
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Contact Number (e.g. 09123456789)"
+                  value={studentContactNumber}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setStudentContactNumber(val);
+                    setStudentContactError(getNumericIdError(val, 'Contact Number'));
+                  }}
+                  required
+                  className={`add-student-input ${studentContactError ? '!border-red-500 focus:!border-red-500' : ''}`}
+                />
+                {studentContactError && (
+                  <p className="text-xs text-red-600 mt-1 font-medium">{studentContactError}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="add-student-grid-2">
+              <div>
+                <CourseSelectDropdown
+                  value={studentProgram}
+                  onChange={setStudentProgram}
+                  required
                 />
               </div>
 

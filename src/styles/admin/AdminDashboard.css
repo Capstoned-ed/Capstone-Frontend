@@ -8,7 +8,7 @@
 .admin-banner {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(to right, #060a24, #0b123e, #121b59);
+  background-color: #0B0B36;
   min-height: 140px;
   display: flex;
   align-items: center;
@@ -45,22 +45,22 @@
   width: 100%;
   object-fit: cover;
   object-position: left;
-  opacity: 0.35;
+  opacity: 0.45;
   mix-blend-mode: screen;
-  transform: scale(1.1);
-  filter: brightness(1.1) contrast(1.1);
+  transform: scale(1.05);
+  filter: brightness(1.08) contrast(1.08);
 }
 
 @media (min-width: 640px) {
   .admin-banner-img {
-    opacity: 0.45;
+    opacity: 0.52;
   }
 }
 
 .admin-banner-fade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to right, #060a24, rgba(11, 18, 62, 0.6), transparent);
+  background: linear-gradient(to right, #0B0B36, rgba(11, 11, 54, 0.7), transparent);
 }
 
 .admin-banner-content {
@@ -91,7 +91,7 @@
 }
 
 .admin-banner-title-highlight {
-  color: #fbbf24;
+  color: #F5B014;
 }
 
 .admin-banner-subtitle {
