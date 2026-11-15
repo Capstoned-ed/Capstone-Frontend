@@ -30,7 +30,7 @@ export default function MainLayout({ children }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans text-slate-800">
+    <div className="min-h-screen w-full overflow-x-clip bg-slate-50 flex flex-col md:flex-row font-sans text-slate-800">
       <header className="md:hidden bg-[#0B0B36] text-white px-4 py-3 flex items-center justify-between sticky top-0 z-40 shadow-md">
         <div className="flex items-center space-x-2.5">
           <button
@@ -78,7 +78,7 @@ export default function MainLayout({ children }) {
         />
       </div>
 
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-y-auto">
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-y-auto overflow-x-hidden">
         <main className={`flex-1 w-full ${isAdminDashboard || isStudentDashboard || isStaffDashboard ? 'p-0 max-w-none' : isStudentView ? 'px-4 sm:px-8 pt-4 sm:pt-6 pb-6 max-w-7xl mx-auto' : 'p-6 sm:p-8 max-w-7xl mx-auto'}`}>
           {children ? children : <Outlet />}
         </main>
