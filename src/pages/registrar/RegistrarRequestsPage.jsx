@@ -9,13 +9,16 @@ import BatchUpdateModal from '../../components/common/BatchUpdateModal';
 import TablePagination from '../../components/common/TablePagination';
 import { StaffRequestsTable } from '../../components/staff';
 import useToast from '../../hooks/useToast';
+import {
+  REQUEST_STATUS,
+  REQUEST_STATUSES,
+  BACKEND_STATUS_MAP,
+  normalizeToBackendStatus,
+  formatStatusDisplay,
+  isClaimedStatus,
+} from '../../constants/workflowStatuses';
 import '../../styles/admin/AdminRequestsPage.css';
 import '../../styles/staff/StaffRequestsPage.css';
-
-const isClaimedStatus = (status) => {
-  const s = String(status || '').trim().toLowerCase();
-  return s === 'claimed' || s.includes('claim');
-};
 
 function loadStoredAssignments() {
   return getStaffAssignments();
@@ -31,73 +34,6 @@ function calculateReleaseDate(createdAt, processingDays = 5) {
   if (isNaN(d.getTime())) return 'N/A';
   d.setDate(d.getDate() + (Number(processingDays) || 5));
   return d.toISOString().split('T')[0];
-}
-
-const REQUEST_STATUSES = [
-  'Pending',
-  'Pending Payment',
-  'For Processing',
-  'Processing',
-  'Releasing',
-  'Claimed',
-  'Rejected',
-];
-
-function formatStatusDisplay(rawStatus) {
-  if (!rawStatus) return 'Pending';
-  const s = rawStatus.trim();
-  if (s === 'For Payment' || s === 'FOR PAYMENT' || s === 'FOR_PAYMENT') return 'Pending Payment';
-  if (REQUEST_STATUSES.includes(s)) return s;
-
-  const upper = s.toUpperCase();
-  switch (upper) {
-    case 'PENDING':
-    case 'PENDONG':
-    case 'RECEIVED':
-    case 'REQUEST SUBMITTED':
-      return 'Pending';
-    case 'FOR_PAYMENT':
-    case 'FOR PAYMENT':
-    case 'PAYMENT_PENDING':
-    case 'PAYMENT PENDING':
-    case 'PENDING_PAYMENT':
-    case 'PENDING PAYMENT':
-    case 'CLEARED FOR PAYMENT':
-      return 'Pending Payment';
-    case 'PAYMENT_VERIFIED':
-    case 'PAYMENT VERIFIED':
-    case 'FOR_PROCESSING':
-    case 'FOR PROCESSING':
-      return 'For Processing';
-    case 'PROCESSING':
-    case 'DOCUMENT_PREPARATION':
-    case 'DOCUMENT PREPARATION':
-      return 'Processing';
-    case 'READY_FOR_RELEASE':
-    case 'READY FOR RELEASE':
-    case 'READY_FOR_PICKUP':
-    case 'READY FOR PICKUP':
-    case 'FOR_RELEASE':
-    case 'FOR RELEASE':
-    case 'RELEASING':
-      return 'Releasing';
-    case 'RELEASED':
-    case 'CLAIMED':
-    case 'CLAIMED / RELEASED':
-    case 'CLAIMED/RELEASED':
-      return 'Claimed';
-    case 'ON HOLD':
-    case 'ON_HOLD':
-    case 'HOLD':
-    case 'REQUIREMENTS_VERIFICATION':
-    case 'CLEARANCE_VERIFIED':
-      return 'On Hold';
-    case 'CANCELLED':
-    case 'REJECTED':
-      return 'Rejected';
-    default:
-      return s;
-  }
 }
 
 export default function RegistrarRequestsPage() {
@@ -1052,9 +988,9 @@ export default function RegistrarRequestsPage() {
         status: newStatus || item.status,
       });
 
-      // Backend API transition if applicable and numeric
-      if (newStatus && targetId && !isNaN(Number(targetId))) {
-        requestsApi.transition(Number(targetId), {
+      // Backend API transition if applicable
+      if (newStatus && targetId && !String(targetId).startsWith('fallback_')) {
+        requestsApi.transition(targetId, {
           status: newStatus,
           remarks: preserveDocTagInRemarks(item, note || 'Batch updated by registrar'),
         }).catch(() => {});

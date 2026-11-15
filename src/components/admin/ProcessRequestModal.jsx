@@ -6,6 +6,13 @@ import requestsApi, { updateStoredRequest, logProcessedAction, setRequestArchive
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import { saveStoredNotification } from '../../api/notifications';
 import { getStoredPaymentProof, verifyStoredPaymentProof } from '../../api/payments';
+import {
+  REQUEST_STATUS,
+  normalizeToBackendStatus,
+  formatStatusDisplay,
+  STATUS_CONFIG,
+  BACKEND_STATUS_MAP,
+} from '../../constants/workflowStatuses';
 import PrintRequestFormModal from '../student/PrintRequestFormModal';
 import ClaimStubModal from '../common/ClaimStubModal';
 
@@ -16,19 +23,6 @@ export default function ProcessRequestModal({
   onUpdated,
 }) {
   const { user } = useAuth();
-  const BACKEND_STATUS_MAP = {
-    'Pending': 'PENDING',
-    'For Payment': 'PAYMENT_PENDING',
-    'Pending Payment': 'PAYMENT_PENDING',
-    'Payment Pending': 'PAYMENT_PENDING',
-    'For Processing': 'PAYMENT_VERIFIED',
-    'Processing': 'PROCESSING',
-    'Releasing': 'READY_FOR_RELEASE',
-    'For release': 'READY_FOR_RELEASE',
-    'Claimed': 'RELEASED',
-    'On Hold': 'REQUIREMENTS_VERIFICATION',
-  };
-
   const toast = useToast();
   const [newStatus, setNewStatus] = useState(() => requestItem?.status || 'Pending');
   const [notes, setNotes] = useState('');
@@ -469,7 +463,8 @@ export default function ProcessRequestModal({
     setStatusDirectly('Pending Payment');
     setIsOrderConfirmed(true);
 
-    const isBackendId = Boolean(requestItem.rawId) && !String(requestItem.rawId).startsWith('TRK-') && !String(requestItem.rawId).startsWith('REQ-');
+    const targetRawId = requestItem.rawId || requestItem.id;
+    const isBackendId = Boolean(targetRawId) && !String(targetRawId).startsWith('fallback_');
     if (isBackendId) {
       const opRemarks = preserveDocTagInRemarks(
         requestItem,
@@ -477,7 +472,7 @@ export default function ProcessRequestModal({
       );
       try {
         await requestsApi.transition(
-          requestItem.rawId,
+          targetRawId,
           {
             status: 'PAYMENT_PENDING',
             remarks: opRemarks,
@@ -487,14 +482,14 @@ export default function ProcessRequestModal({
       } catch (apiErr) {
         try {
           await requestsApi.transition(
-            requestItem.rawId,
+            targetRawId,
             { status: 'REQUIREMENTS_VERIFICATION', remarks: opRemarks },
             { throwOnError: true }
           );
         } catch {}
         try {
           await requestsApi.transition(
-            requestItem.rawId,
+            targetRawId,
             { status: 'PAYMENT_PENDING', remarks: opRemarks },
             { throwOnError: true }
           );
@@ -547,11 +542,11 @@ export default function ProcessRequestModal({
 
     try {
       setLoading(true);
-      if (typeof targetId === 'number') {
+      if (targetId && !String(targetId).startsWith('fallback_')) {
         await requestsApi.transition(targetId, {
           status: 'REJECTED',
           remarks: reason,
-        }).catch(() => {});
+        });
       }
 
       const nowTime = Date.now();
@@ -704,7 +699,8 @@ export default function ProcessRequestModal({
       });
     }
 
-    const isBackendId = Boolean(requestItem.rawId) && !String(requestItem.rawId).startsWith('TRK-') && !String(requestItem.rawId).startsWith('REQ-');
+    const targetRawId = requestItem.rawId || requestItem.id;
+    const isBackendId = Boolean(targetRawId) && !String(targetRawId).startsWith('fallback_');
     if (isBackendId) {
       const payRemarks = preserveDocTagInRemarks(
         requestItem,
@@ -715,7 +711,7 @@ export default function ProcessRequestModal({
       const targetPayStatus = isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING';
       try {
         await requestsApi.transition(
-          requestItem.rawId,
+          targetRawId,
           {
             status: targetPayStatus,
             remarks: payRemarks,
@@ -727,7 +723,7 @@ export default function ProcessRequestModal({
           for (const step of ['REQUIREMENTS_VERIFICATION', 'PAYMENT_PENDING', 'PAYMENT_VERIFIED']) {
             try {
               await requestsApi.transition(
-                requestItem.rawId,
+                targetRawId,
                 { status: step, remarks: payRemarks },
                 { throwOnError: true }
               );
@@ -858,13 +854,14 @@ export default function ProcessRequestModal({
         return;
       }
 
-      const isBackendId = Boolean(requestItem.rawId) && !String(requestItem.rawId).startsWith('TRK-') && !String(requestItem.rawId).startsWith('REQ-');
+      const targetRawId = requestItem.rawId || requestItem.id;
+      const isBackendId = Boolean(targetRawId) && !String(targetRawId).startsWith('fallback_');
       if (isBackendId) {
         const backendStatus = BACKEND_STATUS_MAP[localStatus] || localStatus;
         const transitionRemarks = preserveDocTagInRemarks(requestItem, notes || requestItem.remarks || '');
         try {
           await requestsApi.transition(
-            requestItem.rawId,
+            targetRawId,
             {
               status: backendStatus,
               remarks: transitionRemarks,
@@ -886,7 +883,7 @@ export default function ProcessRequestModal({
             for (let i = 0; i <= targetIdx; i++) {
               try {
                 await requestsApi.transition(
-                  requestItem.rawId,
+                  targetRawId,
                   {
                     status: pipeline[i],
                     remarks: transitionRemarks,
@@ -986,7 +983,7 @@ export default function ProcessRequestModal({
 
     try {
       setLoading(true);
-      if (typeof targetId === 'number') {
+      if (targetId && !String(targetId).startsWith('fallback_')) {
         await requestsApi.transition(targetId, {
           status: 'RELEASED',
           remarks: preserveDocTagInRemarks(requestItem, notes || 'Document claimed by student at registrar window.'),
@@ -1073,7 +1070,7 @@ export default function ProcessRequestModal({
   return (
     <>
       <div className="staff-process-backdrop" onClick={onClose}>
-        <div className="staff-process-dialog max-w-3xl" onClick={(e) => e.stopPropagation()}>
+        <div className="staff-process-dialog max-w-3xl" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
           {/* Sticky Header */}
           <div className="staff-process-header">
             <div>
