@@ -30,7 +30,7 @@ export default function MainLayout({ children }) {
   };
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-slate-50 flex flex-col md:flex-row font-sans text-slate-800">
+    <div className="min-h-screen w-full overflow-x-clip bg-slate-50 flex flex-col md:flex-row font-sans text-slate-800">
       <header className="md:hidden bg-[#0B0B36] text-white px-4 py-3 flex items-center justify-between sticky top-0 z-40 shadow-md">
         <div className="flex items-center space-x-2.5">
           <button
