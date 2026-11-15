@@ -1373,6 +1373,7 @@ export default function StaffRequestsPage() {
         setStatusFilter={setStatusFilter}
         credentialTypes={credentialTypes}
         requestStatuses={REQUEST_STATUSES.filter((st) => st !== 'Claimed')}
+        showStatusFilter={activeTab !== 'history'}
       />
 
       {activeTab === 'active' ? (

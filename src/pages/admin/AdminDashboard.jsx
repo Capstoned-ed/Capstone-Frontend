@@ -201,9 +201,9 @@ export default function AdminDashboard() {
           />
         </section>
 
-        {/* Section 4: User Role Management */}
+        {/* Section 4: User Role Overview */}
         <section id="users">
-          <UserTable />
+          <UserTable overviewOnly />
         </section>
       </div>
     </div>
