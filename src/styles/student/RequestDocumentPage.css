@@ -5,7 +5,13 @@
   width: 100%;
   max-width: 56rem;
   margin: 0 auto;
-  padding: 1rem 1rem 3rem 1rem;
+  padding: 0.5rem 0 2.5rem 0;
+}
+
+@media (min-width: 640px) {
+  .student-page-container {
+    padding: 1rem 1rem 3rem 1rem;
+  }
 }
 
 .student-step-nav {
@@ -56,11 +62,13 @@
    -------------------------------------------------------------------------- */
 .ustp-form-sheet {
   width: 100%;
+  max-width: 100%;
+  overflow: hidden;
   background-color: #ffffff;
   border-radius: 1.25rem;
   border: 1px solid #e2e8f0;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
-  padding: 1.25rem 1rem;
+  padding: 1.25rem 0.875rem;
   color: #0f172a;
 }
 
@@ -180,9 +188,13 @@
 }
 
 .ustp-section-box {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
   border: 1.5px dotted #64748b;
   border-radius: 0.25rem;
-  padding: 0.875rem;
+  padding: 0.75rem;
   font-size: 0.8125rem;
   background-color: #ffffff;
 }
@@ -1162,9 +1174,13 @@
 
 /* Part 2: Document Selection */
 .ustp-part2-box {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
   border: 1.5px dotted #64748b;
   border-radius: 0.25rem;
-  padding: 0.875rem;
+  padding: 0.75rem;
   font-size: 0.8125rem;
   background-color: #ffffff;
   display: flex;
@@ -1176,15 +1192,17 @@
 
 .ustp-part2-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
+  width: 100%;
+  min-width: 0;
   font-size: 0.75rem;
   padding-top: 0.25rem;
 }
 
 @media (min-width: 640px) {
   .ustp-part2-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 
@@ -1192,6 +1210,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  width: 100%;
   min-width: 0;
 }
 
@@ -1251,16 +1270,18 @@
 
 .ustp-cert-subgrid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.5rem;
-  padding-left: 0.75rem;
+  width: 100%;
+  min-width: 0;
+  padding-left: 0.5rem;
   padding-top: 0.25rem;
   font-size: 0.75rem;
 }
 
 @media (min-width: 640px) {
   .ustp-cert-subgrid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     padding-left: 1.5rem;
     font-size: 0.6875rem;
   }
@@ -1276,6 +1297,8 @@
   border-radius: 0.25rem;
   border: 1px solid transparent;
   transition: all 0.15s ease;
+  min-width: 0;
+  word-break: break-word;
 }
 
 .ustp-cert-subitem:hover {
@@ -1324,7 +1347,8 @@
 }
 
 .ustp-purpose-other-row .ustp-underline-field {
-  min-width: 12rem;
+  min-width: 0;
+  flex: 1 1 10rem;
 }
 
 .ustp-purpose-note {
@@ -1379,7 +1403,8 @@
 .ustp-signoff-underline {
   border-bottom: 1px solid #334155;
   flex: 1 1 0%;
-  min-width: 8.75rem;
+  width: 100%;
+  min-width: 0;
   height: 1rem;
 }
 
@@ -1456,7 +1481,8 @@
 }
 
 .ustp-cashier-line {
-  width: 12rem;
+  width: 100%;
+  max-width: 12rem;
   border-bottom: 1px solid #334155;
   height: 1.5rem;
 }
