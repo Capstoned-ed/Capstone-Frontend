@@ -204,11 +204,7 @@
 
 .line-chart-marker {
   cursor: pointer;
-  transition: transform 0.15s ease-in-out;
-}
-
-.line-chart-marker:hover {
-  transform: scale(1.3);
+  transition: r 0.15s ease-in-out, stroke-width 0.15s ease-in-out;
 }
 
 .analytics-table-card {

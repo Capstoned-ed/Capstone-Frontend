@@ -616,7 +616,7 @@ export default function StudentPaymentsPage() {
                   {/* Proof of Payment Details Banner (if attached) */}
                   {hasProofSubmitted && proof && (
                     <div className="payment-proof-banner">
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3 min-w-0">
                         {proof.receiptImage && (
                           <img
                             src={proof.receiptImage}
@@ -624,11 +624,11 @@ export default function StudentPaymentsPage() {
                             className="payment-proof-preview"
                           />
                         )}
-                        <div>
+                        <div className="min-w-0">
                           <h4 className="text-xs font-extrabold text-blue-950">
                             Cashier Receipt Photo Uploaded
                           </h4>
-                          <p className="text-[11px] text-slate-600 mt-0.5">
+                          <p className="text-[11px] text-slate-600 mt-0.5 break-words">
                             O.R. No: <strong className="font-mono text-slate-900">{proof.receiptReferenceNumber || 'Receipt'}</strong> • Amount: <strong>{proof.amount || assessedFee}</strong> • Mode: <strong>{proof.submissionType === 'PERSONAL' ? 'Window Submission' : 'Online Upload'}</strong>
                           </p>
                           <p className="text-[11px] text-blue-700 font-bold mt-0.5">
@@ -640,7 +640,7 @@ export default function StudentPaymentsPage() {
                       <button
                         type="button"
                         onClick={() => handleOpenUploadModal(req)}
-                        className="text-xs font-bold text-indigo-700 hover:text-indigo-950 underline cursor-pointer shrink-0"
+                        className="text-xs font-bold text-indigo-700 hover:text-indigo-950 underline cursor-pointer shrink-0 self-start sm:self-center"
                       >
                         Re-upload / Change Photo
                       </button>
@@ -698,7 +698,7 @@ export default function StudentPaymentsPage() {
                         <button
                           type="button"
                           onClick={() => handleOpenUploadModal(req, 'PERSONAL')}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+                          className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
                           title="Confirm face-to-face cashier payment (FTF)"
                         >
                           <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">

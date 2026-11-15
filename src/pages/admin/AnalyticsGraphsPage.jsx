@@ -424,18 +424,22 @@ export default function AnalyticsGraphsPage() {
           </svg>
         </div>
 
-        {/* Hover Tooltip */}
-        {hoveredItem && (
-          <div className="analytics-tooltip">
-            <span className="font-bold text-slate-900">{hoveredItem.label} Breakdown:</span>
-            <span>Transcript: <strong>{hoveredItem.transcript}</strong></span>
-            <span>Dismissal: <strong>{hoveredItem.dismissal}</strong></span>
-            <span>Evaluation: <strong>{hoveredItem.evaluation}</strong></span>
-            <span>CAR: <strong>{hoveredItem.car}</strong></span>
-            <span>Enrolled: <strong>{hoveredItem.enrolled}</strong></span>
-            <span className="text-[#0B0B36] font-extrabold">Total: {hoveredItem.totalLine}</span>
-          </div>
-        )}
+        {/* Hover Tooltip (always rendered to prevent layout shift on hover) */}
+        <div className="analytics-tooltip">
+          {hoveredItem ? (
+            <>
+              <span className="font-bold text-slate-900">{hoveredItem.label} Breakdown:</span>
+              <span>Transcript: <strong>{hoveredItem.transcript}</strong></span>
+              <span>Dismissal: <strong>{hoveredItem.dismissal}</strong></span>
+              <span>Evaluation: <strong>{hoveredItem.evaluation}</strong></span>
+              <span>CAR: <strong>{hoveredItem.car}</strong></span>
+              <span>Enrolled: <strong>{hoveredItem.enrolled}</strong></span>
+              <span className="text-[#0B0B36] font-extrabold">Total: {hoveredItem.totalLine}</span>
+            </>
+          ) : (
+            <span className="text-slate-400">Hover over a bar to view document breakdown.</span>
+          )}
+        </div>
       </div>
 
       {/* ------------------------------------------------------------------
@@ -493,17 +497,22 @@ export default function AnalyticsGraphsPage() {
 
               return (
                 <g key={`blue-dot-${d.label}`}>
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={isHovered ? 6.5 : 4.5}
-                    fill={colors.blueLine}
-                    stroke="#FFFFFF"
-                    strokeWidth={isHovered ? 2 : 1.5}
+                  <g
                     onMouseEnter={() => setLineHoveredItem(d)}
                     onMouseLeave={() => setLineHoveredItem(null)}
-                    className="line-chart-marker"
-                  />
+                    className="cursor-pointer"
+                  >
+                    <circle cx={cx} cy={cy} r={12} fill="transparent" />
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={isHovered ? 6.5 : 4.5}
+                      fill={colors.blueLine}
+                      stroke="#FFFFFF"
+                      strokeWidth={isHovered ? 2 : 1.5}
+                      className="line-chart-marker"
+                    />
+                  </g>
                   {/* X-axis label */}
                   <text
                     x={cx}
@@ -519,12 +528,16 @@ export default function AnalyticsGraphsPage() {
           </svg>
         </div>
 
-        {lineHoveredItem && (
-          <div className="analytics-tooltip">
-            <span className="font-bold text-slate-900">{lineHoveredItem.label}:</span>
-            <span className="text-[#0066FF] font-black">{lineHoveredItem.totalLine} Total Requests</span>
-          </div>
-        )}
+        <div className="analytics-tooltip">
+          {lineHoveredItem ? (
+            <>
+              <span className="font-bold text-slate-900">{lineHoveredItem.label}:</span>
+              <span className="text-[#0066FF] font-black">{lineHoveredItem.totalLine} Total Requests</span>
+            </>
+          ) : (
+            <span className="text-slate-400">Hover over a point to view total requests.</span>
+          )}
+        </div>
       </div>
 
       {/* ------------------------------------------------------------------
