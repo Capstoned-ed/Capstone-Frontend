@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import requestsApi, {
   updateStoredRequest,
   isValidRequest,
@@ -73,6 +73,7 @@ function getStatusBadge(status) {
 export default function StaffRequestsPage() {
   const toast = useToast();
   const { user } = useAuth();
+  const myAssignedRef = useRef(null);
 
   const [rawRequests, setRawRequests] = useState([]);
   const [users, setUsers] = useState([]);
@@ -875,6 +876,9 @@ export default function StaffRequestsPage() {
     toast.success(`Now processing ${selectedRequestsList.length} request(s)! Successfully assigned to you.`);
     setSelectedIds(new Set());
     setSelectionModeTable(null);
+    requestAnimationFrame(() => {
+      myAssignedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   const getStatusBadge = (status) => {
@@ -1049,10 +1053,10 @@ export default function StaffRequestsPage() {
       window.dispatchEvent(new Event('regquest_assignments_updated'));
       window.dispatchEvent(new Event('regquest_requests_updated'));
 
-      // 9. Immediately open the process modal for the claimed request
-      setSelectedRequest(updatedItem);
-      setNewStatus(formatStatusDisplay(currentStatus) || 'Pending');
-      setNotes('');
+      // 9. Scroll directly to My Assigned Requests
+      requestAnimationFrame(() => {
+        myAssignedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
     } catch (err) {
       console.warn('Error during claim processing:', err);
     }
@@ -1307,6 +1311,7 @@ export default function StaffRequestsPage() {
       {activeTab === 'active' ? (
         <>
           {/* Card 1: My Assigned Requests */}
+          <div ref={myAssignedRef} className="scroll-mt-6">
           <StaffRequestsTable
             title="My Assigned Requests"
             subtitle="Requests assigned to you that are ready for processing"
@@ -1335,6 +1340,7 @@ export default function StaffRequestsPage() {
             onToggleSelect={handleToggleSelect}
             onToggleSelectAll={() => handleToggleSelectAll(assignedRequests.slice(0, 10))}
           />
+          </div>
 
           {/* Card 2: Unassigned Requests Queue */}
           <StaffRequestsTable
