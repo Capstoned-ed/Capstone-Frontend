@@ -360,18 +360,32 @@ export default function ProcessRequestModal({
   }, [requestItem]);
 
   const handleVerifyClearance = async (statusToSet) => {
+    const previousStatus = clearanceStatus;
     setClearanceStatus(statusToSet);
     requestItem.clearance_status = statusToSet;
     const targetId = requestItem.id || requestItem.rawId;
 
     if (requestItem.clearance_id) {
       try {
+        const reviewStatus =
+          statusToSet === 'VERIFIED' ? 'APPROVED' : statusToSet === 'PENDING' ? 'PENDING' : 'REJECTED';
+        const reviewRemarks =
+          notes || (statusToSet === 'REJECTED' ? 'Clearance rejected by staff.' : '');
         await clearancesApi.review(requestItem.clearance_id, {
-          status: statusToSet === 'VERIFIED' ? 'APPROVED' : statusToSet === 'PENDING' ? 'PENDING' : 'REJECTED',
-          remarks: notes || '',
+          status: reviewStatus,
+          remarks: reviewRemarks,
         });
       } catch (err) {
-        console.warn('Backend review clearance notice:', err);
+        console.error('Backend review clearance failed:', err);
+        const errMsg =
+          err.response?.data?.detail ||
+          err.response?.data?.remarks?.[0] ||
+          err.response?.data?.status?.[0] ||
+          'Failed to update clearance verification on the server.';
+        toast.error(errMsg);
+        setClearanceStatus(previousStatus);
+        requestItem.clearance_status = previousStatus;
+        return;
       }
     }
 
