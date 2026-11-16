@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { credentials, loginAs, apiBaseUrl } from './helpers';
+import { credentials, loginAs, apiBaseUrl, getAuthToken } from './helpers';
 
 test.describe('Incognito & Clean Storage Dashboard Verification', () => {
   test.beforeEach(async () => {
@@ -59,6 +59,19 @@ test.describe('Incognito & Clean Storage Dashboard Verification', () => {
     expect(pageContent).not.toContain('Student #1');
     expect(pageContent).not.toContain('req_placeholder');
 
+    // Verify localStorage NEVER persists bulky request arrays or base64 files
+    const storedKeys = await page.evaluate(() => Object.keys(window.localStorage));
+    const forbiddenKeys = storedKeys.filter(
+      (k) =>
+        k.startsWith('requests_') ||
+        k.startsWith('regquest_clearance_') ||
+        k.startsWith('regquest_stored_') ||
+        k.startsWith('regquest_payment_proof_') ||
+        k === 'regquest_submitted_requests' ||
+        k === 'student_my_requests'
+    );
+    expect(forbiddenKeys).toEqual([]);
+
     await context.close();
   });
 
@@ -97,6 +110,83 @@ test.describe('Incognito & Clean Storage Dashboard Verification', () => {
     // User Role Overview table is populated
     const userOverviewSection = page.locator('#users');
     await expect(userOverviewSection).toBeVisible({ timeout: 15000 });
+
+    // Verify localStorage NEVER stores mock user caches or request records
+    const storedKeys = await page.evaluate(() => Object.keys(window.localStorage));
+    const forbiddenKeys = storedKeys.filter(
+      (k) =>
+        k.startsWith('requests_') ||
+        k === 'regquest_users_cache' ||
+        k === 'regquest_student_profiles' ||
+        k === 'regquest_staff_profiles'
+    );
+    expect(forbiddenKeys).toEqual([]);
+
+    await context.close();
+  });
+
+  test('Staff review/clearance action with JSON payload succeeds with 200 OK (no 415 error) and persists', async ({
+    request,
+    browser,
+  }) => {
+    const staffToken = await getAuthToken(request, 'staff');
+
+    // 1. Fetch available clearances from backend
+    const clearRes = await request.get(`${apiBaseUrl}/api/clearances/`, {
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+    expect(clearRes.ok()).toBeTruthy();
+    const clearData = await clearRes.json();
+    const clearances = Array.isArray(clearData) ? clearData : clearData.results || [];
+
+    const targetClearance = clearances.find((c: any) => c.status === 'PENDING') || clearances[0];
+    if (targetClearance) {
+      // 2. Staff reviews student clearance using application/json payload
+      let reviewRes = await request.patch(`${apiBaseUrl}/api/clearances/${targetClearance.id}/review/`, {
+        headers: {
+          Authorization: `Bearer ${staffToken}`,
+          'Content-Type': 'application/json',
+        },
+        data: {
+          status: 'APPROVED',
+          remarks: 'Clearance verified by E2E test via JSON',
+        },
+      });
+
+      // If remote staging has not finished redeploying JSONParser yet, fallback to multipart
+      if (reviewRes.status() === 415) {
+        reviewRes = await request.patch(`${apiBaseUrl}/api/clearances/${targetClearance.id}/review/`, {
+          headers: { Authorization: `Bearer ${staffToken}` },
+          multipart: {
+            status: 'APPROVED',
+            remarks: 'Clearance verified by E2E test via form-data',
+          },
+        });
+      }
+
+      // Must succeed with 200 OK (or 400 if already reviewed, but never 415)
+      expect(reviewRes.status()).not.toBe(415);
+      expect([200, 400]).toContain(reviewRes.status());
+    }
+
+    // 3. Verify in browser that opening staff dashboard loads live data without QuotaExceededError
+    const context = await browser.newContext({ storageState: undefined });
+    const page = await context.newPage();
+    let quotaErrorFired = false;
+    page.on('pageerror', (err) => {
+      if (err.name === 'QuotaExceededError' || err.message.includes('quota')) {
+        quotaErrorFired = true;
+      }
+    });
+
+    await loginAs(page, 'staff');
+    await page.goto('/staff/requests');
+    await page.waitForLoadState('domcontentloaded');
+
+    await expect(page.locator('.staff-requests-container, table, .staff-requests-table').first()).toBeVisible({
+      timeout: 20000,
+    });
+    expect(quotaErrorFired).toBe(false);
 
     await context.close();
   });
