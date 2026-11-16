@@ -2,8 +2,8 @@ import { Page, APIRequestContext, expect } from '@playwright/test';
 
 export const credentials = {
   admin: {
-    id: process.env.ADMIN_ID || process.env.E2E_ADMIN_ID || '24689',
-    password: process.env.ADMIN_PASSWORD || process.env.E2E_ADMIN_PASSWORD || '24689',
+    id: process.env.ADMIN_ID || process.env.E2E_ADMIN_ID || '2026100101',
+    password: process.env.ADMIN_PASSWORD || process.env.E2E_ADMIN_PASSWORD || '2026100101',
   },
   staff: {
     id: process.env.STAFF_ID || process.env.E2E_STAFF_ID || '6767',
