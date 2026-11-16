@@ -942,6 +942,31 @@ export const requestsApi = {
   },
 
   /**
+   * Restore/reopen an archived, completed, or cancelled request back to active queue.
+   */
+  restore: async (id, payload = {}, { throwOnError = true } = {}) => {
+    let resData = null;
+    try {
+      const response = await apiClient.post(`/api/requests/${id}/restore/`, payload);
+      resData = response.data;
+      return resData;
+    } catch (apiErr) {
+      console.warn('Backend restore notice:', apiErr);
+      if (throwOnError) {
+        throw apiErr;
+      }
+    }
+    return resData || { id, ...payload };
+  },
+
+  /**
+   * Reopen request (alias to restore).
+   */
+  reopen: async (id, payload = {}, { throwOnError = true } = {}) => {
+    return requestsApi.restore(id, payload, { throwOnError });
+  },
+
+  /**
    * Fetch all credential types.
    */
   getCredentialTypes: async () => {

@@ -248,41 +248,74 @@ test.describe('Full Lifecycle Credential Request & Staff Processing Audit', () =
       { timeout: 15000 }
     );
 
-    // Step 5: Transition to Processing and Ready for Release
+    // =========================================================================
+    // Part 4 Assertions (a & b):
+    // (a) Footer release buttons only appear when persisted status is READY_FOR_RELEASE
+    // (b) No contradictory badges appear and invalid options are filtered for Staff
+    // =========================================================================
+    // When in PAYMENT_VERIFIED ('For Processing'), release buttons MUST NOT appear
+    await expect(modal.locator('button:has-text("Claimed & Done")')).not.toBeVisible();
+    await expect(modal.locator('button:has-text("Print Claim Stub")')).not.toBeVisible();
+
     const overrideSelect = modal.locator('select.staff-select-input');
     await expect(overrideSelect).toBeVisible({ timeout: 10000 });
     await expect(overrideSelect).toBeEnabled({ timeout: 10000 });
 
-    // Select 'Processing' or 'For Processing'
-    const updateStatusBtn = modal.locator('button.staff-btn-update, button:has-text("Update Status")').first();
+    // Option 'Rejected' must NOT be offered to Staff once payment is verified
+    const selectOptions = await overrideSelect.locator('option').allTextContents();
+    expect(selectOptions).not.toContain('Rejected');
 
+    // Confirm mutually exclusive badges: 'Request Confirmed' visible, 'Request Rejected' NEVER visible
+    const assessmentBox = modal.locator('.staff-process-box').filter({ hasText: /Payment Assessment/i });
+    await expect(assessmentBox.locator('text=Request Confirmed').first()).toBeVisible();
+    await expect(assessmentBox.locator('text=Request Rejected')).not.toBeVisible();
+
+    // Step 5: Transition to Processing
+    const updateStatusBtn = modal.locator('button.staff-btn-update, button:has-text("Update Status")').first();
     await overrideSelect.selectOption({ label: 'Processing' });
     await expect(updateStatusBtn).toBeEnabled({ timeout: 10000 });
     await updateStatusBtn.click();
     await staffPage.waitForTimeout(1000);
 
-    // Select 'Releasing' / 'Ready for Release'
-    await overrideSelect.selectOption({ label: 'Releasing' });
-    await expect(updateStatusBtn).toBeEnabled({ timeout: 10000 });
-    await updateStatusBtn.click();
-    await staffPage.waitForTimeout(1000);
+    // In 'PROCESSING', footer release buttons MUST STILL NOT appear
+    await expect(modal.locator('button:has-text("Claimed & Done")')).not.toBeVisible();
+    await expect(modal.locator('button:has-text("Print Claim Stub")')).not.toBeVisible();
 
-    // Step 6: Mark Claimed / Released
-    const claimedBtn = modal.locator('button:has-text("Claimed & Done"), button:has-text("Claimed")').first();
-    if (await claimedBtn.isVisible()) {
-      await claimedBtn.click();
-    } else {
-      await overrideSelect.selectOption({ label: 'Claimed' });
-      await updateStatusBtn.click();
-    }
+    // Admin transitions request from PROCESSING -> READY_FOR_RELEASE ('Releasing')
+    await adminPage.goto('/registrar/requests');
+    await adminPage.waitForLoadState('domcontentloaded');
+    const adminActiveRow = adminPage.locator('tbody tr').filter({ hasText: trackingId1 }).first();
+    await expect(adminActiveRow).toBeVisible({ timeout: 20000 });
+    await adminActiveRow.locator('button.staff-btn-view, button:has-text("View"), button:has-text("Process")').first().click();
 
-    await staffPage.waitForTimeout(1000);
+    const adminModal = adminPage.locator('.staff-process-dialog, [role="dialog"]').first();
+    await expect(adminModal).toBeVisible({ timeout: 15000 });
+    const adminSelect = adminModal.locator('select.staff-select-input');
+    await adminSelect.selectOption({ label: 'Releasing' });
+    await adminModal.locator('button.staff-btn-update, button:has-text("Update Status")').first().click();
+    await adminPage.waitForTimeout(1000);
+    const adminCloseBtn = adminModal.locator('button:has-text("Close"), button[aria-label="Close"], .staff-process-close-btn').first();
+    if (await adminCloseBtn.isVisible()) await adminCloseBtn.click();
 
-    // Close modal if still visible
-    const closeBtn = modal.locator('button:has-text("Close"), button[aria-label="Close"], .modal-close-btn').first();
-    if (await closeBtn.isVisible()) {
-      await closeBtn.click();
-    }
+    // Reopen in staffPage: now persisted status is READY_FOR_RELEASE!
+    await staffPage.goto('/staff/requests');
+    await staffPage.waitForLoadState('domcontentloaded');
+    const readyStaffRow = staffPage.locator('tbody tr').filter({ hasText: trackingId1 }).first();
+    await expect(readyStaffRow).toBeVisible({ timeout: 20000 });
+    await readyStaffRow.locator('button.staff-btn-view, button:has-text("View")').first().click();
+
+    const readyModal = staffPage.locator('.staff-process-dialog, [role="dialog"]').first();
+    await expect(readyModal).toBeVisible({ timeout: 15000 });
+
+    // Assert (a): Footer release buttons ONLY appear when persisted status is READY_FOR_RELEASE
+    const claimedBtn = readyModal.locator('button:has-text("Claimed & Done")').first();
+    const claimStubBtn = readyModal.locator('button:has-text("Print Claim Stub")').first();
+    await expect(claimedBtn).toBeVisible({ timeout: 10000 });
+    await expect(claimStubBtn).toBeVisible({ timeout: 10000 });
+
+    // Step 6: Mark Claimed & Done (transitions to RELEASED)
+    await claimedBtn.click();
+    await staffPage.waitForTimeout(1500);
 
     await staffContext.close();
 
@@ -305,6 +338,48 @@ test.describe('Full Lifecycle Credential Request & Staff Processing Audit', () =
     // The request must be present with Claimed/Released status in database
     await expect(cleanPage.locator('body')).toContainText(trackingId1, { timeout: 25000 });
     await cleanContext.close();
+
+    // =========================================================================
+    // Phase 6: Admin Restores Request and Preserves Verified Clearance & Payment
+    // =========================================================================
+    await adminPage.goto('/registrar/requests');
+    await adminPage.waitForLoadState('domcontentloaded');
+
+    // History table contains trackingId1
+    const historyRow = adminPage.locator('tbody tr').filter({ hasText: trackingId1 }).first();
+    await expect(historyRow).toBeVisible({ timeout: 25000 });
+
+    const restoreBtn = historyRow.locator('button.staff-btn-restore, button:has-text("Restore")').first();
+    await expect(restoreBtn).toBeVisible({ timeout: 15000 });
+    await restoreBtn.click();
+
+    await expect(adminPage.locator('body, .Toastify__toast--success')).toContainText(
+      /restored to Active Queue/i,
+      { timeout: 15000 }
+    );
+
+    // Verify restored request preserves verified clearance & O.R. payment records
+    await adminPage.goto('/staff/requests');
+    await adminPage.waitForLoadState('domcontentloaded');
+    const restoredRow = adminPage.locator('tbody tr').filter({ hasText: trackingId1 }).first();
+    await expect(restoredRow).toBeVisible({ timeout: 25000 });
+    await restoredRow.locator('button.staff-btn-view, button:has-text("View")').first().click();
+
+    const restoredModal = adminPage.locator('.staff-process-dialog, [role="dialog"]').first();
+    await expect(restoredModal).toBeVisible({ timeout: 15000 });
+
+    // Clearance and payment records preserved!
+    await expect(restoredModal.locator('body')).toContainText('OR-AUDIT-9999');
+    await expect(restoredModal.locator('body')).toContainText(/Verified|APPROVED/i);
+
+    // Because payment was already verified, restored status is READY_FOR_RELEASE
+    await expect(restoredModal.locator('button:has-text("Claimed & Done")')).toBeVisible({ timeout: 10000 });
+    await expect(restoredModal.locator('button:has-text("Print Claim Stub")')).toBeVisible({ timeout: 10000 });
+
+    const closeRestoredBtn = restoredModal.locator('button:has-text("Close"), .staff-process-close-btn').first();
+    if (await closeRestoredBtn.isVisible()) await closeRestoredBtn.click();
+
+    await adminContext.close();
 
     // Verify ZERO unexpected 4xx/5xx network errors occurred throughout the entire lifecycle audit!
     const criticalErrors = networkErrors.filter((e) => e.includes('HTTP 400') || e.includes('HTTP 500'));

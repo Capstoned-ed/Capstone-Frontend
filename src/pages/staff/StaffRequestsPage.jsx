@@ -596,26 +596,47 @@ export default function StaffRequestsPage() {
     toast.success(`Request ${item.id || reqId} marked as Done and moved to Request History.`);
   };
 
-  const handleRestoreRequest = (item) => {
+  const handleRestoreRequest = async (item) => {
     if (!item) return;
+    if (String(user?.role || '').toUpperCase() !== 'ADMIN') {
+      toast.error('Only administrators can restore or reopen requests.');
+      return;
+    }
     const reqId = item.id || item.rawId || item.tracking_number;
-    setRequestArchived(reqId, false, user, { fallbackItem: item });
-    setArchivedMap(getArchivedRequestsMap());
+    try {
+      const restored = await requestsApi.restore(item.id || item.rawId);
+      setRequestArchived(reqId, false, user, { fallbackItem: item });
+      setArchivedMap(getArchivedRequestsMap());
 
-    logProcessedAction({
-      actor: user?.username,
-      actorName: user?.full_name || user?.username,
-      actorId: user?.id,
-      actorRole: user?.role || 'staff',
-      targetName: item.student_name,
-      targetId: item.student_id || reqId,
-      trackingNumber: item.tracking_number || reqId,
-      documentType: item.document_type,
-      action: 'Restored request from History to Active Queue',
-      status: item.status || 'Pending',
-    });
+      updateStoredRequest(reqId, {
+        status: restored?.status || 'Pending',
+        rawStatus: restored?.status || 'PENDING',
+        is_archived: false,
+        in_process_queue: true,
+      });
 
-    toast.success(`Request ${item.id} restored to Active Queue.`);
+      logProcessedAction({
+        actor: user?.username,
+        actorName: user?.full_name || user?.username,
+        actorId: user?.id,
+        actorRole: user?.role || 'admin',
+        targetName: item.student_name,
+        targetId: item.student_id || reqId,
+        trackingNumber: item.tracking_number || reqId,
+        documentType: item.document_type,
+        action: `Restored request from History to Active Queue (${restored?.status || 'Active'})`,
+        status: restored?.status || 'Pending',
+      });
+
+      if (typeof fetchAll === 'function') {
+        await fetchAll();
+      }
+      toast.success(`Request ${item.tracking_number || reqId} restored to Active Queue (${formatStatusDisplay(restored?.status)}).`);
+    } catch (err) {
+      console.error('Failed to restore request:', err);
+      const msg = err.response?.data?.detail || 'Failed to restore request.';
+      toast.error(msg);
+    }
   };
 
   const selectedRequestsList = useMemo(() => {
@@ -1416,7 +1437,7 @@ export default function StaffRequestsPage() {
           getStatusBadge={getStatusBadge}
           onOpenProcess={handleOpenProcess}
           actionType="history"
-          onRestore={handleRestoreRequest}
+          onRestore={String(user?.role || '').toUpperCase() === 'ADMIN' ? handleRestoreRequest : null}
           showAssignedStaff={true}
           emptyMessage="No claimed document requests in history yet."
           enableSelection={true}

@@ -193,15 +193,22 @@ export default function ProcessRequestModal({
 
   const canConfirmPayment = Boolean(hasOrNumber || hasReceiptUploaded);
 
+  const userRole = String(user?.role || '').trim().toUpperCase();
+  const isAdmin = userRole === 'ADMIN';
+
+  const persistedBackendStatus = normalizeToBackendStatus(requestItem?.status);
+  const isPersistedReadyForRelease = persistedBackendStatus === REQUEST_STATUS.READY_FOR_RELEASE;
+  const isPersistedReleased = persistedBackendStatus === REQUEST_STATUS.RELEASED;
+  const isPersistedRejected = persistedBackendStatus === REQUEST_STATUS.REJECTED;
+  const isPersistedCancelled = persistedBackendStatus === REQUEST_STATUS.CANCELLED;
+  const isPersistedTerminal = isPersistedReleased || isPersistedRejected || isPersistedCancelled;
+
   const isAlreadyPastPayment = [
-    'FOR PROCESSING',
-    'FOR_PROCESSING',
-    'PROCESSING',
-    'RELEASING',
-    'READY_FOR_RELEASE',
-    'CLAIMED',
-    'RELEASED',
-  ].includes(String(localStatus || requestItem?.status || '').toUpperCase());
+    REQUEST_STATUS.PAYMENT_VERIFIED,
+    REQUEST_STATUS.PROCESSING,
+    REQUEST_STATUS.READY_FOR_RELEASE,
+    REQUEST_STATUS.RELEASED,
+  ].includes(persistedBackendStatus);
 
   const isClearanceVerified = Boolean(
     clearanceStatus === 'VERIFIED' ||
@@ -217,7 +224,11 @@ export default function ProcessRequestModal({
     isAlreadyPastPayment
   );
 
-  const canOverrideStatus = Boolean(isClearanceVerified && isPaymentVerified);
+  const canOverrideStatus = Boolean(
+    isClearanceVerified &&
+    isPaymentVerified &&
+    (!isPersistedTerminal || isAdmin)
+  );
 
   const isStatusChanged = Boolean(
     localStatus &&
@@ -244,7 +255,9 @@ export default function ProcessRequestModal({
 
   const handleManualStatusChange = (val) => {
     if (!canOverrideStatus) {
-      if (!isClearanceVerified) {
+      if (isPersistedTerminal && !isAdmin) {
+        toast.warning('Cannot change status: This request is already completed or closed.');
+      } else if (!isClearanceVerified) {
         toast.warning('Cannot change status: Please verify student clearance first.');
       } else {
         toast.warning('Cannot change status: Payment must be verified first.');
@@ -272,20 +285,79 @@ export default function ProcessRequestModal({
   }, [requestItem, dateOfRelease]);
 
   const statusOptions = useMemo(() => {
-    const base = [
-      'Pending',
-      'Pending Payment',
-      'For Processing',
-      'Processing',
-      'Releasing',
-      'Claimed',
-      'On Hold',
-      'Rejected',
-    ];
-    const currentVal = normalizeStatus(localStatus || newStatus);
-    if (currentVal && !base.includes(currentVal)) base.push(currentVal);
-    return base;
-  }, [localStatus, newStatus]);
+    const role = String(user?.role || '').trim().toUpperCase();
+    const currentPersisted = normalizeToBackendStatus(requestItem?.status);
+    const currentDisplay = formatStatusDisplay(requestItem?.status, { useReleasing: true });
+
+    let allowed = [currentDisplay];
+
+    if (role === 'ADMIN') {
+      allowed = [
+        'Pending',
+        'Pending Payment',
+        'For Processing',
+        'Processing',
+        'Releasing',
+        'Claimed',
+        'On Hold',
+        'Rejected',
+      ];
+    } else if (role === 'REGISTRAR') {
+      switch (currentPersisted) {
+        case REQUEST_STATUS.PENDING:
+          allowed = ['Pending', 'Pending Payment', 'On Hold', 'Rejected'];
+          break;
+        case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
+          allowed = ['On Hold', 'Pending Payment', 'Rejected'];
+          break;
+        case REQUEST_STATUS.PAYMENT_PENDING:
+          allowed = ['Pending Payment', 'For Processing', 'Rejected'];
+          break;
+        case REQUEST_STATUS.PAYMENT_VERIFIED:
+          allowed = ['For Processing', 'Processing', 'Rejected'];
+          break;
+        case REQUEST_STATUS.PROCESSING:
+          allowed = ['Processing', 'Releasing', 'Rejected'];
+          break;
+        case REQUEST_STATUS.READY_FOR_RELEASE:
+          allowed = ['Releasing', 'Claimed', 'Rejected'];
+          break;
+        default:
+          allowed = [currentDisplay];
+      }
+    } else {
+      // Role: STAFF
+      switch (currentPersisted) {
+        case REQUEST_STATUS.PENDING:
+          allowed = ['Pending', 'Pending Payment', 'On Hold', 'Rejected'];
+          break;
+        case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
+          allowed = ['On Hold', 'Pending Payment', 'Rejected'];
+          break;
+        case REQUEST_STATUS.PAYMENT_PENDING:
+          allowed = ['Pending Payment', 'For Processing', 'Rejected'];
+          break;
+        case REQUEST_STATUS.PAYMENT_VERIFIED:
+          // Staff CANNOT reject once payment is verified!
+          allowed = ['For Processing', 'Processing'];
+          break;
+        case REQUEST_STATUS.PROCESSING:
+          // Staff cannot transition to Releasing or Rejected
+          allowed = ['Processing'];
+          break;
+        case REQUEST_STATUS.READY_FOR_RELEASE:
+          allowed = ['Releasing', 'Claimed'];
+          break;
+        default:
+          allowed = [currentDisplay];
+      }
+    }
+
+    if (!allowed.includes(currentDisplay)) {
+      allowed.unshift(currentDisplay);
+    }
+    return Array.from(new Set(allowed));
+  }, [requestItem?.status, user?.role]);
 
   useEffect(() => {
     let ignore = false;
@@ -938,58 +1010,45 @@ export default function ProcessRequestModal({
       if (isBackendId) {
         const backendStatus = BACKEND_STATUS_MAP[localStatus] || localStatus;
         const transitionRemarks = preserveDocTagInRemarks(requestItem, notes || requestItem.remarks || '');
+        let updatedBackend = null;
         try {
-          await requestsApi.transition(
-            targetRawId,
-            {
-              status: backendStatus,
-              remarks: transitionRemarks,
-            },
-            { throwOnError: true }
-          );
+          if (isPersistedTerminal && isAdmin) {
+            updatedBackend = await requestsApi.restore(
+              targetRawId,
+              { remarks: transitionRemarks },
+              { throwOnError: true }
+            );
+          } else {
+            updatedBackend = await requestsApi.transition(
+              targetRawId,
+              {
+                status: backendStatus,
+                remarks: transitionRemarks,
+              },
+              { throwOnError: true }
+            );
+          }
         } catch (apiErr) {
-          // If backend rejects jumping across intermediate workflow steps, walk the pipeline up to backendStatus
-          const pipeline = [
-            'REQUIREMENTS_VERIFICATION',
-            'PAYMENT_PENDING',
-            'PAYMENT_VERIFIED',
-            'PROCESSING',
-            'READY_FOR_RELEASE',
-            'RELEASED',
-          ];
-          const targetIdx = pipeline.indexOf(backendStatus);
-          let walked = false;
-          if (targetIdx !== -1) {
-            for (let i = 0; i <= targetIdx; i++) {
-              try {
-                await requestsApi.transition(
-                  targetRawId,
-                  {
-                    status: pipeline[i],
-                    remarks: transitionRemarks,
-                  },
-                  { throwOnError: true }
-                );
-                walked = true;
-              } catch {
-                // Step already passed or not applicable from current backend state
-              }
-            }
-          }
-          if (!walked) {
-            console.error('Backend status transition failed:', apiErr);
-            const errMsg =
-              apiErr.response?.data?.detail ||
-              (typeof apiErr.response?.data === 'string' ? apiErr.response.data : null) ||
-              apiErr.response?.data?.non_field_errors?.[0] ||
-              apiErr.response?.data?.status?.[0] ||
-              (apiErr.response?.data ? JSON.stringify(apiErr.response.data) : null) ||
-              apiErr.message ||
-              'Failed to update status on server.';
-            toast.error(errMsg);
-            setLoading(false);
-            return;
-          }
+          console.error('Backend status transition failed:', apiErr);
+          const errMsg =
+            apiErr.response?.data?.detail ||
+            (typeof apiErr.response?.data === 'string' ? apiErr.response.data : null) ||
+            apiErr.response?.data?.non_field_errors?.[0] ||
+            apiErr.response?.data?.status?.[0] ||
+            (apiErr.response?.data ? JSON.stringify(apiErr.response.data) : null) ||
+            apiErr.message ||
+            'Failed to update status on server.';
+          toast.error(errMsg);
+          // Revert uncommitted selection back to persisted backend status!
+          setLocalStatus(formatStatusDisplay(requestItem?.status, { useReleasing: true }));
+          setNewStatus(formatStatusDisplay(requestItem?.status, { useReleasing: true }));
+          setLoading(false);
+          return;
+        }
+
+        if (updatedBackend?.status) {
+          requestItem.status = updatedBackend.status;
+          requestItem.remarks = updatedBackend.remarks || transitionRemarks;
         }
       }
 
@@ -1091,10 +1150,17 @@ export default function ProcessRequestModal({
     try {
       setLoading(true);
       if (targetId && !String(targetId).startsWith('fallback_')) {
-        await requestsApi.transition(targetId, {
-          status: 'RELEASED',
-          remarks: preserveDocTagInRemarks(requestItem, notes || 'Document claimed by student at registrar window.'),
-        }).catch(() => {});
+        await requestsApi.transition(
+          targetId,
+          {
+            status: 'RELEASED',
+            remarks: preserveDocTagInRemarks(
+              requestItem,
+              notes || 'Document claimed by student at registrar window.'
+            ),
+          },
+          { throwOnError: true }
+        );
       }
 
       const claimPatch = {
@@ -1103,6 +1169,7 @@ export default function ProcessRequestModal({
         batch_status: 'Claimed',
         remarks: notes || requestItem.remarks || 'Document claimed by student.',
         is_archived: true,
+        in_process_queue: false,
         archived_at: new Date().toISOString(),
         archived_by: user?.full_name || user?.username || 'Staff',
       };
@@ -1150,6 +1217,39 @@ export default function ProcessRequestModal({
     }
   };
 
+  const handleAdminRestore = async () => {
+    const targetId = requestItem.rawId || requestItem.id;
+    const trackingCode = requestItem.tracking_number || requestItem.trackingId || targetId;
+    try {
+      setLoading(true);
+      const restored = await requestsApi.restore(targetId, {
+        remarks: notes || `Restored to active queue by Admin ${user?.username || ''}`,
+      });
+      const restoredStatus = restored?.status || 'Pending';
+      const patch = {
+        ...requestItem,
+        status: restoredStatus,
+        rawStatus: restoredStatus,
+        is_archived: false,
+        in_process_queue: true,
+      };
+      setLocalStatus(formatStatusDisplay(restoredStatus, { useReleasing: true }));
+      setNewStatus(formatStatusDisplay(restoredStatus, { useReleasing: true }));
+      requestItem.status = restoredStatus;
+      requestItem.in_process_queue = true;
+      if (onUpdated) {
+        onUpdated(patch);
+      }
+      toast.success(`Request ${trackingCode} restored to Active Queue (${formatStatusDisplay(restoredStatus)})!`);
+    } catch (err) {
+      console.error('Failed to restore request:', err);
+      const msg = err.response?.data?.detail || 'Failed to restore request.';
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getStatusBadge = (status) => {
     const s = String(status || '').toLowerCase().replace(/[_ ]/g, '-');
     const map = {
@@ -1158,16 +1258,22 @@ export default function ProcessRequestModal({
       'pending-payment': 'bg-amber-100 text-amber-900 border-amber-300',
       'payment-pending': 'bg-amber-100 text-amber-900 border-amber-300',
       'for-processing': 'bg-blue-100 text-blue-900 border-blue-200',
+      'payment-verified': 'bg-blue-100 text-blue-900 border-blue-200',
       'processing': 'bg-sky-100 text-sky-900 border-sky-200',
       'releasing': 'bg-violet-100 text-violet-900 border-violet-200',
+      'ready-for-release': 'bg-violet-100 text-violet-900 border-violet-200',
       'for-release': 'bg-violet-100 text-violet-900 border-violet-200',
       'claimed': 'bg-emerald-100 text-emerald-900 border-emerald-200',
+      'released': 'bg-emerald-100 text-emerald-900 border-emerald-200',
       'on-hold': 'bg-orange-100 text-orange-900 border-orange-200',
+      'requirements-verification': 'bg-orange-100 text-orange-900 border-orange-200',
+      'rejected': 'bg-rose-100 text-rose-800 border-rose-300',
+      'cancelled': 'bg-slate-100 text-slate-700 border-slate-200',
     };
     const cls = map[s] || 'bg-slate-100 text-slate-700 border-slate-200';
     return (
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${cls}`}>
-        {status || 'Pending'}
+        {formatStatusDisplay(status, { useReleasing: true })}
       </span>
     );
   };
@@ -1223,7 +1329,7 @@ export default function ProcessRequestModal({
                   <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
                     1. Request Summary
                   </span>
-                  <div>{getStatusBadge(currentDisplayStatus)}</div>
+                  <div>{getStatusBadge(requestItem?.status)}</div>
                 </div>
 
                 <div className="staff-process-grid-2">
@@ -1534,7 +1640,14 @@ export default function ProcessRequestModal({
 
                 <div className="mt-3.5 pt-3 border-t border-indigo-100 flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    {isOrderConfirmed ? (
+                    {isPersistedRejected ? (
+                      <span className="text-xs font-semibold text-rose-700 flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        <span>Request Rejected</span>
+                      </span>
+                    ) : isOrderConfirmed ? (
                       <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
                         <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -1562,7 +1675,7 @@ export default function ProcessRequestModal({
                       </svg>
                       <span>Preview Form</span>
                     </button>
-                    {localStatus === 'Rejected' || requestItem?.status === 'Rejected' ? (
+                    {isPersistedRejected ? (
                       <div className="px-3.5 py-2 bg-rose-50 border border-rose-300 text-rose-800 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs">
                         <svg className="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1580,6 +1693,7 @@ export default function ProcessRequestModal({
                       <>
                         <button
                           type="button"
+                          disabled={isPersistedTerminal}
                           onClick={handleRejectRequest}
                           className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
                           title="Reject this request"
@@ -1591,10 +1705,10 @@ export default function ProcessRequestModal({
                         </button>
                         <button
                           type="button"
-                          disabled={!isClearanceVerified}
+                          disabled={!isClearanceVerified || isPersistedTerminal}
                           onClick={handleConfirmAssessmentAndIssuePayment}
                           className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-                            isClearanceVerified
+                            isClearanceVerified && !isPersistedTerminal
                               ? 'bg-indigo-900 hover:bg-indigo-950 text-white shadow-md cursor-pointer'
                               : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
                           }`}
@@ -1885,24 +1999,34 @@ export default function ProcessRequestModal({
                   <span>Close</span>
                 </button>
 
-                {/* If already Claimed, offer Done */}
-                {(localStatus === 'Claimed' || requestItem?.status === 'Claimed') && (
-                  <button
-                    type="button"
-                    onClick={handleMoveToHistory}
-                    disabled={loading}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
-                    title="Document claimed: Mark as Done and move to Request History"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {/* If already Claimed / Released, show status */}
+                {isPersistedReleased && (
+                  <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                     </svg>
-                    <span>Done</span>
+                    <span>Document Claimed & Released</span>
+                  </span>
+                )}
+
+                {/* Admin Restore Button for Terminal State Requests */}
+                {isPersistedTerminal && isAdmin && (
+                  <button
+                    type="button"
+                    onClick={handleAdminRestore}
+                    disabled={loading}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
+                    title="Restore request back to active processing queue"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>Restore Request</span>
                   </button>
                 )}
 
-                {/* If Releasing / For release, offer quick Mark Claimed & Done */}
-                {(localStatus === 'Releasing' || localStatus === 'For release' || requestItem?.status === 'Releasing' || requestItem?.status === 'For release') && (
+                {/* Claimed & Done: ONLY when persisted backend status is READY_FOR_RELEASE and payment verified */}
+                {isPersistedReadyForRelease && isPaymentVerified && (
                   <button
                     type="button"
                     onClick={handleClaimAndMoveToHistory}
@@ -1917,8 +2041,8 @@ export default function ProcessRequestModal({
                   </button>
                 )}
 
-                {/* Print Claim Stub button (available once payment is confirmed / for processing / releasing / claimed) */}
-                {(paymentStatus === 'VERIFIED' || isOrderConfirmed || localStatus === 'For Processing' || localStatus === 'Releasing' || localStatus === 'Claimed') && (
+                {/* Print Claim Stub: ONLY when persisted backend status is READY_FOR_RELEASE (and payment verified) OR already released */}
+                {(isPersistedReadyForRelease || isPersistedReleased) && isPaymentVerified && (
                   <button
                     type="button"
                     onClick={() => setShowClaimStubModal(true)}
@@ -1935,14 +2059,16 @@ export default function ProcessRequestModal({
 
               <button
                 type="submit"
-                disabled={!canSubmitUpdate}
+                disabled={!canSubmitUpdate || (isPersistedTerminal && !isAdmin)}
                 className={`staff-btn-update ${
-                  !canSubmitUpdate
+                  !canSubmitUpdate || (isPersistedTerminal && !isAdmin)
                     ? 'opacity-40 cursor-not-allowed bg-slate-400 hover:bg-slate-400 text-white'
                     : ''
                 }`}
                 title={
-                  !canOverrideStatus
+                  isPersistedTerminal && !isAdmin
+                    ? 'This request is completed or closed. Further edits are disabled.'
+                    : !canOverrideStatus
                     ? 'Manual status override is locked: Verify clearance and payment first'
                     : !isStatusChanged
                     ? 'Status has not been changed. Select a different status to update.'
