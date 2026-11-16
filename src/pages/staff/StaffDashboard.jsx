@@ -133,6 +133,16 @@ export default function StaffDashboard() {
         });
       }
 
+      const clearanceMap = new Map();
+      if (Array.isArray(clearancesRes)) {
+        clearancesRes.forEach((c) => {
+          if (c.user) clearanceMap.set(c.user, c);
+          if (c.user?.id) clearanceMap.set(c.user.id, c);
+          if (c.user?.username) clearanceMap.set(c.user.username, c);
+          if (c.id) clearanceMap.set(c.id, c);
+        });
+      }
+
       let profiles = {};
       try {
         profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
@@ -198,6 +208,19 @@ export default function StaffDashboard() {
             claimedMap[String(trackingNo)] ||
             null;
 
+          const clrObj =
+            clearanceMap.get(r.user) ||
+            clearanceMap.get(r.student_id) ||
+            clearanceMap.get(userObj?.id) ||
+            clearanceMap.get(userObj?.username) ||
+            null;
+          const rawPurpose = r.purpose || r.remarks || '';
+          const cleanPurpose = String(rawPurpose)
+            .replace(/\[.*?\]/g, '')
+            .replace(/\|+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
           return {
             id: trackingNo,
             rawId: rawIdVal,
@@ -212,9 +235,9 @@ export default function StaffDashboard() {
             request_date: reqDate,
             release_date: relDate,
             notes: r.notes || r.remarks || '',
-            clearance_preview: r.clearance_preview || null,
-            clearance_id: r.clearance_id || null,
-            clearance_status: r.clearance_status || (r.clearance_preview ? 'PENDING' : null),
+            clearance_preview: r.clearance_preview || clrObj?.file || null,
+            clearance_id: r.clearance_id || clrObj?.id || null,
+            clearance_status: r.clearance_status || clrObj?.status || (r.clearance_preview || clrObj ? 'PENDING' : null),
             payment_status: r.payment_status || null,
             payment_proof: r.payment_proof || null,
             or_number: r.or_number || '',
@@ -223,7 +246,7 @@ export default function StaffDashboard() {
             confirmed_for_payment: r.confirmed_for_payment ?? false,
             assessed_amount: r.assessed_amount || null,
             amount: r.amount || r.assessed_amount || '',
-            purpose: r.purpose || r.remarks || '',
+            purpose: cleanPurpose || rawPurpose,
             remarks: r.remarks || '',
             user: r.user,
             assigned_staff: r.assigned_staff || (resolvedClaimedStaff && resolvedClaimedStaff !== 'claimed' ? resolvedClaimedStaff : null),

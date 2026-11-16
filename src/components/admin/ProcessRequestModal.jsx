@@ -16,6 +16,16 @@ import {
 import PrintRequestFormModal from '../student/PrintRequestFormModal';
 import ClaimStubModal from '../common/ClaimStubModal';
 
+function formatCleanPurpose(text) {
+  if (!text) return 'For Personal File / Employment';
+  const cleaned = String(text)
+    .replace(/\[.*?\]/g, '')
+    .replace(/\|+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || 'For Personal File / Employment';
+}
+
 export default function ProcessRequestModal({
   isOpen,
   onClose,
@@ -62,10 +72,19 @@ export default function ProcessRequestModal({
   const [clearanceStatus, setClearanceStatus] = useState(() =>
     resolveInitialClearanceStatus(requestItem)
   );
+  const [reviewingClearance, setReviewingClearance] = useState(false);
 
   // Payment Assessment Fields (matching staff modal)
   const defaultStaffName = user?.full_name || (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : user?.username) || 'Admin';
-  const [assessedAmount, setAssessedAmount] = useState('₱100.00');
+  const [assessedAmount, setAssessedAmount] = useState(() => {
+    const baseAmt =
+      requestItem?.assessed_amount ||
+      requestItem?.amount ||
+      requestItem?.price ||
+      100;
+    const cleanAmt = String(baseAmt).replace(/[^0-9.]/g, '');
+    return cleanAmt || '100.00';
+  });
   const [dateOfRelease, setDateOfRelease] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 5);
@@ -200,6 +219,18 @@ export default function ProcessRequestModal({
 
   const canOverrideStatus = Boolean(isClearanceVerified && isPaymentVerified);
 
+  const isStatusChanged = Boolean(
+    localStatus &&
+    requestItem?.status &&
+    localStatus.toLowerCase() !== requestItem.status.toLowerCase()
+  );
+
+  const canSubmitUpdate = Boolean(
+    canOverrideStatus &&
+    isStatusChanged &&
+    !loading
+  );
+
   const normalizeStatus = (val) => {
     if (val === 'For Payment' || val === 'FOR PAYMENT' || val === 'FOR_PAYMENT') return 'Pending Payment';
     return val;
@@ -267,14 +298,9 @@ export default function ProcessRequestModal({
     setLocalStatus(requestItem?.status || 'Pending');
     setNewStatus(requestItem?.status || 'Pending');
 
-    const baseAmt = requestItem.assessed_amount || requestItem.amount || requestItem.price || '₱100.00';
-    setAssessedAmount(
-      typeof baseAmt === 'number'
-        ? `₱${baseAmt.toFixed(2)}`
-        : String(baseAmt).startsWith('₱') || String(baseAmt).startsWith('P')
-        ? String(baseAmt)
-        : `₱${baseAmt}`
-    );
+    const baseAmt = requestItem.assessed_amount || requestItem.amount || requestItem.price || 100;
+    const cleanAmt = String(baseAmt).replace(/[^0-9.]/g, '');
+    setAssessedAmount(cleanAmt || '100.00');
 
     if (requestItem.date_of_release || requestItem.release_date) {
       setDateOfRelease(requestItem.date_of_release || requestItem.release_date);
@@ -361,17 +387,37 @@ export default function ProcessRequestModal({
 
   const handleVerifyClearance = async (statusToSet) => {
     const previousStatus = clearanceStatus;
+    setReviewingClearance(true);
     setClearanceStatus(statusToSet);
     requestItem.clearance_status = statusToSet;
     const targetId = requestItem.id || requestItem.rawId;
 
-    if (requestItem.clearance_id) {
+    let clrId = requestItem.clearance_id;
+    if (!clrId) {
+      try {
+        const clrList = await clearancesApi.list();
+        const found = clrList.find(
+          (c) =>
+            c.user === requestItem.user ||
+            c.user?.id === requestItem.user ||
+            c.user?.username === requestItem.student_id
+        );
+        if (found) {
+          clrId = found.id;
+          requestItem.clearance_id = found.id;
+        }
+      } catch (e) {
+        console.warn('Could not list clearances to find clearance_id:', e);
+      }
+    }
+
+    if (clrId) {
       try {
         const reviewStatus =
           statusToSet === 'VERIFIED' ? 'APPROVED' : statusToSet === 'PENDING' ? 'PENDING' : 'REJECTED';
         const reviewRemarks =
-          notes || (statusToSet === 'REJECTED' ? 'Clearance rejected by staff.' : '');
-        await clearancesApi.review(requestItem.clearance_id, {
+          notes.trim() || (statusToSet === 'REJECTED' ? 'Clearance rejected by staff.' : '');
+        await clearancesApi.review(clrId, {
           status: reviewStatus,
           remarks: reviewRemarks,
         });
@@ -381,13 +427,19 @@ export default function ProcessRequestModal({
           err.response?.data?.detail ||
           err.response?.data?.remarks?.[0] ||
           err.response?.data?.status?.[0] ||
+          (typeof err.response?.data === 'string' ? err.response.data : null) ||
+          (err.response?.data ? JSON.stringify(err.response.data) : null) ||
+          err.message ||
           'Failed to update clearance verification on the server.';
         toast.error(errMsg);
         setClearanceStatus(previousStatus);
         requestItem.clearance_status = previousStatus;
+        setReviewingClearance(false);
         return;
       }
     }
+
+    setReviewingClearance(false);
 
     const nowTime = Date.now();
     const nowIso = new Date(nowTime).toISOString();
@@ -437,7 +489,8 @@ export default function ProcessRequestModal({
     const targetId = requestItem.id || requestItem.rawId;
     const trackingCode = requestItem.tracking_number || requestItem.trackingId || requestItem.id;
     const docName = requestItem.document_type || 'Requested Credential';
-    const cleanAmount = assessedAmount.trim() || '₱100.00';
+    const rawNum = parseFloat(String(assessedAmount).replace(/[^0-9.]/g, '')) || 100.0;
+    const cleanAmount = rawNum.toFixed(2);
 
     const nowTime = Date.now();
     const nowIso = new Date(nowTime).toISOString();
@@ -482,7 +535,7 @@ export default function ProcessRequestModal({
     if (isBackendId) {
       const opRemarks = preserveDocTagInRemarks(
         requestItem,
-        `Clearance verified by ${verifiedByName}. Assessed amount: ${cleanAmount}. Date of release: ${dateOfRelease}.`
+        `Clearance verified by ${verifiedByName}. Assessed amount: ₱${cleanAmount}. Date of release: ${dateOfRelease}.`
       );
       try {
         await requestsApi.transition(
@@ -546,7 +599,7 @@ export default function ProcessRequestModal({
       });
     }
 
-    toast.success(`Request confirmed! Status updated to "Pending Payment". Student notified to pay ${cleanAmount}.`);
+    toast.success(`Request confirmed! Status updated to "Pending Payment". Student notified to pay ₱${cleanAmount}.`);
   };
 
   const handleRejectRequest = async () => {
@@ -865,20 +918,21 @@ export default function ProcessRequestModal({
 
   const handleUpdate = async (e) => {
     e.preventDefault();
+    if (!canSubmitUpdate) {
+      if (!isStatusChanged) {
+        toast.info(`Status is already set to ${localStatus || 'this status'}.`);
+      } else if (!isClearanceVerified) {
+        toast.warning('Manual status override is locked: Please verify student clearance first.');
+      } else if (!isPaymentVerified) {
+        toast.warning('Manual status override is locked: Payment must be verified first.');
+      }
+      return;
+    }
+
     setLoading(true);
 
     try {
       const targetId = requestItem.rawId || requestItem.id;
-      if (!canOverrideStatus && localStatus !== (requestItem.status || 'Pending')) {
-        toast.warning(
-          !isClearanceVerified
-            ? 'Manual status override is locked: Please verify student clearance first.'
-            : 'Manual status override is locked: Payment must be verified first.'
-        );
-        setLoading(false);
-        return;
-      }
-
       const targetRawId = requestItem.rawId || requestItem.id;
       const isBackendId = Boolean(targetRawId) && !String(targetRawId).startsWith('fallback_');
       if (isBackendId) {
@@ -904,6 +958,7 @@ export default function ProcessRequestModal({
             'RELEASED',
           ];
           const targetIdx = pipeline.indexOf(backendStatus);
+          let walked = false;
           if (targetIdx !== -1) {
             for (let i = 0; i <= targetIdx; i++) {
               try {
@@ -915,12 +970,25 @@ export default function ProcessRequestModal({
                   },
                   { throwOnError: true }
                 );
+                walked = true;
               } catch {
                 // Step already passed or not applicable from current backend state
               }
             }
-          } else {
-            console.warn('Backend transition notice:', apiErr);
+          }
+          if (!walked) {
+            console.error('Backend status transition failed:', apiErr);
+            const errMsg =
+              apiErr.response?.data?.detail ||
+              (typeof apiErr.response?.data === 'string' ? apiErr.response.data : null) ||
+              apiErr.response?.data?.non_field_errors?.[0] ||
+              apiErr.response?.data?.status?.[0] ||
+              (apiErr.response?.data ? JSON.stringify(apiErr.response.data) : null) ||
+              apiErr.message ||
+              'Failed to update status on server.';
+            toast.error(errMsg);
+            setLoading(false);
+            return;
           }
         }
       }
@@ -1187,7 +1255,7 @@ export default function ProcessRequestModal({
                 <div className="mt-3">
                   <span className="staff-field-label">Purpose</span>
                   <div className="staff-field-box text-xs">
-                    {requestItem.purpose || requestItem.remarks || 'For Personal File / Employment'}
+                    {formatCleanPurpose(requestItem.purpose || requestItem.remarks)}
                   </div>
                 </div>
               </div>
@@ -1261,7 +1329,15 @@ export default function ProcessRequestModal({
                         </span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {clearanceStatus === 'VERIFIED' || clearanceStatus === 'APPROVED' ? (
+                        {reviewingClearance ? (
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 font-semibold text-xs rounded-lg">
+                            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>Reviewing...</span>
+                          </div>
+                        ) : clearanceStatus === 'VERIFIED' || clearanceStatus === 'APPROVED' ? (
                           <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-xs rounded-lg flex items-center gap-1.5">
                             <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -1278,6 +1354,7 @@ export default function ProcessRequestModal({
                             </div>
                             <button
                               type="button"
+                              disabled={reviewingClearance}
                               onClick={() => handleVerifyClearance('PENDING')}
                               className="px-2 py-1.5 text-[11px] font-semibold text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-indigo-200"
                               title="Re-review clearance"
@@ -1289,6 +1366,7 @@ export default function ProcessRequestModal({
                           <>
                             <button
                               type="button"
+                              disabled={reviewingClearance}
                               onClick={() => handleVerifyClearance('VERIFIED')}
                               className="px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-xs bg-emerald-600 hover:bg-emerald-700 text-white"
                             >
@@ -1299,6 +1377,7 @@ export default function ProcessRequestModal({
                             </button>
                             <button
                               type="button"
+                              disabled={reviewingClearance}
                               onClick={() => handleVerifyClearance('REJECTED')}
                               className="px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300"
                               title="Reject clearance"
@@ -1413,13 +1492,19 @@ export default function ProcessRequestModal({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Payment Amount *</label>
-                    <input
-                      type="text"
-                      value={assessedAmount}
-                      onChange={(e) => setAssessedAmount(e.target.value)}
-                      placeholder="e.g. ₱100.00"
-                      className="w-full px-3 py-2 text-sm font-bold text-indigo-950 border border-indigo-200 rounded-lg focus:outline-none focus:border-indigo-600 bg-white"
-                    />
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3 text-sm font-bold text-slate-500 select-none">₱</span>
+                      <input
+                        type="text"
+                        value={assessedAmount}
+                        onChange={(e) => {
+                          const clean = e.target.value.replace(/[^0-9.]/g, '');
+                          setAssessedAmount(clean);
+                        }}
+                        placeholder="100.00"
+                        className="w-full pl-8 pr-3 py-2 text-sm font-bold text-indigo-950 border border-indigo-200 rounded-lg focus:outline-none focus:border-indigo-600 bg-white"
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Release Date *</label>
@@ -1850,8 +1935,19 @@ export default function ProcessRequestModal({
 
               <button
                 type="submit"
-                disabled={loading}
-                className="staff-btn-update"
+                disabled={!canSubmitUpdate}
+                className={`staff-btn-update ${
+                  !canSubmitUpdate
+                    ? 'opacity-40 cursor-not-allowed bg-slate-400 hover:bg-slate-400 text-white'
+                    : ''
+                }`}
+                title={
+                  !canOverrideStatus
+                    ? 'Manual status override is locked: Verify clearance and payment first'
+                    : !isStatusChanged
+                    ? 'Status has not been changed. Select a different status to update.'
+                    : 'Update request status'
+                }
               >
                 {loading ? 'Updating...' : 'Update Status'}
               </button>
