@@ -137,12 +137,14 @@ export default function UserManagementPage() {
 
   const handleUserCreated = (newUser) => {
     setUsers((prev) => [newUser, ...prev]);
+    window.dispatchEvent(new Event('regquest_users_updated'));
   };
 
   const handleUserUpdated = (updatedUser) => {
     setUsers((prev) =>
       prev.map((u) => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u))
     );
+    window.dispatchEvent(new Event('regquest_users_updated'));
     try {
       const activity = JSON.parse(localStorage.getItem('regquest_account_activity') || '[]');
       const targetName = updatedUser.full_name || updatedUser.username || `User #${updatedUser.id}`;
@@ -167,6 +169,7 @@ export default function UserManagementPage() {
     setUsers((prev) =>
       prev.map((u) => (u.id === userId ? { ...u, is_active: false } : u))
     );
+    window.dispatchEvent(new Event('regquest_users_updated'));
     try {
       const activity = JSON.parse(localStorage.getItem('regquest_account_activity') || '[]');
       activity.unshift({

@@ -95,6 +95,7 @@ export default function UserTable({
       );
     }
     setEditingUser(null);
+    window.dispatchEvent(new Event('regquest_users_updated'));
   };
 
   // Handle soft-deactivated user
@@ -107,6 +108,7 @@ export default function UserTable({
       );
     }
     setDeactivatingUser(null);
+    window.dispatchEvent(new Event('regquest_users_updated'));
   };
 
   // Handle reactivate user directly

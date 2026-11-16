@@ -20,39 +20,7 @@ function syncUserProfile(userObj) {
 }
 
 function mergeUsersWithCache(apiUsers = []) {
-  const overrides = getUserOverrides();
-  const cached = getCachedUsers();
-  const baseList = apiUsers.length > 0 ? apiUsers : cached;
-
-  const merged = baseList.map((u) => {
-    const byId = overrides[String(u.id)] || {};
-    const byUsername = u.username ? overrides[String(u.username).toLowerCase()] || {} : {};
-    return {
-      ...u,
-      ...byUsername,
-      ...byId,
-    };
-  });
-
-  cached.forEach((c) => {
-    if (!merged.some((m) => String(m.id) === String(c.id) || m.username === c.username)) {
-      const byId = overrides[String(c.id)] || {};
-      const byUsername = c.username ? overrides[String(c.username).toLowerCase()] || {} : {};
-      merged.unshift({
-        ...c,
-        ...byUsername,
-        ...byId,
-      });
-    }
-  });
-
-  try {
-    if (merged.length > 0) {
-      localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(merged));
-    }
-  } catch {}
-
-  return merged;
+  return Array.isArray(apiUsers) ? apiUsers : [];
 }
 
 export const usersApi = {

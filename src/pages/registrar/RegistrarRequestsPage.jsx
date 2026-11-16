@@ -307,21 +307,6 @@ export default function RegistrarRequestsPage() {
         let cachedClearanceFileName = null;
         let cachedClearanceIsPdf = false;
         let matchedStored = null;
-        try {
-          const storedList = JSON.parse(localStorage.getItem('regquest_stored_requests') || '[]');
-          matchedStored = storedList.find(
-            (s) =>
-              String(s.id) === String(r.id) ||
-              String(s.id) === String(r.tracking_number) ||
-              String(s.tracking_number) === String(r.tracking_number) ||
-              String(s.rawId) === String(r.id)
-          );
-          if (matchedStored?.clearance_preview) {
-            cachedClearancePreview = matchedStored.clearance_preview;
-            cachedClearanceFileName = matchedStored.clearance_file_name;
-            cachedClearanceIsPdf = matchedStored.clearance_is_pdf;
-          }
-        } catch {}
 
         const localClearance = getClearanceAttachment([
           r.tracking_number,
