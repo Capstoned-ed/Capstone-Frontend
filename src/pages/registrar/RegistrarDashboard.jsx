@@ -184,7 +184,7 @@ export default function RegistrarDashboard() {
         const [requestsRes, credTypesRes, usersRes, clearancesRes] = await Promise.all([
           requestsApi.list().catch(() => []),
           requestsApi.getCredentialTypes().catch(() => []),
-          usersApi.list().catch(() => []),
+          usersApi.getStaffDirectory().catch(() => []),
           clearancesApi.list().catch(() => []),
         ]);
 
