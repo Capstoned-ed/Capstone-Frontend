@@ -119,17 +119,8 @@ export default function useDashboardData() {
         const types = Array.isArray(typesRes) ? typesRes : typesRes?.results || [];
         const users = Array.isArray(usersRes) ? usersRes : usersRes?.results || [];
 
-        // Merge backend requests and locally stored requests
-        const stored = getStoredRequests();
-        const combined = [...backendList];
-        stored.forEach((s) => {
-          const key = s.tracking_number || s.id;
-          if (!combined.some((b) => (b.tracking_number || b.id) === key)) {
-            combined.push(s);
-          }
-        });
-
-        const requests = combined.filter(isValidRequest);
+        // Use live backend requests directly
+        const requests = backendList.filter(isValidRequest);
 
         // -------------------------------------------------------------
         // 1. Compute Dynamic Status Distribution

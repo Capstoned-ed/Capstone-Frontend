@@ -90,11 +90,31 @@ export const clearancesApi = {
    * @returns {Promise<Object>} The updated clearance record
    */
   async review(id, { status, remarks = '' }) {
-    const response = await apiClient.patch(`/api/clearances/${id}/review/`, {
-      status,
-      remarks,
-    });
-    return response.data;
+    try {
+      const response = await apiClient.patch(
+        `/api/clearances/${id}/review/`,
+        {
+          status,
+          remarks,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      return response.data;
+    } catch (err) {
+      // Graceful compatibility fallback if remote staging hasn't deployed JSONParser yet
+      if (err.response?.status === 415) {
+        const formData = new FormData();
+        formData.append('status', status);
+        formData.append('remarks', remarks);
+        const fbRes = await apiClient.patch(`/api/clearances/${id}/review/`, formData);
+        return fbRes.data;
+      }
+      throw err;
+    }
   },
 
   /**
@@ -346,7 +366,8 @@ export function generateOfficialClearanceSvg({
 }
 
 /**
- * Save student clearance attachment safely into sessionStorage and localStorage.
+ * Save student clearance attachment safely into sessionStorage for in-tab preview only.
+ * NEVER persists large base64 payloads to localStorage to prevent QuotaExceededError.
  */
 export function saveClearanceAttachment(identifier, dataUrl, meta = {}) {
   if (!identifier || !dataUrl) return;
@@ -356,26 +377,13 @@ export function saveClearanceAttachment(identifier, dataUrl, meta = {}) {
     sessionStorage.setItem(`regquest_clearance_meta_${identifier}`, JSON.stringify(meta));
   } catch {}
 
+  // Clean any old base64 clearance files from localStorage to free quota
   try {
-    localStorage.setItem(`regquest_clearance_${identifier}`, dataUrl);
-    localStorage.setItem(`regquest_clearance_meta_${identifier}`, JSON.stringify(meta));
-    localStorage.setItem('regquest_latest_clearance_file', dataUrl);
-    localStorage.setItem('regquest_latest_clearance_meta', JSON.stringify(meta));
-  } catch (err) {
-    // If quota reached, purge older clearance files from localStorage
-    try {
-      const keysToClean = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith('regquest_clearance_') && k !== `regquest_clearance_${identifier}`) {
-          keysToClean.push(k);
-        }
-      }
-      keysToClean.forEach((k) => localStorage.removeItem(k));
-      localStorage.setItem(`regquest_clearance_${identifier}`, dataUrl);
-      localStorage.setItem(`regquest_clearance_meta_${identifier}`, JSON.stringify(meta));
-    } catch {}
-  }
+    localStorage.removeItem(`regquest_clearance_${identifier}`);
+    localStorage.removeItem(`regquest_clearance_meta_${identifier}`);
+    localStorage.removeItem('regquest_latest_clearance_file');
+    localStorage.removeItem('regquest_latest_clearance_meta');
+  } catch {}
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(

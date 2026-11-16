@@ -107,37 +107,9 @@ export const paymentsApi = {
       saveStoredPaymentProof(String(requestId), paymentRecord);
     }
 
-    // Immediately persist payment proof into the exact request in local storage
-    try {
-      ['regquest_stored_requests', 'regquest_submitted_requests', 'student_my_requests'].forEach((storageKey) => {
-        const raw = localStorage.getItem(storageKey);
-        if (raw) {
-          const list = JSON.parse(raw);
-          if (Array.isArray(list)) {
-            const updated = list.map((item) => {
-              const matches =
-                (trackingNumber && (item.tracking_number === trackingNumber || item.trackingId === trackingNumber)) ||
-                (requestId && (String(item.id) === String(requestId) || String(item.rawId) === String(requestId)));
-              if (matches) {
-                return {
-                  ...item,
-                  payment_proof: paymentRecord,
-                  payment_status: 'PAYMENT_SUBMITTED',
-                  or_number: receiptReferenceNumber || 'Submitted at Window',
-                  receipt_image: paymentRecord.receiptImage,
-                  payment_submission_type: submissionType,
-                  updated_at: new Date().toISOString(),
-                };
-              }
-              return item;
-            });
-            localStorage.setItem(storageKey, JSON.stringify(updated));
-          }
-        }
-      });
+    // Dispatch request update event so active views re-fetch live data from API
+    if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('regquest_requests_updated'));
-    } catch (err) {
-      console.warn('Failed to update local requests with payment proof:', err);
     }
 
     // Notify assigned Staff & Registrar that student has submitted proof of payment
@@ -202,7 +174,8 @@ export const paymentsApi = {
 };
 
 /**
- * Save payment proof safely into client storage
+ * Save payment proof safely into sessionStorage for in-tab preview only.
+ * NEVER persists large base64 payloads to localStorage to prevent QuotaExceededError.
  */
 export function saveStoredPaymentProof(identifier, paymentData) {
   if (!identifier || !paymentData) return;
@@ -211,22 +184,10 @@ export function saveStoredPaymentProof(identifier, paymentData) {
     sessionStorage.setItem(`${PAYMENTS_STORAGE_PREFIX}${identifier}`, JSON.stringify(paymentData));
   } catch {}
 
+  // Clean any old base64 payment proof records from localStorage to free quota
   try {
-    localStorage.setItem(`${PAYMENTS_STORAGE_PREFIX}${identifier}`, JSON.stringify(paymentData));
-  } catch (err) {
-    // If quota exceeded, clean up old payment records
-    try {
-      const keysToClean = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith(PAYMENTS_STORAGE_PREFIX) && k !== `${PAYMENTS_STORAGE_PREFIX}${identifier}`) {
-          keysToClean.push(k);
-        }
-      }
-      keysToClean.forEach((k) => localStorage.removeItem(k));
-      localStorage.setItem(`${PAYMENTS_STORAGE_PREFIX}${identifier}`, JSON.stringify(paymentData));
-    } catch {}
-  }
+    localStorage.removeItem(`${PAYMENTS_STORAGE_PREFIX}${identifier}`);
+  } catch {}
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(
