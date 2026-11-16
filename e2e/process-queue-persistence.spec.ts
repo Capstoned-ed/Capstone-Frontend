@@ -79,106 +79,121 @@ test.describe('Process Queue Persistence & Admin Provisioning Flow', () => {
     await context2.close();
   });
 
-  test('Admin provisions Staff and Student, Student requests document, Staff processes request', async ({ page }) => {
+  test('Admin provisions 2 Staff and 1 Student, assigns to Staff 1, verifies Staff 2 has 0, persists in queue across clean context', async ({ browser }) => {
     // -------------------------------------------------------------------------
-    // Phase 1: Admin logs in and provisions 1 Staff and 1 Student account
+    // Step 1: Admin logs in and provisions 2 Staff accounts and 1 Student account
     // -------------------------------------------------------------------------
-    await loginAs(page, 'admin');
-    await page.goto('/admin/users');
-    await page.waitForLoadState('domcontentloaded');
+    const adminContext = await browser.newContext({ storageState: undefined });
+    const adminPage = await adminContext.newPage();
+
+    await loginAs(adminPage, 'admin');
+    await adminPage.goto('/admin/users');
+    await adminPage.waitForLoadState('domcontentloaded');
 
     const timestamp = Date.now().toString().slice(-6);
-    const newStaffId = `7${timestamp}`;
-    const newStudentId = `9${timestamp}`;
+    const staff1Id = `71${timestamp}`;
+    const staff2Id = `72${timestamp}`;
+    const studentId = `90${timestamp}`;
+    const digitToWord = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+    const letterCode = timestamp.split('').map((d) => digitToWord[Number(d)]).join('');
+    const staffLastName = `Staff${letterCode}`;
+    const staff1FullName = `StaffOne ${staffLastName}`;
 
-    // Provision Staff
-    const addUserTrigger = page.locator('.add-user-trigger-btn, button:has-text("Add New User")').first();
+    // Provision Staff 1
+    const addUserTrigger = adminPage.locator('.add-user-trigger-btn, button:has-text("Add New User")').first();
     await expect(addUserTrigger).toBeVisible({ timeout: 25000 });
     await addUserTrigger.click();
 
-    // Fill user form
-    const firstNameInput = page.locator('form.add-user-form input[placeholder="First Name"]');
-    const lastNameInput = page.locator('form.add-user-form input[placeholder="Last Name"]');
-    const idInputStaff = page.locator('form.add-user-form input[placeholder*="ID Number"]');
-    const emailInputStaff = page.locator('form.add-user-form input[type="email"]');
-    const roleSelect = page.locator('form.add-user-form select.add-user-select');
+    const firstNameInput = adminPage.locator('form.add-user-form input[placeholder="First Name"]');
+    const lastNameInput = adminPage.locator('form.add-user-form input[placeholder="Last Name"]');
+    const idInputStaff = adminPage.locator('form.add-user-form input[placeholder*="ID Number"]');
+    const emailInputStaff = adminPage.locator('form.add-user-form input[type="email"]');
+    const roleSelect = adminPage.locator('form.add-user-form select.add-user-select');
 
     await expect(idInputStaff).toBeVisible({ timeout: 10000 });
-    await firstNameInput.fill('StaffFirst');
-    await lastNameInput.fill('StaffLast');
-    await idInputStaff.fill(newStaffId);
-    await emailInputStaff.fill(`staff_${timestamp}@ustp.edu.ph`);
+    await firstNameInput.fill('StaffOne');
+    await lastNameInput.fill(staffLastName);
+    await idInputStaff.fill(staff1Id);
+    await emailInputStaff.fill(`staff1_${timestamp}@ustp.edu.ph`);
     await roleSelect.selectOption('staff');
 
-    // Submit provisioning
-    const saveStaffBtn = page.locator('form.add-user-form button.add-user-submit-btn').first();
-    await saveStaffBtn.click();
+    const saveStaff1Btn = adminPage.locator('form.add-user-form button.add-user-submit-btn').first();
+    await saveStaff1Btn.click();
 
-    // Verify staff form closes and user appears in table
-    await expect(page.locator('form.add-user-form')).not.toBeVisible({ timeout: 20000 });
-    await expect(page.locator('body')).toContainText(newStaffId, { timeout: 15000 });
+    await expect(adminPage.locator('form.add-user-form')).not.toBeVisible({ timeout: 20000 });
+    await expect(adminPage.locator('body')).toContainText(staff1Id, { timeout: 15000 });
+
+    // Provision Staff 2
+    await adminPage.waitForTimeout(1000);
+    await addUserTrigger.click();
+    await expect(idInputStaff).toBeVisible({ timeout: 10000 });
+    await firstNameInput.fill('StaffTwo');
+    await lastNameInput.fill(staffLastName);
+    await idInputStaff.fill(staff2Id);
+    await emailInputStaff.fill(`staff2_${timestamp}@ustp.edu.ph`);
+    await roleSelect.selectOption('staff');
+
+    const saveStaff2Btn = adminPage.locator('form.add-user-form button.add-user-submit-btn').first();
+    await saveStaff2Btn.click();
+
+    await expect(adminPage.locator('form.add-user-form')).not.toBeVisible({ timeout: 20000 });
+    await expect(adminPage.locator('body')).toContainText(staff2Id, { timeout: 15000 });
 
     // Provision Student
-    await page.waitForTimeout(1000);
-    const addStudentTrigger = page.locator('.add-student-trigger-btn, button:has-text("Add New Student")').first();
+    await adminPage.waitForTimeout(1000);
+    const addStudentTrigger = adminPage.locator('.add-student-trigger-btn, button:has-text("Add New Student")').first();
     await expect(addStudentTrigger).toBeVisible({ timeout: 25000 });
     await addStudentTrigger.click();
 
-    const studFirstInput = page.locator('form.add-student-form input[placeholder="First Name"]');
-    const studLastInput = page.locator('form.add-student-form input[placeholder="Last Name"]');
-    const studIdInput = page.locator('form.add-student-form input[placeholder*="Student ID"]');
-    const studEmailInput = page.locator('form.add-student-form input[type="email"]');
-    const studDateInput = page.locator('form.add-student-form input[type="date"]');
-    const studContactInput = page.locator('form.add-student-form input[placeholder*="Contact"]');
+    const studFirstInput = adminPage.locator('form.add-student-form input[placeholder="First Name"]');
+    const studLastInput = adminPage.locator('form.add-student-form input[placeholder="Last Name"]');
+    const studIdInput = adminPage.locator('form.add-student-form input[placeholder*="Student ID"]');
+    const studEmailInput = adminPage.locator('form.add-student-form input[type="email"]');
+    const studDateInput = adminPage.locator('form.add-student-form input[type="date"]');
+    const studContactInput = adminPage.locator('form.add-student-form input[placeholder*="Contact"]');
 
     await expect(studIdInput).toBeVisible({ timeout: 10000 });
     await studFirstInput.fill('StudentFirst');
     await studLastInput.fill('StudentLast');
-    await studIdInput.fill(newStudentId);
+    await studIdInput.fill(studentId);
     await studEmailInput.fill(`student_${timestamp}@ustp.edu.ph`);
     await studDateInput.fill('2002-01-15');
     await studContactInput.fill('09123456789');
 
     // Select course via CourseSelectDropdown
-    const courseDropdownBtn = page.locator('form.add-student-form button').filter({ hasText: /Select Course/i }).first();
+    const courseDropdownBtn = adminPage.locator('form.add-student-form button').filter({ hasText: /Select Course/i }).first();
     await expect(courseDropdownBtn).toBeVisible({ timeout: 10000 });
     await courseDropdownBtn.click();
 
-    const itChoice = page.locator('button:has-text("BS in Information Technology"), button:has-text("BSIT")').first();
+    const itChoice = adminPage.locator('button:has-text("BS in Information Technology"), button:has-text("BSIT")').first();
     await expect(itChoice).toBeVisible({ timeout: 10000 });
     await itChoice.click();
 
-    const saveStudentBtn = page.locator('form.add-student-form button.add-student-submit-btn').first();
+    const saveStudentBtn = adminPage.locator('form.add-student-form button.add-student-submit-btn').first();
     await saveStudentBtn.click();
 
-    // Verify student form closes and student ID appears
-    await expect(page.locator('form.add-student-form')).not.toBeVisible({ timeout: 20000 });
-    await expect(page.locator('body')).toContainText(newStudentId, { timeout: 15000 });
+    await expect(adminPage.locator('form.add-student-form')).not.toBeVisible({ timeout: 20000 });
+    await expect(adminPage.locator('body')).toContainText(studentId, { timeout: 15000 });
+
+    await adminContext.close();
 
     // -------------------------------------------------------------------------
-    // Phase 2: Student logs in and submits an in-scope credential request
+    // Step 2: Student submits a new credential request in a clean context
     // -------------------------------------------------------------------------
-    // Clear session for student login
-    await page.evaluate(() => window.localStorage.clear());
-    await page.goto('/login');
+    const studentContext = await browser.newContext({ storageState: undefined });
+    const studentPage = await studentContext.newPage();
 
-    const idInput = page.locator('#username');
-    const passwordInput = page.locator('#password');
-    const submitBtn = page.getByRole('button', { name: /Log In/i });
+    await studentPage.goto('/login');
+    await studentPage.locator('#username').fill(studentId);
+    await studentPage.locator('#password').fill(studentId);
+    await studentPage.getByRole('button', { name: /Log In/i }).click();
+    await studentPage.waitForURL(/\/student/, { timeout: 45000 });
 
-    await idInput.fill(newStudentId);
-    await passwordInput.fill(newStudentId);
-    await submitBtn.click();
-
-    // Verify Student dashboard redirect
-    await page.waitForURL(/\/student/, { timeout: 45000 });
-
-    // Navigate to request form
-    await page.goto('/student/new-request');
-    await page.waitForLoadState('domcontentloaded');
+    await studentPage.goto('/student/new-request');
+    await studentPage.waitForLoadState('domcontentloaded');
 
     // Attach sample clearance
-    const clearanceInput = page.locator('input[type="file"]').first();
+    const clearanceInput = studentPage.locator('input[type="file"]').first();
     await clearanceInput.setInputFiles({
       name: 'clearance.png',
       mimeType: 'image/png',
@@ -189,70 +204,193 @@ test.describe('Process Queue Persistence & Admin Provisioning Flow', () => {
     });
 
     // Select document
-    const docCheckbox = page.locator('#ustp-part-2-section input[type="checkbox"], .ustp-doc-col input[type="checkbox"]').first();
+    const docCheckbox = studentPage.locator('#ustp-part-2-section input[type="checkbox"], .ustp-doc-col input[type="checkbox"]').first();
     await expect(docCheckbox).toBeVisible({ timeout: 15000 });
     await docCheckbox.check({ force: true });
 
     // Select purpose
-    const purposeLabel = page.locator('.ustp-purpose-grid label, label:has-text("For Evaluation"), label:has-text("Personal")').first();
+    const purposeLabel = studentPage.locator('.ustp-purpose-grid label, label:has-text("For Evaluation"), label:has-text("Personal")').first();
     await purposeLabel.click();
 
     // Proceed to Review step
-    const nextBtn = page.getByRole('button', { name: /Next Step/i }).first();
+    const nextBtn = studentPage.getByRole('button', { name: /Next Step/i }).first();
     await nextBtn.click();
 
-    await expect(page.locator('body')).toContainText(/Review Data/i, { timeout: 15000 });
+    await expect(studentPage.locator('body')).toContainText(/Review Data/i, { timeout: 15000 });
 
     // Final submit
-    const finalSubmit = page.getByRole('button', { name: /Submit|Next Step/i }).last();
+    const finalSubmit = studentPage.getByRole('button', { name: /Submit|Next Step/i }).last();
     await finalSubmit.click();
 
-    // Verify submission success without any 400 Bad Request error
-    await expect(page.locator('body')).toContainText(/Submitted|Success/i, { timeout: 20000 });
+    await expect(studentPage.locator('body')).toContainText(/Submitted|Success/i, { timeout: 20000 });
 
-    // Grab tracking code from confirmation page
-    const trackingBox = page.locator('.complete-tracking-code');
+    // Extract tracking code
+    const trackingBox = studentPage.locator('.complete-tracking-code');
     await expect(trackingBox).toBeVisible({ timeout: 15000 });
     const studentTrackingId = (await trackingBox.innerText()).trim();
     expect(studentTrackingId).toBeTruthy();
 
+    await studentContext.close();
+
     // -------------------------------------------------------------------------
-    // Phase 3: Staff logs in and processes the request
+    // Step 3: Admin assigns the request to Staff 1 in /registrar/requests
     // -------------------------------------------------------------------------
-    await page.evaluate(() => window.localStorage.clear());
-    // Staff logs in using newly provisioned staff account
-    await page.goto('/login');
-    await page.locator('#username').fill(newStaffId);
-    await page.locator('#password').fill(newStaffId);
-    await page.getByRole('button', { name: /Log In/i }).click();
-    await page.waitForURL(/\/staff/, { timeout: 45000 });
+    const adminAssignContext = await browser.newContext({ storageState: undefined });
+    const adminAssignPage = await adminAssignContext.newPage();
 
-    await page.goto('/staff/requests');
-    await page.waitForLoadState('domcontentloaded');
+    await loginAs(adminAssignPage, 'admin');
+    await adminAssignPage.goto('/registrar/requests');
+    await adminAssignPage.waitForLoadState('domcontentloaded');
 
-    // Filter by the student's tracking ID
-    const searchInput = page.locator('input.staff-search-field, input[placeholder*="Search"]').first();
-    await expect(searchInput).toBeVisible({ timeout: 20000 });
-    await searchInput.fill(studentTrackingId);
+    const requestsTable = adminAssignPage.locator('table, .requests-table').first();
+    await expect(requestsTable).toBeVisible({ timeout: 25000 });
 
-    // Verify the newly created student request appears in staff view
-    await expect(page.locator('body')).toContainText(studentTrackingId, { timeout: 25000 });
+    // Filter/Search by the student's tracking ID
+    const searchInput = adminAssignPage.locator('input.assign-search-input, input[placeholder*="Search"]').first();
+    if (await searchInput.isVisible()) {
+      await searchInput.fill(studentTrackingId);
+      await adminAssignPage.waitForTimeout(500);
+    }
 
-    // Process/claim this request
-    const processBtn = page.locator('button.staff-btn-process-this, button:has-text("Process This")').first();
+    const targetAssignRow = adminAssignPage.locator('tbody tr').filter({ hasText: studentTrackingId }).first();
+    await expect(targetAssignRow).toBeVisible({ timeout: 20000 });
+
+    const staffSelect = targetAssignRow.locator('select.staff-select-dropdown');
+    await expect(staffSelect).toBeVisible({ timeout: 10000 });
+
+    // Wait until StaffOne option is present and select it
+    await expect(staffSelect.locator('option', { hasText: staff1FullName }).first()).toBeAttached({ timeout: 15000 });
+    await staffSelect.selectOption(staff1FullName);
+
+    await expect(adminAssignPage.locator('.Toastify__toast--success, .toast-success, body')).toContainText(
+      /Assigned/i,
+      { timeout: 15000 }
+    );
+
+    await adminAssignContext.close();
+
+    // -------------------------------------------------------------------------
+    // Step 4: Staff 1 sees ONLY that 1 request, Staff 2 sees 0
+    // -------------------------------------------------------------------------
+    // Context for Staff 1
+    const staff1Context = await browser.newContext({ storageState: undefined });
+    const staff1Page = await staff1Context.newPage();
+
+    await staff1Page.goto('/login');
+    await staff1Page.locator('#username').fill(staff1Id);
+    await staff1Page.locator('#password').fill(staff1Id);
+    await staff1Page.getByRole('button', { name: /Log In/i }).click();
+    await staff1Page.waitForURL(/\/staff/, { timeout: 45000 });
+
+    // Check Staff 1 Dashboard: must see studentTrackingId in My Assigned Requests
+    await staff1Page.goto('/staff/dashboard');
+    await staff1Page.waitForLoadState('domcontentloaded');
+    await expect(staff1Page.locator('body')).toContainText(studentTrackingId, { timeout: 25000 });
+
+    // Go to /staff/requests: must see studentTrackingId in My Assigned Requests
+    await staff1Page.goto('/staff/requests');
+    await staff1Page.waitForLoadState('domcontentloaded');
+    await expect(staff1Page.locator('body')).toContainText(studentTrackingId, { timeout: 25000 });
+
+    // Context for Staff 2
+    const staff2Context = await browser.newContext({ storageState: undefined });
+    const staff2Page = await staff2Context.newPage();
+
+    await staff2Page.goto('/login');
+    await staff2Page.locator('#username').fill(staff2Id);
+    await staff2Page.locator('#password').fill(staff2Id);
+    await staff2Page.getByRole('button', { name: /Log In/i }).click();
+    await staff2Page.waitForURL(/\/staff/, { timeout: 45000 });
+
+    // Check Staff 2 Dashboard: must NOT see studentTrackingId in My Assigned Requests table
+    await staff2Page.goto('/staff/dashboard');
+    await staff2Page.waitForLoadState('domcontentloaded');
+    await expect(staff2Page.locator('.staff-requests-table, table').first()).not.toContainText(studentTrackingId);
+    await expect(staff2Page.locator('body')).toContainText(/No document requests currently assigned to you|0/i);
+
+    // Check Staff 2 Requests Page: must NOT see studentTrackingId in My Assigned Requests table
+    await staff2Page.goto('/staff/requests');
+    await staff2Page.waitForLoadState('domcontentloaded');
+    const staff2AssignedTable = staff2Page.locator('.staff-requests-table, table').first();
+    await expect(staff2AssignedTable).not.toContainText(studentTrackingId);
+
+    await staff2Context.close();
+
+    // -------------------------------------------------------------------------
+    // Step 5: Staff 1 claims/adds to Process Queue, updates status
+    // -------------------------------------------------------------------------
+    const staff1Row = staff1Page.locator('tbody tr').filter({ hasText: studentTrackingId }).first();
+    await expect(staff1Row).toBeVisible({ timeout: 15000 });
+
+    const processBtn = staff1Row.locator('button.staff-btn-process-this, button:has-text("Process This")').first();
+    const viewBtn = staff1Row.locator('button.staff-btn-view, button:has-text("View")').first();
+
     if (await processBtn.isVisible()) {
       await processBtn.click();
-      await expect(page.locator('.Toastify__toast--success, .toast-success, body')).toContainText(
+      await expect(staff1Page.locator('.Toastify__toast--success, .toast-success, body')).toContainText(
         /processing|assigned/i,
         { timeout: 15000 }
       );
+    } else if (await viewBtn.isVisible()) {
+      await viewBtn.click();
+      const modal = staff1Page.locator('.staff-process-dialog, [role="dialog"], form');
+      await expect(modal.first()).toBeVisible({ timeout: 15000 });
+
+      // Verify clearance if button is available
+      const verifyClearanceBtn = staff1Page.locator('button:has-text("Verify"), button:has-text("Mark Cleared")').first();
+      if (await verifyClearanceBtn.isVisible()) {
+        await verifyClearanceBtn.click();
+        await staff1Page.waitForTimeout(1000);
+      }
+
+      // Close modal
+      const closeBtn = staff1Page.locator('button:has-text("Close"), button[aria-label="Close"], .modal-close-btn').first();
+      if (await closeBtn.isVisible()) {
+        await closeBtn.click();
+      }
     }
 
-    // Refresh page to confirm persistence directly from backend database
-    await page.reload();
-    await page.waitForLoadState('domcontentloaded');
-    await searchInput.fill(studentTrackingId);
-    await expect(page.locator('body')).toContainText(studentTrackingId, { timeout: 25000 });
+    // Completely close Staff 1 context
+    await staff1Context.close();
+
+    // -------------------------------------------------------------------------
+    // Step 6: Staff 1 opens fresh context (Incognito equivalent) and verifies persistence
+    // -------------------------------------------------------------------------
+    const staff1CleanContext = await browser.newContext({ storageState: undefined });
+    const staff1CleanPage = await staff1CleanContext.newPage();
+
+    const cleanNetworkErrors: string[] = [];
+    staff1CleanPage.on('response', (res) => {
+      if (res.status() === 400 || res.status() === 404 || res.status() === 500) {
+        cleanNetworkErrors.push(`HTTP ${res.status()} on ${res.url()}`);
+      }
+    });
+
+    // Ensure completely clean storage
+    await staff1CleanPage.goto('/login');
+    const storageCount = await staff1CleanPage.evaluate(() => window.localStorage.length);
+    expect(storageCount).toBe(0);
+
+    // Log in as Staff 1
+    await staff1CleanPage.locator('#username').fill(staff1Id);
+    await staff1CleanPage.locator('#password').fill(staff1Id);
+    await staff1CleanPage.getByRole('button', { name: /Log In/i }).click();
+    await staff1CleanPage.waitForURL(/\/staff/, { timeout: 45000 });
+
+    // Navigate to Staff Requests page
+    await staff1CleanPage.goto('/staff/requests');
+    await staff1CleanPage.waitForLoadState('domcontentloaded');
+
+    // Verify My Assigned Requests STILL contains studentTrackingId directly from DB
+    await expect(staff1CleanPage.locator('body')).toContainText(studentTrackingId, { timeout: 25000 });
+
+    // Verify zero 400 or 404 errors were triggered
+    const badErrors = cleanNetworkErrors.filter(
+      (err) => err.includes('HTTP 400') || err.includes('HTTP 404')
+    );
+    expect(badErrors).toEqual([]);
+
+    await staff1CleanContext.close();
   });
 });
 

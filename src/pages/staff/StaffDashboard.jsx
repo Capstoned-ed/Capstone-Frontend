@@ -104,8 +104,12 @@ export default function StaffDashboard() {
 
   const loadDashboardData = useCallback(async () => {
     try {
+      const isStaffUser = String(user?.role || '').toLowerCase() === 'staff';
+      const requestsParam = isStaffUser
+        ? { assigned_to: user?.id || user?.username || 'me' }
+        : {};
       const [backendRequests, credTypesRes, usersRes, clearancesRes] = await Promise.all([
-        requestsApi.list().catch(() => []),
+        requestsApi.list(requestsParam).catch(() => []),
         requestsApi.getCredentialTypes().catch(() => []),
         usersApi.getStaffDirectory().catch(() => []),
         clearancesApi.list().catch(() => []),
@@ -343,20 +347,18 @@ export default function StaffDashboard() {
 
   const targetRequestsForMetrics = useMemo(() => {
     if (String(user?.role || '').toLowerCase() === 'staff') {
-      return assignedRequests.length > 0 ? assignedRequests : requestsList.filter((r) => !isRequestArchived(r, archivedMap));
+      return assignedRequests;
     }
-    return requestsList;
+    return requestsList.filter((r) => !isRequestArchived(r, archivedMap));
   }, [user, assignedRequests, requestsList, archivedMap]);
 
   // All requests assigned to this user (or all requests for admin/master) - UNFILTERED by selected calendar date
   const allUserRequests = useMemo(() => {
     if (String(user?.role || '').toLowerCase() === 'staff') {
-      return assignedRequests.length > 0
-        ? requestsList.filter((r) => isRequestAssignedToUser(r, user, assignments, usersList))
-        : requestsList.filter((r) => !isRequestArchived(r, archivedMap));
+      return requestsList.filter((r) => isRequestAssignedToUser(r, user, assignments, usersList));
     }
-    return requestsList;
-  }, [user, requestsList, assignments, usersList, assignedRequests.length, archivedMap]);
+    return requestsList.filter((r) => !isRequestArchived(r, archivedMap));
+  }, [user, requestsList, assignments, usersList, archivedMap]);
 
   const metrics = useMemo(() => {
     const total = targetRequestsForMetrics.length;
@@ -1175,28 +1177,26 @@ export default function StaffDashboard() {
             </button>
           </div>
 
-          {/* My Assigned Requests / Department Processing Queue */}
+          {/* My Assigned Requests */}
           <StaffRequestsTable
-            title={assignedRequests.length > 0 ? "My Assigned Requests" : "Requests Ready for Processing"}
+            title="My Assigned Requests"
             subtitle={
               selectedCalendarDate
-                ? `Showing requests matching ${selectedCalendarDate} (${(assignedRequests.length > 0 ? assignedRequests : requestsList).length} found)`
-                : assignedRequests.length > 0
-                ? 'Requests assigned to you that are ready for processing'
-                : 'Available department requests ready for staff assignment & processing'
+                ? `Showing requests matching ${selectedCalendarDate} (${assignedRequests.length} found)`
+                : 'Requests assigned to you that are ready for processing'
             }
-            badgeCount={assignedRequests.length > 0 ? assignedRequests.length : requestsList.filter((r) => !isRequestArchived(r, archivedMap)).length}
+            badgeCount={assignedRequests.length}
             loading={loading}
-            filteredRequests={assignedRequests.length > 0 ? assignedRequests : requestsList.filter((r) => !isRequestArchived(r, archivedMap))}
-            totalRequestsCount={assignedRequests.length > 0 ? assignedRequests.length : requestsList.filter((r) => !isRequestArchived(r, archivedMap)).length}
+            filteredRequests={assignedRequests}
+            totalRequestsCount={assignedRequests.length}
             getStatusBadge={getStatusBadge}
             onOpenProcess={handleOpenProcess}
             actionType="view"
             onArchive={handleArchiveRequest}
             emptyMessage={
               selectedCalendarDate
-                ? `No requests found for ${selectedCalendarDate}.`
-                : 'No document requests in the processing queue.'
+                ? `No assigned requests found for ${selectedCalendarDate}.`
+                : 'No document requests currently assigned to you.'
             }
           />
         </div>

@@ -122,6 +122,7 @@ export default function App() {
                 <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
 
                 <Route element={<RoleRoute allowedRoles={[ROLES.STUDENT]} />}>
+                  <Route path="/student" element={<Navigate to={ROUTES.STUDENT.DASHBOARD} replace />} />
                   <Route path={ROUTES.STUDENT.DASHBOARD} element={<StudentDashboard />} />
                   <Route path={ROUTES.STUDENT.CLEARANCE} element={<Navigate to={ROUTES.STUDENT.NEW_REQUEST} replace />} />
                   <Route path={ROUTES.STUDENT.NEW_REQUEST} element={<RequestDocumentPage />} />
@@ -132,6 +133,7 @@ export default function App() {
                 </Route>
 
                 <Route element={<RoleRoute allowedRoles={[ROLES.STAFF, ROLES.REGISTRAR, ROLES.ADMIN]} />}>
+                  <Route path="/staff" element={<Navigate to={ROUTES.STAFF.DASHBOARD} replace />} />
                   <Route path={ROUTES.STAFF.DASHBOARD} element={<StaffDashboard />} />
                   <Route path={ROUTES.STAFF.CALENDAR} element={<ProcessingCalendarPage />} />
                   <Route path={ROUTES.STAFF.REQUESTS} element={<StaffRequestsPage />} />
@@ -142,6 +144,7 @@ export default function App() {
                 </Route>
 
                 <Route element={<RoleRoute allowedRoles={[ROLES.ADMIN]} />}>
+                  <Route path="/admin" element={<Navigate to={ROUTES.ADMIN.DASHBOARD} replace />} />
                   <Route path={ROUTES.ADMIN.DASHBOARD} element={<AdminDashboard />} />
                   <Route path={ROUTES.ADMIN.ANALYTICS} element={<AnalyticsGraphsPage />} />
                   <Route path={ROUTES.ADMIN.CALENDAR} element={<AdminProcessingCalendarPage />} />
@@ -149,6 +152,7 @@ export default function App() {
                 </Route>
 
                 <Route element={<RoleRoute allowedRoles={[ROLES.REGISTRAR, ROLES.ADMIN]} />}>
+                  <Route path="/registrar" element={<Navigate to={ROUTES.REGISTRAR.DASHBOARD} replace />} />
                   <Route path={ROUTES.REGISTRAR.DASHBOARD} element={<RegistrarDashboard />} />
                   <Route path={ROUTES.REGISTRAR.ANALYTICS} element={<RegistrarAnalyticsGraphsPage />} />
                   <Route path={ROUTES.REGISTRAR.CALENDAR} element={<RegistrarProcessingCalendarPage />} />
