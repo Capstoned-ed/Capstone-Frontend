@@ -6,9 +6,12 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load .env.test from workspace root or frontend folder
+// Load .env.test and .env from workspace root, backend, or frontend folders
 dotenv.config({ path: path.resolve(__dirname, '../../.env.test') });
 dotenv.config({ path: path.resolve(__dirname, '.env.test') });
+dotenv.config({ path: path.resolve(__dirname, '../../backend/.env') });
+dotenv.config({ path: path.resolve(__dirname, '.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const baseURL = process.env.E2E_BASE_URL || 'https://stagingregquest.vercel.app';
 

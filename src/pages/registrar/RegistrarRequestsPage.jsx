@@ -573,8 +573,7 @@ export default function RegistrarRequestsPage() {
     });
   }, [requests, selectedBatch, archivedMap, assignmentHistorySearch, assignmentHistoryDocType]);
 
-  const handleAssignStaff = (requestId, rawId, staffName) => {
-
+  const handleAssignStaff = async (requestId, rawId, staffName) => {
     setAssignments((prev) => {
       const updated = { ...prev };
       if (staffName) {
@@ -633,30 +632,6 @@ export default function RegistrarRequestsPage() {
         )
       );
 
-      // Backend API transition if applicable
-      const targetBackendId = rawId || requestId;
-      if (targetBackendId && !String(targetBackendId).startsWith('TRK-')) {
-        const currentReq = rawRequests.find(
-          (r) => String(r.id) === String(rawId) || String(r.id) === String(requestId) || String(r.tracking_number) === String(requestId)
-        );
-        const currentStatus = currentReq?.status ? normalizeToBackendStatus(currentReq.status) : 'PENDING';
-        const currentRemarks = currentReq?.remarks || '';
-        const cleanRemarks = currentRemarks.replace(/\[Assigned(?:\s+to)?:\s*[^\]]+\]/gi, '').trim();
-        const updatedRemarks = cleanRemarks
-          ? `${cleanRemarks} | [Assigned to: ${staffName}]`
-          : `[Assigned to: ${staffName}]`;
-        requestsApi
-          .transition(targetBackendId, {
-            status: currentStatus,
-            remarks: updatedRemarks,
-          }, { throwOnError: false })
-          .catch(() => {});
-      }
-    }
-
-    if (staffName) {
-      toast.success(`Assigned ${staffName} to ${requestId}`);
-
       const targetStaff =
         staffMembers.find(
           (s) =>
@@ -670,6 +645,38 @@ export default function RegistrarRequestsPage() {
             [u.first_name, u.last_name].filter(Boolean).join(' ') === staffName ||
             String(u.id) === String(staffName)
         );
+
+      // Backend API assign endpoint to persist directly in PostgreSQL DB
+      const targetBackendId = rawId || requestId;
+      if (targetBackendId && !String(targetBackendId).startsWith('TRK-')) {
+        const currentReq = rawRequests.find(
+          (r) => String(r.id) === String(rawId) || String(r.id) === String(requestId) || String(r.tracking_number) === String(requestId)
+        );
+        const currentStatus = currentReq?.status ? normalizeToBackendStatus(currentReq.status) : 'PENDING';
+        const currentRemarks = currentReq?.remarks || '';
+        const cleanRemarks = currentRemarks.replace(/\[Assigned(?:\s+to)?:\s*[^\]]+\]/gi, '').trim();
+        const updatedRemarks = cleanRemarks
+          ? `${cleanRemarks} | [Assigned to: ${staffName}]`
+          : `[Assigned to: ${staffName}]`;
+
+        const staffIdentifier = targetStaff?.username || targetStaff?.id || staffName;
+        try {
+          await requestsApi.assign(targetBackendId, {
+            assigned_staff: staffIdentifier,
+            in_process_queue: true,
+            remarks: updatedRemarks,
+          });
+        } catch {
+          await requestsApi.transition(targetBackendId, {
+            status: currentStatus,
+            remarks: updatedRemarks,
+            assigned_staff: staffIdentifier,
+            in_process_queue: true,
+          }, { throwOnError: false }).catch(() => {});
+        }
+      }
+
+      toast.success(`Assigned ${staffName} to ${requestId}`);
 
       const req = requests.find(
         (r) =>
@@ -695,8 +702,14 @@ export default function RegistrarRequestsPage() {
         target_username: targetStaff?.username || null,
         target_name: staffName,
       });
+      window.dispatchEvent(new Event('regquest_assignments_updated'));
+      window.dispatchEvent(new Event('regquest_requests_updated'));
+      await loadData();
     } else {
       toast.info(`Unassigned staff from ${requestId}`);
+      window.dispatchEvent(new Event('regquest_assignments_updated'));
+      window.dispatchEvent(new Event('regquest_requests_updated'));
+      await loadData();
     }
   };
 
