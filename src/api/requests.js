@@ -650,63 +650,38 @@ export function resolveRequestDocType(r, cred = null) {
 }
 
 /**
- * Permanently purge corrupt, blank, or placeholder requests from localStorage.
+ * Permanently purge stored request arrays, base64 files, and ghost cache from localStorage.
+ * Frees storage quota immediately and ensures the application exclusively renders live backend data.
  */
 export function purgeCorruptRequests() {
   if (typeof window === 'undefined') return;
   try {
-    const keys = [STORAGE_KEY, STUDENT_REQUESTS_KEY, 'regquest_stored_requests'];
-    let changed = false;
-
-    keys.forEach((key) => {
-      const raw = localStorage.getItem(key);
-      if (!raw) return;
-      try {
-        const list = JSON.parse(raw);
-        if (Array.isArray(list)) {
-          const cleaned = list.filter((item) => {
-            if (!isValidRequest(item)) return false;
-            // Malformed records without a real tracking number (displayed as REQ-0000xx) are removed permanently
-            if (!String(item.tracking_number || '').trim()) return false;
-            const sName = String(item.student_name || item.student || '').trim();
-            const sId = String(item.student_id || item.studentId || '').trim();
-            const date = item.created_at || item.request_date || item.date;
-            if (!date || date === 'N/A') return false;
-            if ((!sName || sName === 'Student' || sName === 'N/A') && (!sId || sId === 'N/A')) {
-              const isBackend = item.tracking_number && (
-                /^[A-Z0-9]+-\d{2}-\d{2}-\d{2}-/i.test(item.tracking_number) ||
-                /^REQ-\d{4}-\d+$/i.test(item.tracking_number) ||
-                /^RQ-\d+/i.test(item.tracking_number)
-              );
-              if (!isBackend) return false;
-            }
-            return true;
-          });
-
-          // Sanitize any existing records where document_type was erroneously saved or overridden as 'Walk-in FTF'
-          cleaned.forEach((item) => {
-            const dt = String(item.document_type || '').trim().toLowerCase();
-            if (dt === 'walk-in ftf' || dt === 'walk-in' || dt === 'walkin' || dt === 'ftf') {
-              const fallbackDoc = item.credential_type_details?.name || resolveRequestDocType(item);
-              if (fallbackDoc && !/walk-in|ftf/i.test(fallbackDoc)) {
-                item.document_type = fallbackDoc;
-                changed = true;
-              }
-            }
-          });
-
-          if (cleaned.length !== list.length || changed) {
-            localStorage.setItem(key, JSON.stringify(cleaned));
-            changed = true;
-          }
-        }
-      } catch {}
-    });
-
-    if (changed) {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (
+        k.startsWith('requests_') ||
+        k === STORAGE_KEY ||
+        k === STUDENT_REQUESTS_KEY ||
+        k === 'regquest_stored_requests' ||
+        k.startsWith('regquest_clearance_') ||
+        k.startsWith('regquest_latest_clearance_') ||
+        k.startsWith('regquest_payment_proof_') ||
+        k === 'regquest_users_cache' ||
+        k === 'regquest_student_profiles' ||
+        k === 'regquest_staff_profiles'
+      ) {
+        keysToRemove.push(k);
+      }
+    }
+    if (keysToRemove.length > 0) {
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
       window.dispatchEvent(new CustomEvent('regquest_requests_updated'));
     }
-  } catch {}
+  } catch (err) {
+    console.warn('Failed to purge requests from localStorage:', err);
+  }
 }
 
 // Auto-run purge on module initialization
@@ -716,85 +691,25 @@ if (typeof window !== 'undefined') {
 
 /**
  * Retrieve stored/submitted requests across student, staff, and admin.
+ * Returns empty array: all requests are strictly loaded live from Django REST API.
  */
 export function getStoredRequests(user = null) {
-  try {
-    purgeCorruptRequests();
-    const uid = getActiveUserId(user);
-    const userKey = getRequestsStorageKey(user);
-
-    const primary = JSON.parse(localStorage.getItem(userKey) || '[]');
-    const fallback = uid === 'anon' ? JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') : [];
-
-    const map = new Map();
-    [...primary, ...fallback].forEach((item) => {
-      if (!isValidRequest(item)) return;
-      // If user ID is known, ensure item belongs to this user
-      if (uid !== 'anon') {
-        const itemUid = item.user ? String(item.user) : (item.student_id ? String(item.student_id) : null);
-        if (itemUid && itemUid !== uid) {
-          return;
-        }
-      }
-      const dt = String(item.document_type || '').trim().toLowerCase();
-      if (dt === 'walk-in ftf' || dt === 'walk-in' || dt === 'walkin' || dt === 'ftf') {
-        item.document_type = item.credential_type_details?.name || resolveRequestDocType(item);
-      }
-      const key = item.tracking_number || item.trackingId || item.id;
-      if (key && !map.has(key)) {
-        map.set(key, item);
-      }
-    });
-
-    return Array.from(map.values()).sort(sortRequestsNewestFirst);
-  } catch (err) {
-    console.warn('Failed to load stored requests:', err);
-    return [];
-  }
+  purgeCorruptRequests();
+  return [];
 }
 
 /**
- * Save a newly submitted request into localStorage so it is instantly visible to Admin and Staff,
- * and dynamically trigger notifications for both student and staff/admin.
+ * Handle a newly submitted request: records activity timestamps, sends user notifications,
+ * and broadcasts refresh events across browser contexts without persisting bulky payloads to localStorage.
  */
 export function saveStoredRequest(requestItem, user = null) {
   try {
-    const existing = getStoredRequests(user);
-    const key = requestItem.tracking_number || requestItem.trackingId || requestItem.id;
-    const filtered = existing.filter((item) => {
-      const itemKey = item.tracking_number || item.trackingId || item.id;
-      return itemKey !== key;
-    });
-    const updated = [requestItem, ...filtered];
-
-    if (requestItem.clearance_preview) {
-      const meta = {
-        isPdf: Boolean(requestItem.clearance_is_pdf),
-        fileName: requestItem.clearance_file_name || (requestItem.clearance_is_pdf ? 'Student_Clearance.pdf' : 'Student_Clearance.jpg'),
-      };
-      saveClearanceAttachment(key, requestItem.clearance_preview, meta);
-      if (requestItem.student_id) {
-        saveClearanceAttachment(requestItem.student_id, requestItem.clearance_preview, meta);
-      }
-      if (requestItem.user) {
-        saveClearanceAttachment(String(requestItem.user), requestItem.clearance_preview, meta);
-      }
-    }
-
-    const storageKey = getRequestsStorageKey(user || requestItem.user);
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(updated));
-    } catch (quotaErr) {
-      console.warn('LocalStorage quota reached, saving trimmed request without bulky base64:', quotaErr);
-      const trimmed = updated.map((item) => ({
-        ...item,
-        clearance_preview: item.clearance_preview?.length > 10000 ? null : item.clearance_preview,
-        photo_preview: item.photo_preview?.length > 10000 ? null : item.photo_preview,
-      }));
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(trimmed));
-      } catch {}
-    }
+    const candidateIds = [
+      requestItem?.id,
+      requestItem?.rawId,
+      requestItem?.tracking_number,
+      requestItem?.trackingId,
+    ].filter(Boolean);
 
     // Always record activity timestamp so this request instantly sorts to the top
     const nowTime = Date.now();
@@ -845,23 +760,19 @@ export function saveStoredRequest(requestItem, user = null) {
         } catch {}
       }
     }
-    return updated;
+    return [requestItem];
   } catch (err) {
-    console.warn('Failed to save stored request:', err);
+    console.warn('Failed to save stored request notification:', err);
     return [];
   }
 }
 
 /**
- * Update the status, remarks, or staff assignment of a request in localStorage,
- * and dynamically trigger notifications when status updates.
+ * Handle a request update: records activity timestamp, sends notification for status changes,
+ * and broadcasts update event without persisting bulky payloads to localStorage.
  */
 export function updateStoredRequest(idOrTracking, patch, options = {}) {
   try {
-    const existing = getStoredRequests();
-    let targetMatched = null;
-    let previousStatus = null;
-
     const candidateIds = [
       idOrTracking,
       patch?.id,
@@ -876,84 +787,22 @@ export function updateStoredRequest(idOrTracking, patch, options = {}) {
       .filter((v) => v !== undefined && v !== null && String(v).trim() !== '')
       .map((v) => String(v).trim());
 
-    const updated = existing.map((item) => {
-      const itemKeys = [item.id, item.rawId, item.tracking_number, item.trackingId]
-        .filter((v) => v !== undefined && v !== null && String(v).trim() !== '')
-        .map((v) => String(v).trim());
-
-      const match = candidateIds.some((cid) => itemKeys.includes(cid));
-      if (match) {
-        previousStatus = item.status;
-        targetMatched = {
-          ...item,
-          ...patch,
-          updated_at: new Date().toISOString(),
-        };
-        return targetMatched;
-      }
-      return item;
-    });
-
-    // If the request originated from the backend API and was not in localStorage yet,
-    // upsert it so status, clearance verification, and payment confirmation persist locally!
-    const isLikelyTracking = (
-      String(idOrTracking || '').startsWith('REQ-') ||
-      /^[A-Z0-9]+-\d{2}-\d{2}-\d{2}-/i.test(String(idOrTracking || ''))
-    );
-    if (!targetMatched && (options.fallbackItem || patch?.tracking_number || isLikelyTracking)) {
-      const base = options.fallbackItem || {};
-      previousStatus = base.status || 'Pending';
-      const resolvedTracking =
-        patch?.tracking_number ||
-        base.tracking_number ||
-        base.trackingId ||
-        (isLikelyTracking ? String(idOrTracking) : String(base.id || idOrTracking));
-
-      targetMatched = {
-        ...base,
-        ...patch,
-        id: base.id || idOrTracking,
-        rawId: base.rawId || base.id || idOrTracking,
-        tracking_number: resolvedTracking,
-        created_at: base.created_at || base.request_date || new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      // Avoid storing circular `raw` reference
-      delete targetMatched.raw;
-      updated.unshift(targetMatched);
-    }
-
-    const storageKey = getRequestsStorageKey(options?.user);
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(updated));
-    } catch (quotaErr) {
-      console.warn('LocalStorage quota reached on update, saving trimmed request:', quotaErr);
-      const trimmed = updated.map((item) => ({
-        ...item,
-        clearance_preview: item.clearance_preview?.length > 10000 ? null : item.clearance_preview,
-        photo_preview: item.photo_preview?.length > 10000 ? null : item.photo_preview,
-        receipt_image: item.receipt_image?.length > 10000 ? null : item.receipt_image,
-      }));
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(trimmed));
-      } catch {}
-    }
-
     // Always record activity timestamp so this request instantly sorts to the top
     const nowTime = Date.now();
     candidateIds.forEach((cid) => {
       recordRequestActivityTimestamp(cid, nowTime);
     });
 
+    const targetMatched = options.fallbackItem || patch || {};
+    const previousStatus = targetMatched.status || 'Pending';
+
     // Exactly ONE notification per real status change (sent to the student).
-    // Callers that send their own tailored message pass { silentNotify: true }.
     const statusChanged =
       patch.status &&
-      targetMatched &&
       String(previousStatus || '').trim().toLowerCase() !== String(patch.status).trim().toLowerCase();
 
     if (statusChanged && !options.silentNotify) {
-      const trackingCode = targetMatched.tracking_number || targetMatched.trackingId || targetMatched.id;
+      const trackingCode = targetMatched.tracking_number || targetMatched.trackingId || targetMatched.id || idOrTracking;
       const docTitle = targetMatched.document_type || 'Document';
 
       saveStoredNotification({
@@ -978,17 +827,17 @@ export function updateStoredRequest(idOrTracking, patch, options = {}) {
         } catch {}
       }
     }
-    return updated;
+    return [targetMatched];
   } catch (err) {
-    console.warn('Failed to update stored request:', err);
+    console.warn('Failed to update request notification:', err);
     return [];
   }
 }
 
 export const requestsApi = {
   /**
-   * Fetch list of all credential requests (for Admin / Staff / Student).
-   * Combines backend database requests with submitted frontend requests.
+   * Fetch list of all credential requests directly from Django REST API.
+   * Completely live and never relies on localStorage caching.
    */
   list: async (params = {}, user = null) => {
     let backendResults = [];
@@ -1022,83 +871,7 @@ export const requestsApi = {
       }
     }
 
-    const localRequests = getStoredRequests(user);
-    if (!localRequests.length) {
-      return backendResults.filter(isValidRequest).sort(sortRequestsNewestFirst);
-    }
-
-    const combined = [...backendResults];
-    localRequests.forEach((loc) => {
-      const locKeys = [loc.tracking_number, loc.trackingId, loc.id, loc.rawId]
-        .filter((v) => v !== undefined && v !== null && String(v).trim() !== '')
-        .map((v) => String(v).trim());
-
-      const index = combined.findIndex((c) => {
-        const cKeys = [c.tracking_number, c.trackingId, c.id, c.rawId]
-          .filter((v) => v !== undefined && v !== null && String(v).trim() !== '')
-          .map((v) => String(v).trim());
-        return locKeys.some((k) => cKeys.includes(k));
-      });
-
-      if (index === -1) {
-        combined.unshift(loc);
-      } else {
-        const backendItem = combined[index];
-        const locStatusUpper = String(loc.status || '').trim().toUpperCase();
-        const backendStatusUpper = String(backendItem.status || '').trim().toUpperCase();
-        const locTime = loc.updated_at ? new Date(loc.updated_at).getTime() : 0;
-        const backendTime = backendItem.updated_at ? new Date(backendItem.updated_at).getTime() : 0;
-
-        let preferredStatus = backendItem.status || loc.status;
-        if (loc.status && locStatusUpper !== 'PENDING' && backendStatusUpper === 'PENDING') {
-          preferredStatus = loc.status;
-        } else if (backendItem.status && backendStatusUpper !== 'PENDING' && locStatusUpper === 'PENDING') {
-          preferredStatus = backendItem.status;
-        } else if (loc.status && locTime > backendTime) {
-          preferredStatus = loc.status;
-        }
-
-        combined[index] = {
-          ...backendItem,
-          ...loc,
-          id: backendItem.id || loc.id,
-          rawId: backendItem.id || loc.rawId || loc.id,
-          tracking_number: backendItem.tracking_number || loc.tracking_number || loc.id,
-          student_name: loc.student_name || backendItem.student_name,
-          student_id: loc.student_id || backendItem.student_id,
-          document_type: loc.document_type || resolveRequestDocType(backendItem) || backendItem.document_type,
-          copies: loc.copies || backendItem.copies || '1 copy',
-          amount: loc.amount || loc.assessed_amount || backendItem.amount,
-          assessed_amount: loc.assessed_amount || loc.amount || backendItem.assessed_amount || null,
-          price: loc.price || backendItem.price,
-          date_of_release: loc.date_of_release || loc.release_date || backendItem.date_of_release,
-          release_date: loc.release_date || loc.date_of_release || backendItem.release_date,
-          verified_by_name: loc.verified_by_name || backendItem.verified_by_name || null,
-          assigned_staff: loc.assigned_staff || backendItem.assigned_staff || null,
-          assigned_at: loc.assigned_at || backendItem.assigned_at || null,
-          accepted_at: loc.accepted_at || backendItem.accepted_at || null,
-          updated_at: loc.updated_at || backendItem.updated_at || loc.updatedAt || backendItem.updatedAt || null,
-          clearance_preview: loc.clearance_preview || backendItem.clearance_preview,
-          clearance_id: loc.clearance_id || backendItem.clearance_id || null,
-          clearance_is_pdf: loc.clearance_is_pdf ?? backendItem.clearance_is_pdf ?? false,
-          clearance_file_name: loc.clearance_file_name || backendItem.clearance_file_name || null,
-          clearance_status: loc.clearance_status || backendItem.clearance_status || null,
-          is_confirmed: Boolean(loc.is_confirmed || backendItem.is_confirmed),
-          confirmed_for_payment: Boolean(loc.confirmed_for_payment || backendItem.confirmed_for_payment),
-          payment_status: loc.payment_status || backendItem.payment_status || null,
-          payment_proof: loc.payment_proof || backendItem.payment_proof || null,
-          or_number: loc.or_number || backendItem.or_number || '',
-          receipt_image: loc.receipt_image || backendItem.receipt_image || null,
-          photo_preview: loc.photo_preview || backendItem.photo_preview,
-          purpose: loc.purpose || backendItem.remarks,
-          status: preferredStatus,
-          remarks: loc.remarks || backendItem.remarks,
-          notes: loc.notes || loc.remarks || backendItem.remarks,
-        };
-      }
-    });
-
-    return combined
+    return backendResults
       .filter(isValidRequest)
       .map((item) => {
         let enriched = { ...item };
@@ -1115,56 +888,6 @@ export const requestsApi = {
             enriched.assessed_amount = latestPay.amount;
           }
         }
-        if (!enriched.clearance_preview || (!enriched.clearance_preview.startsWith('data:') && !enriched.clearance_preview.startsWith('blob:'))) {
-          const clRec = getClearanceAttachment([
-            enriched.tracking_number,
-            enriched.id,
-            enriched.rawId,
-            enriched.student_id,
-            enriched.user,
-          ]);
-          if (clRec?.dataUrl) {
-            enriched.clearance_preview = clRec.dataUrl;
-            enriched.clearance_is_pdf = Boolean(clRec.meta?.isPdf || clRec.dataUrl.startsWith('data:application/pdf'));
-            enriched.clearance_file_name = clRec.meta?.fileName || enriched.clearance_file_name || 'Clearance Document';
-            enriched.clearance_status = enriched.clearance_status || 'PENDING';
-          }
-        }
-
-        // Validate if enriched.payment_proof actually belongs to this specific request
-        if (enriched.payment_proof) {
-          const recTracking = String(enriched.payment_proof.trackingNumber || '').trim().toUpperCase();
-          const recReqId = String(enriched.payment_proof.requestId || '').trim().toUpperCase();
-          const thisTracking = String(enriched.tracking_number || enriched.trackingId || '').trim().toUpperCase();
-          const thisId = String(enriched.id || enriched.rawId || '').trim().toUpperCase();
-
-          const belongs =
-            (recTracking && (recTracking === thisTracking || recTracking === thisId)) ||
-            (recReqId && (recReqId === thisTracking || recReqId === thisId));
-
-          if (!belongs) {
-            enriched.payment_proof = null;
-            if (enriched.payment_status === 'PAYMENT_SUBMITTED') {
-              enriched.payment_status = null;
-            }
-            enriched.or_number = '';
-            enriched.receipt_image = null;
-          }
-        }
-
-        const payProof = getStoredPaymentProof([
-          enriched.tracking_number,
-          enriched.id,
-          enriched.rawId,
-        ]);
-        if (payProof) {
-          enriched.payment_proof = payProof;
-          enriched.payment_status = enriched.payment_status || payProof.status;
-          enriched.or_number = enriched.or_number || payProof.receiptReferenceNumber;
-          enriched.receipt_image = enriched.receipt_image || payProof.receiptImage;
-          enriched.payment_submission_type = enriched.payment_submission_type || payProof.submissionType;
-        }
-
         return enriched;
       })
       .sort(sortRequestsNewestFirst);
@@ -1174,17 +897,8 @@ export const requestsApi = {
    * Fetch single request details by ID
    */
   get: async (id) => {
-    try {
-      const response = await apiClient.get(`/api/requests/${id}/`);
-      return response.data;
-    } catch {
-      const stored = getStoredRequests();
-      const matched = stored.find(
-        (r) => r.id === id || r.rawId === id || r.tracking_number === id || r.trackingId === id
-      );
-      if (matched) return matched;
-      throw new Error(`Request #${id} not found.`);
-    }
+    const response = await apiClient.get(`/api/requests/${id}/`);
+    return response.data;
   },
 
   /**

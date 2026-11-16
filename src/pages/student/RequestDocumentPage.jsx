@@ -1032,15 +1032,6 @@ export default function RequestDocumentPage() {
           fileName: clearanceFile?.name || (clearanceIsPdf ? 'Student_Clearance.pdf' : 'Student_Clearance.jpg'),
         };
         saveClearanceAttachment(trackingCode, clearancePreview, clMeta);
-        if (studentId) {
-          saveClearanceAttachment(studentId, clearancePreview, clMeta);
-        }
-        if (user?.id) {
-          saveClearanceAttachment(String(user.id), clearancePreview, clMeta);
-        }
-        if (user?.userId) {
-          saveClearanceAttachment(String(user.userId), clearancePreview, clMeta);
-        }
       }
 
       // Create notification for student that document request has been created

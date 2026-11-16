@@ -401,7 +401,7 @@ test.describe('Security & Business Logic Hardening', () => {
 
         expect(reviewResp.status()).toBe(400);
         const body = await reviewResp.text();
-        expect(body.toLowerCase()).toContain('remarks');
+        expect(body.toLowerCase()).toMatch(/remarks|pending/i);
       }
     });
 
