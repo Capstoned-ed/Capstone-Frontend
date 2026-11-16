@@ -15,10 +15,12 @@ export default function AdminDashboard() {
   const isRegistrar = user?.role === ROLES.REGISTRAR;
   const {
     loading,
+    error,
     statusDistribution,
     staffMetrics,
     dailyVolume,
     monthlyVolume,
+    refetch,
   } = useDashboardData();
 
   const [staffMetricsPage, setStaffMetricsPage] = useState(1);
@@ -32,6 +34,22 @@ export default function AdminDashboard() {
     (safeStaffMetricsPage - 1) * STAFF_METRICS_PAGE_SIZE,
     safeStaffMetricsPage * STAFF_METRICS_PAGE_SIZE
   );
+
+  // Trigger live backend GET on mount and sync on updates
+  useEffect(() => {
+    refetch();
+    const handleSync = () => {
+      refetch();
+    };
+    window.addEventListener('regquest_requests_updated', handleSync);
+    window.addEventListener('regquest_users_updated', handleSync);
+    window.addEventListener('regquest_assignments_updated', handleSync);
+    return () => {
+      window.removeEventListener('regquest_requests_updated', handleSync);
+      window.removeEventListener('regquest_users_updated', handleSync);
+      window.removeEventListener('regquest_assignments_updated', handleSync);
+    };
+  }, [refetch]);
 
   useEffect(() => {
     if (
@@ -243,7 +261,11 @@ export default function AdminDashboard() {
 
         {/* Section 4: User Role Overview */}
         <section id="users">
-          <UserTable overviewOnly />
+          <UserTable
+            overviewOnly
+            onUserUpdated={() => refetch()}
+            onUserDeactivated={() => refetch()}
+          />
         </section>
       </div>
     </div>

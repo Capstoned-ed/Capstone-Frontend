@@ -107,10 +107,20 @@ export default function useDashboardData() {
 
     async function loadDashboardData() {
       try {
+        setError(null);
         const [requestsRes, typesRes, usersRes] = await Promise.all([
-          requestsApi.list().catch(() => []),
-          requestsApi.getCredentialTypes().catch(() => []),
-          usersApi.getStaffDirectory().catch(() => []),
+          requestsApi.list().catch((err) => {
+            console.warn('Dashboard requestsApi.list error:', err);
+            return [];
+          }),
+          requestsApi.getCredentialTypes().catch((err) => {
+            console.warn('Dashboard getCredentialTypes error:', err);
+            return [];
+          }),
+          usersApi.getStaffDirectory().catch((err) => {
+            console.warn('Dashboard getStaffDirectory error:', err);
+            return [];
+          }),
         ]);
 
         if (ignore) return;
@@ -250,6 +260,29 @@ export default function useDashboardData() {
             pending: staffPending,
           };
         });
+
+        // Add Unassigned Queue summary if there are active unassigned requests
+        const unassignedReqs = validRequests.filter((r) =>
+          !activeStaff.some((staff) => isRequestAssignedToUser(r, staff, assignments, users))
+        );
+        if (unassignedReqs.length > 0) {
+          const unassignedCompleted = unassignedReqs.filter((r) => isCompletedRequest(r, archivedMap)).length;
+          const unassignedRemaining = unassignedReqs.filter((r) => !isCompletedRequest(r, archivedMap));
+          const unassignedForProcessing = unassignedRemaining.filter(isForProcessingRequest).length;
+          const unassignedProcessing = unassignedRemaining.filter(isProcessingRequest).length;
+          const unassignedPending = unassignedRemaining.filter(
+            (r) => !isForProcessingRequest(r) && !isProcessingRequest(r)
+          ).length;
+
+          computedStaffMetrics.unshift({
+            name: 'Unassigned / Queue',
+            completed: unassignedCompleted,
+            forProcessing: unassignedForProcessing,
+            processing: unassignedProcessing,
+            pending: unassignedPending,
+          });
+        }
+
         setStaffMetrics(computedStaffMetrics);
 
         // -------------------------------------------------------------
@@ -347,12 +380,16 @@ export default function useDashboardData() {
       loadDashboardData();
     };
     window.addEventListener('regquest_requests_updated', handleSync);
+    window.addEventListener('regquest_users_updated', handleSync);
+    window.addEventListener('regquest_assignments_updated', handleSync);
     window.addEventListener('regquest_archived_updated', handleSync);
     window.addEventListener('regquest_staff_assignments_updated', handleSync);
 
     return () => {
       ignore = true;
       window.removeEventListener('regquest_requests_updated', handleSync);
+      window.removeEventListener('regquest_users_updated', handleSync);
+      window.removeEventListener('regquest_assignments_updated', handleSync);
       window.removeEventListener('regquest_archived_updated', handleSync);
       window.removeEventListener('regquest_staff_assignments_updated', handleSync);
     };

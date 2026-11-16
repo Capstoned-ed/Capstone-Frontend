@@ -393,7 +393,7 @@ export default function StaffRequestsPage() {
         r.tracking_number !== undefined && r.tracking_number !== null ? String(r.tracking_number) : null,
       ].filter(Boolean);
 
-      const isClaimedByMe = rKeys.some((k) => {
+      const isClaimedByMe = isRequestAssignedToUser(r, user, assignments, users) || rKeys.some((k) => {
         const claimVal = claimedMap[k];
         if (claimVal) {
           const cStr = String(claimVal).trim().toLowerCase();
@@ -732,6 +732,7 @@ export default function StaffRequestsPage() {
     setSelectedIds(new Set());
     setSelectionModeTable(null);
     setBatchModalOpen(false);
+    loadData();
   };
 
   const handleBatchClaimAndProcess = () => {
@@ -870,6 +871,7 @@ export default function StaffRequestsPage() {
     toast.success(`Now processing ${selectedRequestsList.length} request(s)! Successfully assigned to you.`);
     setSelectedIds(new Set());
     setSelectionModeTable(null);
+    loadData();
   };
 
   const getStatusBadge = (status) => {
@@ -1239,6 +1241,7 @@ export default function StaffRequestsPage() {
       );
 
       setSelectedRequest(null);
+      loadData();
     } catch (err) {
       console.error('Failed to update status:', err);
       toast.error('Failed to update request status.');
@@ -1269,6 +1272,7 @@ export default function StaffRequestsPage() {
               setActiveTab('active');
               setSelectionModeTable(null);
               setSelectedIds(new Set());
+              loadData();
             }}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
               activeTab === 'active'
@@ -1286,6 +1290,7 @@ export default function StaffRequestsPage() {
               setSelectionModeTable(null);
               setSelectedIds(new Set());
               setStatusFilter('');
+              loadData();
             }}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
               activeTab === 'history'

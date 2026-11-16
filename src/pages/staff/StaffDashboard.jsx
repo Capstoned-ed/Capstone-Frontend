@@ -111,36 +111,7 @@ export default function StaffDashboard() {
         clearancesApi.list().catch(() => []),
       ]);
 
-      const stored = getStoredRequests();
-      const combinedRaw = [...backendRequests];
-
-      stored.forEach((s) => {
-        const sKeys = [s.tracking_number, s.trackingId, s.id, s.rawId]
-          .filter((v) => v !== undefined && v !== null && String(v).trim() !== '')
-          .map((v) => String(v).trim());
-
-        const existingIdx = combinedRaw.findIndex((b) => {
-          const bKeys = [b.tracking_number, b.trackingId, b.id, b.rawId]
-            .filter((v) => v !== undefined && v !== null && String(v).trim() !== '')
-            .map((v) => String(v).trim());
-          return sKeys.some((k) => bKeys.includes(k));
-        });
-
-        if (existingIdx === -1) {
-          combinedRaw.push(s);
-        } else {
-          const prev = combinedRaw[existingIdx];
-          const sStatusUpper = String(s.status || '').trim().toUpperCase();
-          combinedRaw[existingIdx] = {
-            ...prev,
-            ...s,
-            status:
-              (s.updated_at && s.status) || (s.status && sStatusUpper !== 'PENDING')
-                ? s.status
-                : prev.status || s.status,
-          };
-        }
-      });
+      const combinedRaw = Array.isArray(backendRequests) ? [...backendRequests] : [];
 
       const userMap = new Map();
       if (Array.isArray(usersRes)) {
@@ -367,7 +338,8 @@ export default function StaffDashboard() {
     });
 
     toast.success(`Request ${item.id} moved to History.`);
-  }, [user, toast]);
+    loadDashboardData();
+  }, [user, toast, loadDashboardData]);
 
   const targetRequestsForMetrics = useMemo(() => {
     if (String(user?.role || '').toLowerCase() === 'staff') {
@@ -1243,6 +1215,7 @@ export default function StaffDashboard() {
                   : item
               )
             );
+            loadDashboardData();
           }}
         />
       )}
