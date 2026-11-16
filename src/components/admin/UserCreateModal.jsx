@@ -119,7 +119,14 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
           }
         });
         setErrors(fieldErrors);
-        toast.error(nonFieldMsg || 'Failed to provision user. Please fix the form errors.');
+        const allFieldErrors = Object.entries(fieldErrors)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(' | ');
+        toast.error(
+          nonFieldMsg ||
+          allFieldErrors ||
+          'Failed to provision user. Please fix the form errors.'
+        );
       } else {
         toast.error('Network or server error provisioning user.');
       }

@@ -617,7 +617,18 @@ export default function ProcessRequestModal({
       onClose();
     } catch (err) {
       console.warn('Reject error:', err);
-      toast.error('Failed to reject request.');
+      const data = err.response?.data;
+      let detail = 'Failed to reject request.';
+      if (typeof data === 'string') detail = data;
+      else if (data?.detail) detail = data.detail;
+      else if (typeof data === 'object' && data !== null) {
+        detail = Object.entries(data)
+          .map(([k, v]) => `${k !== 'non_field_errors' ? `${k}: ` : ''}${Array.isArray(v) ? v.join(' ') : v}`)
+          .join(' | ');
+      } else if (err.message) {
+        detail = err.message;
+      }
+      toast.error(detail);
     } finally {
       setLoading(false);
     }
@@ -962,7 +973,21 @@ export default function ProcessRequestModal({
       onClose();
     } catch (err) {
       console.error('Failed to transition request:', err);
-      const detail = err.response?.data?.detail || err.response?.data?.message || err.message || 'Status transition failed.';
+      const data = err.response?.data;
+      let detail = 'Status transition failed.';
+      if (typeof data === 'string') {
+        detail = data;
+      } else if (data?.detail) {
+        detail = data.detail;
+      } else if (data?.message) {
+        detail = data.message;
+      } else if (typeof data === 'object' && data !== null) {
+        detail = Object.entries(data)
+          .map(([k, v]) => `${k !== 'non_field_errors' ? `${k}: ` : ''}${Array.isArray(v) ? v.join(' ') : v}`)
+          .join(' | ');
+      } else if (err.message) {
+        detail = err.message;
+      }
       toast.error(detail);
     } finally {
       setLoading(false);
