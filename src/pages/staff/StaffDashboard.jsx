@@ -107,7 +107,7 @@ export default function StaffDashboard() {
       const [backendRequests, credTypesRes, usersRes, clearancesRes] = await Promise.all([
         requestsApi.list().catch(() => []),
         requestsApi.getCredentialTypes().catch(() => []),
-        usersApi.list().catch(() => []),
+        usersApi.getStaffDirectory().catch(() => []),
         clearancesApi.list().catch(() => []),
       ]);
 
@@ -264,15 +264,6 @@ export default function StaffDashboard() {
           if (/^student\s*#?\s*[1-4]$/i.test(sName) || /^student\s*#?\s*[1-4]$/i.test(sId)) {
             return false;
           }
-          if (r.id || r.tracking_number) {
-            return true;
-          }
-          if (
-            (r.student_name === 'Student' || r.student_name === 'N/A' || !r.student_name) &&
-            (r.student_id === 'N/A' || r.student_id === '—' || !r.student_id)
-          ) {
-            return false;
-          }
           return true;
         })
         .sort(sortRequestsNewestFirst);
@@ -379,15 +370,21 @@ export default function StaffDashboard() {
   }, [user, toast]);
 
   const targetRequestsForMetrics = useMemo(() => {
-    return String(user?.role || '').toLowerCase() === 'staff' ? assignedRequests : requestsList;
-  }, [user, assignedRequests, requestsList]);
+    if (String(user?.role || '').toLowerCase() === 'staff') {
+      return assignedRequests.length > 0 ? assignedRequests : requestsList.filter((r) => !isRequestArchived(r, archivedMap));
+    }
+    return requestsList;
+  }, [user, assignedRequests, requestsList, archivedMap]);
 
   // All requests assigned to this user (or all requests for admin/master) - UNFILTERED by selected calendar date
   const allUserRequests = useMemo(() => {
-    return String(user?.role || '').toLowerCase() === 'staff'
-      ? requestsList.filter((r) => isRequestAssignedToUser(r, user, assignments, usersList))
-      : requestsList;
-  }, [user, requestsList, assignments, usersList]);
+    if (String(user?.role || '').toLowerCase() === 'staff') {
+      return assignedRequests.length > 0
+        ? requestsList.filter((r) => isRequestAssignedToUser(r, user, assignments, usersList))
+        : requestsList.filter((r) => !isRequestArchived(r, archivedMap));
+    }
+    return requestsList;
+  }, [user, requestsList, assignments, usersList, assignedRequests.length, archivedMap]);
 
   const metrics = useMemo(() => {
     const total = targetRequestsForMetrics.length;
@@ -1206,26 +1203,28 @@ export default function StaffDashboard() {
             </button>
           </div>
 
-          {/* My Assigned Requests */}
+          {/* My Assigned Requests / Department Processing Queue */}
           <StaffRequestsTable
-            title="My Assigned Requests"
+            title={assignedRequests.length > 0 ? "My Assigned Requests" : "Requests Ready for Processing"}
             subtitle={
               selectedCalendarDate
-                ? `Showing requests assigned to you matching ${selectedCalendarDate} (${assignedRequests.length} found)`
-                : 'Requests assigned to you that are ready for processing'
+                ? `Showing requests matching ${selectedCalendarDate} (${(assignedRequests.length > 0 ? assignedRequests : requestsList).length} found)`
+                : assignedRequests.length > 0
+                ? 'Requests assigned to you that are ready for processing'
+                : 'Available department requests ready for staff assignment & processing'
             }
-            badgeCount={assignedRequests.length}
+            badgeCount={assignedRequests.length > 0 ? assignedRequests.length : requestsList.filter((r) => !isRequestArchived(r, archivedMap)).length}
             loading={loading}
-            filteredRequests={assignedRequests}
-            totalRequestsCount={assignedRequests.length}
+            filteredRequests={assignedRequests.length > 0 ? assignedRequests : requestsList.filter((r) => !isRequestArchived(r, archivedMap))}
+            totalRequestsCount={assignedRequests.length > 0 ? assignedRequests.length : requestsList.filter((r) => !isRequestArchived(r, archivedMap)).length}
             getStatusBadge={getStatusBadge}
             onOpenProcess={handleOpenProcess}
             actionType="view"
             onArchive={handleArchiveRequest}
             emptyMessage={
               selectedCalendarDate
-                ? `No assigned requests found for ${selectedCalendarDate}.`
-                : 'No requests currently assigned to you for processing.'
+                ? `No requests found for ${selectedCalendarDate}.`
+                : 'No document requests in the processing queue.'
             }
           />
         </div>

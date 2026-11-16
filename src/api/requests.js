@@ -257,6 +257,15 @@ export function isRequestAssignedToUser(request, currentUser, assignmentsMap = n
       '';
   }
 
+  // 5. Fallback to assigned tag in remarks (e.g. "[Assigned to: Faith]" or "Assigned to: Faith")
+  if (assignedVal === null || assignedVal === undefined || assignedVal === '') {
+    const rem = String(request.remarks || request.raw?.remarks || request.notes || '');
+    const match = rem.match(/\[Assigned(?:\s+to)?:\s*([^\]]+)\]/i) || rem.match(/Assigned(?:\s+to)?:\s*([^|\n\r;]+)/i);
+    if (match) {
+      assignedVal = match[1].trim();
+    }
+  }
+
   if (!assignedVal) return false;
 
   let assignedStr = '';
@@ -272,6 +281,9 @@ export function isRequestAssignedToUser(request, currentUser, assignmentsMap = n
 
   for (const candidate of candidates) {
     if (assignedStr === candidate) return true;
+    if (candidate.length >= 3 && (assignedStr.includes(candidate) || candidate.includes(assignedStr))) {
+      return true;
+    }
   }
 
   return false;
@@ -1004,7 +1016,10 @@ export const requestsApi = {
         };
       });
     } catch (err) {
-      console.warn('requestsApi.list backend returned error, using local requests:', err);
+      console.warn('requestsApi.list backend returned error:', err);
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        throw err;
+      }
     }
 
     const localRequests = getStoredRequests(user);

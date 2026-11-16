@@ -110,7 +110,7 @@ export default function useDashboardData() {
         const [requestsRes, typesRes, usersRes] = await Promise.all([
           requestsApi.list().catch(() => []),
           requestsApi.getCredentialTypes().catch(() => []),
-          usersApi.list().catch(() => []),
+          usersApi.getStaffDirectory().catch(() => []),
         ]);
 
         if (ignore) return;
