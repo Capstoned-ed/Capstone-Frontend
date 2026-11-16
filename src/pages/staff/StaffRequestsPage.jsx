@@ -160,16 +160,9 @@ export default function StaffRequestsPage() {
 
         let usersRes = [];
         try {
-          usersRes = await usersApi.list();
-          if (Array.isArray(usersRes) && usersRes.length > 0) {
-            localStorage.setItem('regquest_users_cache', JSON.stringify(usersRes));
-          }
+          usersRes = await usersApi.getStaffDirectory();
         } catch {
-          try {
-            usersRes = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
-          } catch {
-            usersRes = [];
-          }
+          usersRes = [];
         }
 
         if (!ignore) {
@@ -512,18 +505,6 @@ export default function StaffRequestsPage() {
       if (/^student\s*#?\s*[1-4]$/i.test(sName) || /^student\s*#?\s*[1-4]$/i.test(sId)) {
         return false;
       }
-      if (r.id || r.tracking_number) {
-        return true;
-      }
-      if (
-        (r.student_name === 'Student' || r.student_name === 'N/A' || !r.student_name) &&
-        (r.student_id === 'N/A' || !r.student_id)
-      ) {
-        return false;
-      }
-      if (r.request_date === 'N/A' && r.release_date === 'N/A') {
-        return false;
-      }
       return true;
     });
 
@@ -832,6 +813,20 @@ export default function StaffRequestsPage() {
         status: currentStatus,
       });
 
+      // Persist staff claim/assignment to backend so it survives Incognito & fresh sessions
+      try {
+        const targetBackendId = rawId || item.raw?.id || item.id || trackingNo;
+        const currentRemarks = item.remarks || item.purpose || '';
+        const cleanRemarks = currentRemarks.replace(/\[Assigned(?:\s+to)?:\s*[^\]]+\]/gi, '').trim();
+        const updatedRemarks = cleanRemarks
+          ? `${cleanRemarks} | [Assigned to: ${staffName}]`
+          : `[Assigned to: ${staffName}]`;
+        requestsApi.transition(targetBackendId, {
+          status: item.rawStatus || 'PENDING',
+          remarks: updatedRemarks,
+        }, { throwOnError: false }).catch(() => {});
+      } catch {}
+
       recordRequestActivityTimestamp(trackingNo || reqId || rawId, now);
     }
 
@@ -1011,6 +1006,20 @@ export default function StaffRequestsPage() {
           fallbackItem: updatedItem,
         }
       );
+
+      // Persist staff assignment to backend so it survives Incognito & fresh sessions
+      try {
+        const targetBackendId = rawId || item.raw?.id || item.id || trackingNo;
+        const currentRemarks = item.remarks || item.purpose || '';
+        const cleanRemarks = currentRemarks.replace(/\[Assigned(?:\s+to)?:\s*[^\]]+\]/gi, '').trim();
+        const updatedRemarks = cleanRemarks
+          ? `${cleanRemarks} | [Assigned to: ${staffName}]`
+          : `[Assigned to: ${staffName}]`;
+        requestsApi.transition(targetBackendId, {
+          status: item.rawStatus || 'PENDING',
+          remarks: updatedRemarks,
+        }, { throwOnError: false }).catch(() => {});
+      } catch {}
 
       // 6. Update raw requests state immediately
       setRawRequests((prev) =>

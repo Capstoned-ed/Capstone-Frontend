@@ -37,6 +37,18 @@ export async function loginAs(
   await passwordInput.fill(creds.password);
   await submitButton.click();
 
+  // Retry once if Render has a cold-start transient network error
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const errorAlert = page.getByText(/Unable to connect to the authentication server/i);
+    const hasError = await errorAlert.waitFor({ state: 'visible', timeout: 4000 }).then(() => true).catch(() => false);
+    if (hasError) {
+      await page.waitForTimeout(2000);
+      await submitButton.click();
+    } else {
+      break;
+    }
+  }
+
   // Wait for post-login redirect according to role (60s to accommodate Render cold start latency)
   const expectedPath = role === 'student' 
     ? '/student' 

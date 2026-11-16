@@ -102,7 +102,7 @@ export default function ProcessingCalendarPage() {
       const [backendRequests, credTypesRes, usersRes, clearancesRes] = await Promise.all([
         requestsApi.list().catch(() => []),
         requestsApi.getCredentialTypes().catch(() => []),
-        usersApi.list().catch(() => []),
+        usersApi.getStaffDirectory().catch(() => []),
         clearancesApi.list().catch(() => []),
       ]);
 
@@ -203,15 +203,6 @@ export default function ProcessingCalendarPage() {
           const sName = String(r.student_name || '').toLowerCase();
           const sId = String(r.student_id || '').toLowerCase();
           if (/^student\s*#?\s*[1-4]$/i.test(sName) || /^student\s*#?\s*[1-4]$/i.test(sId)) {
-            return false;
-          }
-          if (r.id || r.tracking_number) {
-            return true;
-          }
-          if (
-            (r.student_name === 'Student' || r.student_name === 'N/A' || !r.student_name) &&
-            (r.student_id === 'N/A' || r.student_id === '—' || !r.student_id)
-          ) {
             return false;
           }
           return true;

@@ -201,11 +201,10 @@ export default function RegistrarRequestsPage() {
 
         let usersRes = [];
         try {
-          usersRes = await usersApi.list();
-          if (Array.isArray(usersRes) && usersRes.length > 0) {
-            localStorage.setItem('regquest_users_cache', JSON.stringify(usersRes));
-          }
-        } catch {}
+          usersRes = await usersApi.getStaffDirectory();
+        } catch {
+          usersRes = [];
+        }
 
         if (!ignore) {
           setRawRequests(Array.isArray(requestsRes) ? requestsRes : []);
@@ -522,18 +521,6 @@ export default function RegistrarRequestsPage() {
         if (/^student\s*#?\s*[1-4]$/i.test(sName) || /^student\s*#?\s*[1-4]$/i.test(sId)) {
           return false;
         }
-        if (r.id || r.tracking_number) {
-          return true;
-        }
-        if (
-          (r.student_name === 'Student' || r.student_name === 'N/A' || !r.student_name) &&
-          (r.student_id === 'N/A' || !r.student_id)
-        ) {
-          return false;
-        }
-        if (r.request_date === 'N/A' && r.release_date === 'N/A') {
-          return false;
-        }
         return true;
       })
       .sort(sortRequestsNewestFirst);
@@ -662,13 +649,22 @@ export default function RegistrarRequestsPage() {
       );
 
       // Backend API transition if applicable
-      const isBackendId = Boolean(rawId) && !String(rawId).startsWith('TRK-') && !String(rawId).startsWith('REQ-');
-      if (isBackendId) {
+      const targetBackendId = rawId || requestId;
+      if (targetBackendId && !String(targetBackendId).startsWith('TRK-')) {
+        const currentReq = rawRequests.find(
+          (r) => String(r.id) === String(rawId) || String(r.id) === String(requestId) || String(r.tracking_number) === String(requestId)
+        );
+        const currentStatus = currentReq?.status ? normalizeToBackendStatus(currentReq.status) : 'PENDING';
+        const currentRemarks = currentReq?.remarks || '';
+        const cleanRemarks = currentRemarks.replace(/\[Assigned(?:\s+to)?:\s*[^\]]+\]/gi, '').trim();
+        const updatedRemarks = cleanRemarks
+          ? `${cleanRemarks} | [Assigned to: ${staffName}]`
+          : `[Assigned to: ${staffName}]`;
         requestsApi
-          .transition(rawId, {
-            status: 'PAYMENT_VERIFIED',
-            remarks: `Assigned to ${staffName} for processing by registrar`,
-          })
+          .transition(targetBackendId, {
+            status: currentStatus,
+            remarks: updatedRemarks,
+          }, { throwOnError: false })
           .catch(() => {});
       }
     }

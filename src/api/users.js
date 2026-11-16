@@ -142,28 +142,38 @@ export const usersApi = {
     return response.data;
   },
 
-  async list(params = {}) {
+  async getStaffDirectory() {
     try {
-      const response = await apiClient.get('/api/users/', { params });
+      const response = await apiClient.get('/api/users/staff-directory/');
       const data = Array.isArray(response.data) ? response.data : (response.data?.results || []);
-      return mergeUsersWithCache(data);
-    } catch {
-      return mergeUsersWithCache([]);
+      return data;
+    } catch (err) {
+      // If staff-directory endpoint returns 404 or 403, fallback to listing active staff/admin
+      if (err.response?.status === 404 || err.response?.status === 403) {
+        try {
+          const response = await apiClient.get('/api/users/');
+          const raw = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+          return raw.filter((u) => {
+            const r = String(u.role || '').toLowerCase();
+            return (r === 'staff' || r === 'registrar' || r === 'admin') && u.is_active !== false;
+          });
+        } catch {
+          return [];
+        }
+      }
+      throw err;
     }
   },
 
+  async list(params = {}) {
+    const response = await apiClient.get('/api/users/', { params });
+    const data = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+    return data;
+  },
+
   async get(id) {
-    try {
-      const response = await apiClient.get(`/api/users/${id}/`);
-      const overrides = getUserOverrides();
-      const u = response.data;
-      const byId = overrides[String(id)] || {};
-      const byUsername = u?.username ? overrides[String(u.username).toLowerCase()] || {} : {};
-      return { ...u, ...byUsername, ...byId };
-    } catch {
-      const all = getCachedUsers();
-      return all.find((u) => String(u.id) === String(id)) || null;
-    }
+    const response = await apiClient.get(`/api/users/${id}/`);
+    return response.data;
   },
 
   async create(userData) {

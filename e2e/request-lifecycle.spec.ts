@@ -22,6 +22,8 @@ async function resolveRequestUuid(
 }
 
 test.describe.serial('Core Document Request & Processing Workflow Lifecycle', () => {
+  test.setTimeout(120000);
+
   let primaryTrackingId = '';
   let primaryUuid = '';
   let secondTrackingId = '';
@@ -71,9 +73,15 @@ test.describe.serial('Core Document Request & Processing Workflow Lifecycle', ()
     });
 
     // Check Transcript of Records (TOR)
-    const torCheckbox = page.locator('.ustp-doc-label input[type="checkbox"]').first();
+    const torCheckbox = page.locator('#ustp-part-2-section input[type="checkbox"], .ustp-doc-label input[type="checkbox"]').first();
     await expect(torCheckbox).toBeVisible({ timeout: 10000 });
-    await torCheckbox.check({ force: true });
+    if (!(await torCheckbox.isChecked())) {
+      const docLabel = page.locator('#ustp-part-2-section label, .ustp-doc-label').first();
+      await docLabel.click();
+      if (!(await torCheckbox.isChecked())) {
+        await torCheckbox.check({ force: true }).catch(() => {});
+      }
+    }
 
     // Select purpose
     const purposeCheckbox = page.locator('.ustp-checkbox-row').filter({ hasText: /Evaluation|Personal File|Scholarship/i }).first();
@@ -140,6 +148,7 @@ test.describe.serial('Core Document Request & Processing Workflow Lifecycle', ()
     await loginAs(page, 'staff');
     await page.goto('/staff/requests');
     await page.waitForLoadState('domcontentloaded');
+    await expect(page.getByText(/Loading requests from server/i)).not.toBeVisible({ timeout: 30000 }).catch(() => {});
 
     // 3. Verify submitted Reference ID appears in Staff table
     const searchInput = page.locator('input[placeholder*="Search"]').first();
@@ -207,6 +216,7 @@ test.describe.serial('Core Document Request & Processing Workflow Lifecycle', ()
     // 6. Reload page and verify updated status persists cleanly
     await page.reload();
     await page.waitForLoadState('domcontentloaded');
+    await expect(page.getByText(/Loading requests from server/i)).not.toBeVisible({ timeout: 30000 }).catch(() => {});
     await searchInput.fill(primaryTrackingId);
     await page.waitForTimeout(500);
     const rowAfterReload = page.locator('tr').filter({ hasText: primaryTrackingId }).first();
@@ -241,6 +251,7 @@ test.describe.serial('Core Document Request & Processing Workflow Lifecycle', ()
     // Reload page again to verify PROCESSING status persists cleanly
     await page.reload();
     await page.waitForLoadState('domcontentloaded');
+    await expect(page.getByText(/Loading requests from server/i)).not.toBeVisible({ timeout: 30000 }).catch(() => {});
     await searchInput.fill(primaryTrackingId);
     await page.waitForTimeout(500);
     const processingRow = page.locator('tr').filter({ hasText: primaryTrackingId }).first();
@@ -286,17 +297,18 @@ test.describe.serial('Core Document Request & Processing Workflow Lifecycle', ()
 
     await page.goto('/staff/requests');
     await page.waitForLoadState('domcontentloaded');
+    await expect(page.getByText(/Loading requests from server/i)).not.toBeVisible({ timeout: 30000 }).catch(() => {});
 
     const historyTabBtn = page.getByRole('button', { name: /Request History|Completed/i });
     if (await historyTabBtn.isVisible()) {
       await historyTabBtn.click();
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(1000);
       const historySearch = page.locator('input[placeholder*="Search"]').first();
       if (await historySearch.isVisible()) {
         await historySearch.fill(primaryTrackingId);
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(1000);
       }
-      await expect(page.locator('body')).toContainText(primaryTrackingId, { timeout: 15000 });
+      await expect(page.locator('body')).toContainText(primaryTrackingId, { timeout: 20000 });
       await expect(page.locator('body')).toContainText(/Claimed|Released/i);
     }
   });
