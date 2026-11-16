@@ -231,7 +231,9 @@ export default function RequestDocumentPage() {
 
   // Helper to accurately map selected document names to backend database CredentialType IDs
   const resolveCredentialTypeId = (docName, typesList = []) => {
-    if (!docName || !Array.isArray(typesList) || typesList.length === 0) return 1;
+    if (!docName || !Array.isArray(typesList) || typesList.length === 0) {
+      return typesList?.[0]?.id || 'TOR';
+    }
     const lower = docName.toLowerCase();
 
     // 1. Exact match by name or code if DB has it
@@ -272,7 +274,7 @@ export default function RequestDocumentPage() {
     const matched = typesList.find((t) => lower.includes(t.name.toLowerCase()) || t.name.toLowerCase().includes(lower));
     if (matched) return matched.id;
 
-    return typesList[0]?.id || 1;
+    return typesList[0]?.id || 'TOR';
   };
 
   // Get document info, price, and database type ID

@@ -736,7 +736,7 @@ export default function StaffRequestsPage() {
     loadData();
   };
 
-  const handleBatchClaimAndProcess = () => {
+  const handleBatchClaimAndProcess = async () => {
     if (selectedRequestsList.length === 0) return;
 
     const staffName =
@@ -822,10 +822,18 @@ export default function StaffRequestsPage() {
         const updatedRemarks = cleanRemarks
           ? `${cleanRemarks} | [Assigned to: ${staffName}]`
           : `[Assigned to: ${staffName}]`;
-        requestsApi.transition(targetBackendId, {
-          status: item.rawStatus || 'PENDING',
+        await requestsApi.assign(targetBackendId, {
+          assigned_staff: user?.username || staffName,
+          in_process_queue: true,
           remarks: updatedRemarks,
-        }, { throwOnError: false }).catch(() => {});
+        }).catch(async () => {
+          return requestsApi.transition(targetBackendId, {
+            status: item.rawStatus || 'PENDING',
+            remarks: updatedRemarks,
+            assigned_staff: user?.username || staffName,
+            in_process_queue: true,
+          }, { throwOnError: false });
+        });
       } catch {}
 
       recordRequestActivityTimestamp(trackingNo || reqId || rawId, now);
@@ -872,7 +880,7 @@ export default function StaffRequestsPage() {
     toast.success(`Now processing ${selectedRequestsList.length} request(s)! Successfully assigned to you.`);
     setSelectedIds(new Set());
     setSelectionModeTable(null);
-    loadData();
+    await loadData();
     requestAnimationFrame(() => {
       myAssignedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
@@ -923,7 +931,7 @@ export default function StaffRequestsPage() {
     setNotes('');
   };
 
-  const handleClaimAndProcess = (item, options = {}) => {
+  const handleClaimAndProcess = async (item, options = {}) => {
     if (!item) return;
 
     const reqId = item.id;
@@ -1009,7 +1017,7 @@ export default function StaffRequestsPage() {
         }
       );
 
-      // Persist staff assignment to backend so it survives Incognito & fresh sessions
+      // Persist staff assignment to backend DB so it survives Incognito & fresh sessions
       try {
         const targetBackendId = rawId || item.raw?.id || item.id || trackingNo;
         const currentRemarks = item.remarks || item.purpose || '';
@@ -1017,10 +1025,18 @@ export default function StaffRequestsPage() {
         const updatedRemarks = cleanRemarks
           ? `${cleanRemarks} | [Assigned to: ${staffName}]`
           : `[Assigned to: ${staffName}]`;
-        requestsApi.transition(targetBackendId, {
-          status: item.rawStatus || 'PENDING',
+        await requestsApi.assign(targetBackendId, {
+          assigned_staff: user?.username || staffName,
+          in_process_queue: true,
           remarks: updatedRemarks,
-        }, { throwOnError: false }).catch(() => {});
+        }).catch(async () => {
+          return requestsApi.transition(targetBackendId, {
+            status: item.rawStatus || 'PENDING',
+            remarks: updatedRemarks,
+            assigned_staff: user?.username || staffName,
+            in_process_queue: true,
+          }, { throwOnError: false });
+        });
       } catch {}
 
       // 6. Update raw requests state immediately
@@ -1063,6 +1079,8 @@ export default function StaffRequestsPage() {
       recordRequestActivityTimestamp(trackingNo || reqId || rawId, now);
       window.dispatchEvent(new Event('regquest_assignments_updated'));
       window.dispatchEvent(new Event('regquest_requests_updated'));
+
+      await loadData();
 
       // 9. Scroll directly to My Assigned Requests
       requestAnimationFrame(() => {
