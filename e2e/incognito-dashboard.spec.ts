@@ -10,6 +10,18 @@ test.describe('Incognito & Clean Storage Dashboard Verification', () => {
     const context = await browser.newContext({ storageState: undefined });
     const page = await context.newPage();
 
+    // Track API GET calls
+    const apiGets = new Set<string>();
+    page.on('response', (res) => {
+      const req = res.request();
+      if (req.method() === 'GET' && res.status() === 200) {
+        const url = req.url();
+        if (url.includes('/api/requests/')) apiGets.add('requests');
+        if (url.includes('/api/users/staff-directory/')) apiGets.add('staff-directory');
+        if (url.includes('/api/credentials/forecast/daily/')) apiGets.add('daily-forecast');
+      }
+    });
+
     // Verify localStorage starts completely clean
     await page.goto('/login');
     const initialStorageCount = await page.evaluate(() => window.localStorage.length);
@@ -22,6 +34,11 @@ test.describe('Incognito & Clean Storage Dashboard Verification', () => {
     // 3. Verify Staff Dashboard elements load live data
     await page.goto('/staff/dashboard');
     await page.waitForLoadState('domcontentloaded');
+
+    // Wait for core GET requests to fire
+    await expect.poll(() => apiGets.has('requests'), { timeout: 20000 }).toBe(true);
+    await expect.poll(() => apiGets.has('staff-directory'), { timeout: 20000 }).toBe(true);
+    await expect.poll(() => apiGets.has('daily-forecast'), { timeout: 20000 }).toBe(true);
 
     // Hero title is visible
     const heroTitle = page.locator('.staff-dash-hero-title');
@@ -80,6 +97,19 @@ test.describe('Incognito & Clean Storage Dashboard Verification', () => {
     const context = await browser.newContext({ storageState: undefined });
     const page = await context.newPage();
 
+    // Track API GET calls
+    const apiGets = new Set<string>();
+    page.on('response', (res) => {
+      const req = res.request();
+      if (req.method() === 'GET' && res.status() === 200) {
+        const url = req.url();
+        if (url.includes('/api/requests/')) apiGets.add('requests');
+        if (url.includes('/api/users/staff-directory/')) apiGets.add('staff-directory');
+        if (url.includes('/api/users/')) apiGets.add('users');
+        if (url.includes('/api/credentials/forecast/daily/')) apiGets.add('daily-forecast');
+      }
+    });
+
     // Verify localStorage starts completely clean
     await page.goto('/login');
     const initialStorageCount = await page.evaluate(() => window.localStorage.length);
@@ -92,6 +122,12 @@ test.describe('Incognito & Clean Storage Dashboard Verification', () => {
     // 3. Verify Admin Dashboard live data
     await page.goto('/admin/dashboard');
     await page.waitForLoadState('domcontentloaded');
+
+    // Wait for core GET requests to fire
+    await expect.poll(() => apiGets.has('requests'), { timeout: 20000 }).toBe(true);
+    await expect.poll(() => apiGets.has('staff-directory'), { timeout: 20000 }).toBe(true);
+    await expect.poll(() => apiGets.has('users'), { timeout: 20000 }).toBe(true);
+    await expect.poll(() => apiGets.has('daily-forecast'), { timeout: 20000 }).toBe(true);
 
     // Banner title
     const bannerTitle = page.locator('.admin-banner-title');

@@ -106,15 +106,7 @@ export default function ProcessingCalendarPage() {
         clearancesApi.list().catch(() => []),
       ]);
 
-      const stored = getStoredRequests();
-      const combinedRaw = [...backendRequests];
-
-      stored.forEach((s) => {
-        const key = s.tracking_number || s.id;
-        if (!combinedRaw.some((b) => (b.tracking_number || b.id) === key)) {
-          combinedRaw.push(s);
-        }
-      });
+      const combinedRaw = Array.isArray(backendRequests) ? [...backendRequests] : [];
 
       const userMap = new Map();
       if (Array.isArray(usersRes)) {
