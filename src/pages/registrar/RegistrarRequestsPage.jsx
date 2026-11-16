@@ -160,24 +160,47 @@ export default function RegistrarRequestsPage() {
     toast.success(`Request ${item.id || reqId} marked as Done and moved to Request History.`);
   };
 
-  const handleRestoreRequest = (item) => {
+  const handleRestoreRequest = async (item) => {
     if (!item) return;
+    if (String(currentUser?.role || '').toUpperCase() !== 'ADMIN') {
+      toast.error('Only administrators can restore or reopen requests.');
+      return;
+    }
     const reqId = item.id || item.rawId || item.tracking_number;
-    setRequestArchived(reqId, false, currentUser, { fallbackItem: item });
-    setArchivedMap(getArchivedRequestsMap());
-    logProcessedAction({
-      actor: currentUser?.username,
-      actorName: currentUser?.full_name || currentUser?.username,
-      actorId: currentUser?.id,
-      actorRole: currentUser?.role || 'registrar',
-      targetName: item.student_name,
-      targetId: item.student_id || reqId,
-      trackingNumber: item.tracking_number || reqId,
-      documentType: item.document_type,
-      action: 'Restored request from History to Active Queue',
-      status: item.status || 'Claimed',
-    });
-    toast.success(`Request ${item.id || reqId} restored to Active Queue.`);
+    try {
+      const restored = await requestsApi.restore(item.id || item.rawId);
+      setRequestArchived(reqId, false, currentUser, { fallbackItem: item });
+      setArchivedMap(getArchivedRequestsMap());
+
+      updateStoredRequest(reqId, {
+        status: restored?.status || 'Pending',
+        rawStatus: restored?.status || 'PENDING',
+        is_archived: false,
+        in_process_queue: true,
+      });
+
+      logProcessedAction({
+        actor: currentUser?.username,
+        actorName: currentUser?.full_name || currentUser?.username,
+        actorId: currentUser?.id,
+        actorRole: 'admin',
+        targetName: item.student_name,
+        targetId: item.student_id || reqId,
+        trackingNumber: item.tracking_number || reqId,
+        documentType: item.document_type,
+        action: `Restored request from History to Active Queue (${restored?.status || 'Active'})`,
+        status: restored?.status || 'Claimed',
+      });
+
+      if (typeof loadData === 'function') {
+        await loadData();
+      }
+      toast.success(`Request ${item.id || reqId} restored to Active Queue (${formatStatusDisplay(restored?.status)}).`);
+    } catch (err) {
+      console.error('Failed to restore request:', err);
+      const msg = err.response?.data?.detail || 'Failed to restore request.';
+      toast.error(msg);
+    }
   };
 
   useEffect(() => {
@@ -1833,17 +1856,19 @@ export default function RegistrarRequestsPage() {
                         </td>
                         <td className="text-right whitespace-nowrap">
                           <div className="inline-flex items-center justify-end gap-2 flex-nowrap whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => handleRestoreRequest(item)}
-                              className="staff-btn-restore"
-                              title="Restore back to Active Processing queue"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                              </svg>
-                              <span>Restore</span>
-                            </button>
+                            {String(currentUser?.role || '').toUpperCase() === 'ADMIN' && (
+                              <button
+                                type="button"
+                                onClick={() => handleRestoreRequest(item)}
+                                className="staff-btn-restore"
+                                title="Restore back to Active Processing queue"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                <span>Restore</span>
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => handleOpenProcess(item)}
@@ -1884,7 +1909,7 @@ export default function RegistrarRequestsPage() {
             getStatusBadge={getStatusBadge}
             onOpenProcess={handleOpenProcess}
             actionType="history"
-            onRestore={handleRestoreRequest}
+            onRestore={String(currentUser?.role || '').toUpperCase() === 'ADMIN' ? handleRestoreRequest : null}
             showAssignedStaff={true}
             emptyMessage="No claimed document requests in history yet."
             enableSelection={true}
