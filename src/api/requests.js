@@ -910,6 +910,14 @@ export const requestsApi = {
   },
 
   /**
+   * Assign staff member to request and add to processing queue in backend DB
+   */
+  assign: async (id, payload = {}) => {
+    const response = await apiClient.patch(`/api/requests/${id}/assign/`, payload);
+    return response.data;
+  },
+
+  /**
    * Transition request status (e.g. PAYMENT_VERIFIED -> PROCESSING -> READY_FOR_RELEASE)
    */
   transition: async (id, payload, { throwOnError = true } = {}) => {
