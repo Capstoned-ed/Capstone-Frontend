@@ -70,15 +70,7 @@ export default function AnalyticsGraphsPage() {
         requestsApi.getCredentialTypes().catch(() => []),
       ]);
 
-      const stored = getStoredRequests();
-      const combined = [...(Array.isArray(backendRequests) ? backendRequests : [])];
-
-      stored.forEach((s) => {
-        const key = s.tracking_number || s.id;
-        if (!combined.some((b) => (b.tracking_number || b.id) === key)) {
-          combined.push(s);
-        }
-      });
+      const combined = Array.isArray(backendRequests) ? backendRequests : [];
 
       setRequestsList(combined.filter(isValidRequest));
       setCredTypes(Array.isArray(typesRes) ? typesRes : []);
