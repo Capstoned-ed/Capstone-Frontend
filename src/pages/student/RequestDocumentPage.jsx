@@ -9,6 +9,7 @@ import requestsApi, {
 } from '../../api/requests';
 import { saveStoredNotification } from '../../api/notifications';
 import credentialTypesApi from '../../api/credentialTypes';
+import settingsApi from '../../api/settings';
 import clearancesApi, { saveClearanceAttachment } from '../../api/clearances';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
@@ -37,6 +38,19 @@ export default function RequestDocumentPage() {
     initialDraft?.currentStep === 2 ? 2 : 1
   );
   const [credentialTypes, setCredentialTypes] = useState([]);
+  const [activeRegistrarName, setActiveRegistrarName] = useState('Jonalin T. Lagrada, MPSM');
+
+  useEffect(() => {
+    let active = true;
+    settingsApi.getRegistrarApproval().then((data) => {
+      if (active && data?.active_registrar_name) {
+        setActiveRegistrarName(data.active_registrar_name);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const resolveStudentName = (u) => {
     if (u?.full_name) return u.full_name;
@@ -1743,7 +1757,7 @@ export default function RequestDocumentPage() {
                   <div className="ustp-signoff-approved">
                     <span className="ustp-signoff-label">Approved:</span>
                     <div className="ustp-registrar-name">
-                      <p className="ustp-registrar-title">Jonalin T. Lagrada, MPSM</p>
+                      <p className="ustp-registrar-title">{activeRegistrarName || 'Jonalin T. Lagrada, MPSM'}</p>
                       <p className="ustp-registrar-role">University Registrar</p>
                     </div>
                   </div>

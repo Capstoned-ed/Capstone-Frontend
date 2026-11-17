@@ -497,6 +497,26 @@ export default function StaffRequestsPage() {
           r.updated_at ||
           r.updatedAt ||
           null,
+        is_approved: Boolean(
+          matchedStored?.is_approved !== undefined
+            ? matchedStored.is_approved
+            : (r.is_approved !== undefined ? r.is_approved : false)
+        ),
+        is_auto_approved: Boolean(
+          matchedStored?.is_auto_approved !== undefined
+            ? matchedStored.is_auto_approved
+            : (r.is_auto_approved !== undefined ? r.is_auto_approved : false)
+        ),
+        approved_by_name:
+          matchedStored?.approved_by_name ||
+          r.approved_by_name ||
+          '',
+        approved_at:
+          matchedStored?.approved_at ||
+          r.approved_at ||
+          null,
+        payments: r.payments || matchedStored?.payments || [],
+        raw: r,
       };
     })
     .filter((r) => {
