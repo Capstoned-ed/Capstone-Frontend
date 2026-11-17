@@ -532,10 +532,10 @@ export default function StaffProfileModal({ isOpen, onClose }) {
                     Role Authority
                   </span>
                   <div className="text-base font-bold text-slate-800 truncate">
-                    {isAdmin ? 'Full System Admin' : 'Registrar Operations'}
+                    {isAdmin ? 'Full System Admin' : isRegistrar ? 'Registrar Operations' : 'Staff'}
                   </div>
                   <span className="text-[11px] text-emerald-600 font-medium mt-0.5 block">
-                    &bull; Active Session ({user?.username})
+                    &bull; Active Session
                   </span>
                 </div>
               </div>
@@ -543,7 +543,7 @@ export default function StaffProfileModal({ isOpen, onClose }) {
               {/* Account Management & Updates Log Table */}
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-lg font-bold text-[#000080]">
-                  {isAdmin ? 'My Account Management & Process Log' : 'My Processed Requests Log'}
+                  {isAdmin ? 'Process Log' : 'My Processed Requests Log'}
                 </h3>
                 <span className="text-xs text-slate-500 font-medium">
                   Account: <strong className="text-slate-700 font-mono">{user?.username}</strong>

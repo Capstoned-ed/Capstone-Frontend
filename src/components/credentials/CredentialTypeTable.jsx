@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { compareCredentialCodes } from '../../api/credentialTypes';
 
 /**
  * CredentialTypeTable Component
@@ -25,20 +26,23 @@ export default function CredentialTypeTable({
     }).format(val);
   };
 
-  const filteredTypes = credentialTypes.filter((type) => {
-    const q = searchQuery.toLowerCase().trim();
-    const matchesSearch =
-      !q ||
-      type.code?.toLowerCase().includes(q) ||
-      type.name?.toLowerCase().includes(q) ||
-      type.description?.toLowerCase().includes(q);
+  const filteredTypes = credentialTypes
+    .filter((type) => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        type.code?.toLowerCase().includes(q) ||
+        type.doc_code?.toLowerCase().includes(q) ||
+        type.name?.toLowerCase().includes(q) ||
+        type.description?.toLowerCase().includes(q);
 
-    if (!matchesSearch) return false;
+      if (!matchesSearch) return false;
 
-    if (statusFilter === 'ACTIVE') return type.is_active;
-    if (statusFilter === 'INACTIVE') return !type.is_active;
-    return true;
-  });
+      if (statusFilter === 'ACTIVE') return type.is_active;
+      if (statusFilter === 'INACTIVE') return !type.is_active;
+      return true;
+    })
+    .sort(compareCredentialCodes);
 
   return (
     <div className="credentials-table-card">
@@ -152,7 +156,7 @@ export default function CredentialTypeTable({
                 <tr key={type.id} className="credentials-row">
                   {/* Short Code */}
                   <td className="credentials-td">
-                    <span className="badge-code">{type.code}</span>
+                    <span className="badge-code">{type.doc_code || type.code}</span>
                   </td>
 
                   {/* Name & Description */}
