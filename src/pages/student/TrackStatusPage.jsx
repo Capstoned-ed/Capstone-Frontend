@@ -498,12 +498,19 @@ export default function TrackStatusPage() {
       dateOfRelease = estimatedCompletion || 'Pending schedule';
     }
 
+    const orNumber =
+      matchedRequest.or_number ||
+      matchedRequest.receipt_reference_number ||
+      (matchedRequest.payments && matchedRequest.payments[0]?.receipt_reference_number) ||
+      '';
+
     return {
       studentName,
       course,
       dateOfRequest,
       credentialRequested,
       dateOfRelease,
+      orNumber,
     };
   }, [matchedRequest, user, matchedCred, estimatedCompletion]);
 
