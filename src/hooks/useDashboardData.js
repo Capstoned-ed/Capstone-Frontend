@@ -9,6 +9,11 @@ import requestsApi, {
   getProcessedActions,
 } from '../api/requests';
 import usersApi from '../api/users';
+import {
+  getVolumeDocKey,
+  createEmptyVolumeBucket,
+  sumVolumeBucket,
+} from '../api/credentialTypes';
 import { ROLES } from '../constants/roles';
 
 function isCompletedRequest(r, archivedMap) {
@@ -293,15 +298,7 @@ export default function useDashboardData() {
 
         // Monthly: Jan through Dec of current year
         const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const monthsData = monthLabels.map((label) => ({
-          label,
-          transcript: 0,
-          dismissal: 0,
-          evaluation: 0,
-          car: 0,
-          enrolled: 0,
-          totalLine: 0,
-        }));
+        const monthsData = monthLabels.map((label) => createEmptyVolumeBucket({ label }));
 
         requests.forEach((r) => {
           const reqDateStr = toLocalDateStr(r.request_date || r.created_at);
@@ -309,7 +306,7 @@ export default function useDashboardData() {
           const [y, m] = reqDateStr.split('-').map(Number);
           if (y === currentYear && m >= 1 && m <= 12) {
             const monthIdx = m - 1;
-            const docKey = getDocTypeKey(r, types);
+            const docKey = getVolumeDocKey(r, types);
             const copies = parseInt(r.copies) || 1;
             monthsData[monthIdx][docKey] = (monthsData[monthIdx][docKey] || 0) + copies;
           }
@@ -317,7 +314,7 @@ export default function useDashboardData() {
 
         const computedMonthlyVolume = monthsData.map((d) => ({
           ...d,
-          totalLine: d.transcript + d.dismissal + d.evaluation + d.car + d.enrolled,
+          totalLine: sumVolumeBucket(d),
         }));
         setMonthlyVolume(computedMonthlyVolume);
 
@@ -332,16 +329,7 @@ export default function useDashboardData() {
           const d = new Date(monday);
           d.setDate(monday.getDate() + idx);
           const dateStr = toLocalDateStr(d);
-          return {
-            label,
-            dateStr,
-            transcript: 0,
-            dismissal: 0,
-            evaluation: 0,
-            car: 0,
-            enrolled: 0,
-            totalLine: 0,
-          };
+          return createEmptyVolumeBucket({ label, dateStr });
         });
 
         const dateIndexMap = {};
@@ -353,7 +341,7 @@ export default function useDashboardData() {
           const reqDateStr = toLocalDateStr(r.request_date || r.created_at);
           if (reqDateStr && dateIndexMap[reqDateStr] !== undefined) {
             const idx = dateIndexMap[reqDateStr];
-            const docKey = getDocTypeKey(r, types);
+            const docKey = getVolumeDocKey(r, types);
             const copies = parseInt(r.copies) || 1;
             daysData[idx][docKey] = (daysData[idx][docKey] || 0) + copies;
           }
@@ -361,7 +349,7 @@ export default function useDashboardData() {
 
         const computedDailyVolume = daysData.map((d) => ({
           ...d,
-          totalLine: d.transcript + d.dismissal + d.evaluation + d.car + d.enrolled,
+          totalLine: sumVolumeBucket(d),
         }));
         setDailyVolume(computedDailyVolume);
 
