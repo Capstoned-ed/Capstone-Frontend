@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ROLES } from '../../constants/roles';
 import usersApi from '../../api/users';
 import useToast from '../../hooks/useToast';
+import { useAuth } from '../../hooks/useAuth';
 
 const getNameError = (val, label = 'Name') => {
   if (!val) return '';
@@ -17,6 +18,12 @@ const getNumericError = (val, label = 'Contact Number') => {
 
 function EditUserForm({ user, onClose, onUserUpdated }) {
   const toast = useToast();
+  const { user: currentUser } = useAuth();
+  const isSelf = currentUser && (
+    String(user.id) === String(currentUser.id) ||
+    String(user.id) === String(currentUser.userId) ||
+    (user.username && currentUser.username && user.username.toLowerCase() === currentUser.username.toLowerCase())
+  );
   const cachedStaff = (() => {
     try {
       const profiles = JSON.parse(localStorage.getItem('regquest_staff_profiles') || '{}');
@@ -297,9 +304,10 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
           </label>
           <select
             name="role"
+            disabled={isSelf}
             value={formData.role}
             onChange={handleChange}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            className={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${isSelf ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
           >
             <option value={ROLES.REGISTRAR}>Registrar</option>
             <option value={ROLES.STAFF}>Staff</option>
@@ -321,9 +329,10 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
           <input
             type="checkbox"
             name="is_active"
+            disabled={isSelf}
             checked={formData.is_active}
             onChange={handleChange}
-            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+            className={`w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 ${isSelf ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
           />
           <span className="text-xs font-semibold text-slate-700 select-none">
             Account Status is Active (Permit login access)

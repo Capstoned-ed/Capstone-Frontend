@@ -1,11 +1,13 @@
 import React, { useRef, useState } from 'react';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 import useToast from '../../hooks/useToast';
 import '../../styles/student/TrackStatusPage.css';
 
 /**
  * Reusable official USTP Claim Stub Modal.
  * Matches the official USTP Claim Stub paper format.
- * Supports crisp PDF download (via html2pdf.js) and standard printing.
+ * Supports crisp PDF download and standard printing.
  */
 export default function ClaimStubModal({
   isOpen,
@@ -24,22 +26,45 @@ export default function ClaimStubModal({
     const element = claimStubRef.current;
     if (!element || downloading) return;
     setDownloading(true);
+    const safeRef = trackingNumber || claimStubDetails?.tracking_number || claimStubDetails?.id || 'DOC';
+    const filename = `Claim-Stub-${safeRef}.pdf`;
+
     try {
-      const html2pdfModule = await import('html2pdf.js');
-      const html2pdf = html2pdfModule.default || html2pdfModule;
-      const safeTracking = trackingNumber || 'DOC';
-      const opt = {
-        margin: [10, 10, 10, 10],
-        filename: `USTP_Claim_Stub_${safeTracking}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
-      };
-      await html2pdf().set(opt).from(element).save();
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      const finalHeight = Math.min(pdfHeight, pdf.internal.pageSize.getHeight());
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, finalHeight);
+      pdf.save(filename);
       toast.success('Claim Stub downloaded successfully!');
     } catch (err) {
       console.error('Failed to generate Claim Stub PDF:', err);
-      toast.error('Could not download PDF. You can use the Print button instead.');
+      try {
+        const canvasFallback = await html2canvas(element, { scale: 2, logging: false });
+        const link = document.createElement('a');
+        link.download = filename.replace('.pdf', '.png');
+        link.href = canvasFallback.toDataURL('image/png');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success('Claim Stub downloaded as PNG!');
+      } catch (fallbackErr) {
+        toast.error('Could not download file. You can use the Print button instead.');
+      }
     } finally {
       setDownloading(false);
     }

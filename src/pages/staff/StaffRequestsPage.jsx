@@ -280,9 +280,6 @@ export default function StaffRequestsPage() {
           r.tracking_number,
           r.id,
           r.rawId,
-          r.student_id,
-          r.user,
-          String(r.user),
         ]);
 
         const userClearance =
@@ -456,8 +453,8 @@ export default function StaffRequestsPage() {
           clearance_preview: effectiveClearancePreview,
           clearance_id: r.clearance_id || userClearance?.id || null,
           clearance_status:
-            matchedStored?.clearance_status ||
             r.clearance_status ||
+            matchedStored?.clearance_status ||
             (effectiveClearancePreview ? 'PENDING' : null),
           clearance_file_name: effectiveClearanceFileName,
           clearance_is_pdf: effectiveClearanceIsPdf,

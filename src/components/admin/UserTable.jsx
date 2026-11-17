@@ -7,6 +7,7 @@ import useToast from '../../hooks/useToast';
 import UserEditModal from './UserEditModal';
 import UserDeleteDialog from './UserDeleteDialog';
 import TablePagination from '../common/TablePagination';
+import { useAuth } from '../../hooks/useAuth';
 import '../../styles/admin/UserTable.css';
 
 const PAGE_SIZE = 10;
@@ -22,6 +23,7 @@ export default function UserTable({
 }) {
   const toast = useToast();
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
   const [internalUsers, setInternalUsers] = useState([]);
   const [internalLoading, setInternalLoading] = useState(true);
   const [internalError, setInternalError] = useState(null);
@@ -386,39 +388,55 @@ export default function UserTable({
                       {/* Actions: [Change Role] & [Deactivate / Activate] */}
                       {!overviewOnly && (
                         <td className="user-table-cell">
-                          <div className="action-btn-group">
-                            {/* Update / Change Role Button (Solid Blue) */}
-                            <button
-                              type="button"
-                              onClick={() => setEditingUser(user)}
-                              className="btn-change-role"
+                          {currentUser && (
+                            String(user.id) === String(currentUser.id) ||
+                            String(user.id) === String(currentUser.userId) ||
+                            (user.username && currentUser.username && user.username.toLowerCase() === currentUser.username.toLowerCase())
+                          ) ? (
+                            <span
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 cursor-not-allowed select-none"
+                              title="You cannot modify or deactivate your own active account"
                             >
-                              Update / Change Role
-                            </button>
+                              <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                              </svg>
+                              <span>Current Account (Protected)</span>
+                            </span>
+                          ) : (
+                            <div className="action-btn-group">
+                              {/* Update / Change Role Button (Solid Blue) */}
+                              <button
+                                type="button"
+                                onClick={() => setEditingUser(user)}
+                                className="btn-change-role"
+                              >
+                                Update / Change Role
+                              </button>
 
-                            {/* Deactivate Button (Red Outline) or Activate */}
-                            {user.is_active ? (
-                              <button
-                                type="button"
-                                onClick={() => setDeactivatingUser(user)}
-                                className="btn-deactivate"
-                              >
-                                Deactivate
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleReactivate(user)}
-                                disabled={actionLoadingId === user.id}
-                                className="btn-activate"
-                              >
-                                {actionLoadingId === user.id ? (
-                                  <div className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-                                ) : null}
-                                <span>Activate</span>
-                              </button>
-                            )}
-                          </div>
+                              {/* Deactivate Button (Red Outline) or Activate */}
+                              {user.is_active ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setDeactivatingUser(user)}
+                                  className="btn-deactivate"
+                                >
+                                  Deactivate
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleReactivate(user)}
+                                  disabled={actionLoadingId === user.id}
+                                  className="btn-activate"
+                                >
+                                  {actionLoadingId === user.id ? (
+                                    <div className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                                  ) : null}
+                                  <span>Activate</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </td>
                       )}
                     </tr>

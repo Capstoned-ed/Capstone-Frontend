@@ -1104,7 +1104,7 @@ export default function RequestDocumentPage() {
         related_object_type: 'CredentialRequest',
         related_object_id: trackingCode,
         target_role: 'staff',
-        target_roles: ['admin', 'staff', 'registrar'],
+        target_roles: ['staff', 'registrar'],
       });
 
       toast.success('Your credential request was successfully submitted!');

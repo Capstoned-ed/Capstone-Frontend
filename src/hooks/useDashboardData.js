@@ -214,15 +214,14 @@ export default function useDashboardData() {
         setStatusDistribution(computedStatusDistribution);
 
         // -------------------------------------------------------------
-        // 2. Compute Dynamic Staff Performance Metrics (per-staff)
+        // 2. Compute Dynamic Staff Performance Metrics (strictly STAFF role, sorted descending)
         // -------------------------------------------------------------
         const staffUsers = users.filter((u) => {
           const r = String(u.role || '').toLowerCase();
-          return r === ROLES.STAFF || r === ROLES.REGISTRAR;
+          return r === ROLES.STAFF || r === 'staff';
         });
-        const activeStaff = staffUsers.length > 0 ? staffUsers : users.filter((u) => String(u.role || '').toLowerCase() === ROLES.ADMIN);
 
-        const computedStaffMetrics = activeStaff.map((staff) => {
+        const computedStaffMetrics = staffUsers.map((staff) => {
           const displayName = staff.first_name && staff.last_name
             ? `${staff.first_name} ${staff.last_name}`
             : staff.full_name || staff.first_name || staff.username;
@@ -264,6 +263,14 @@ export default function useDashboardData() {
             processing: staffProcessing,
             pending: staffPending,
           };
+        }).sort((a, b) => {
+          // Sort descending: highest completed first, then highest total workload
+          if (b.completed !== a.completed) {
+            return b.completed - a.completed;
+          }
+          const bTotal = b.completed + b.forProcessing + b.processing + b.pending;
+          const aTotal = a.completed + a.forProcessing + a.processing + a.pending;
+          return bTotal - aTotal;
         });
 
         setStaffMetrics(computedStaffMetrics);

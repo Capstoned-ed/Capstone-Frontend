@@ -39,9 +39,21 @@ export function NotificationProvider({ children }) {
         const combined = [];
 
         // 1. Backend notifications are primary source of truth (isolated per authenticated user by Django)
+        const currentRole = String(user?.role || '').toLowerCase();
         if (Array.isArray(backendData)) {
           backendData.forEach((item) => {
             if (item && item.id) {
+              // Enforce strict role isolation: Admin never receives operational request processing alerts
+              if (currentRole === 'admin') {
+                const isRequestProcessingEvent =
+                  item.event_type === 'REQUEST_CREATED' ||
+                  item.event_type === 'CLEARANCE_SUBMITTED' ||
+                  item.event_type === 'PAYMENT_SUBMITTED' ||
+                  item.related_object_type === 'CredentialRequest' ||
+                  item.related_object_type === 'StudentClearance' ||
+                  item.related_object_type === 'Payment';
+                if (isRequestProcessingEvent) return;
+              }
               const idStr = String(item.id);
               seenIds.add(idStr);
               combined.push({
