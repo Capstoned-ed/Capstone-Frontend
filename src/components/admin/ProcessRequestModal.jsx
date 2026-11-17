@@ -278,7 +278,13 @@ export default function ProcessRequestModal({
     const reqDateFormatted = requestItem.request_date || (requestItem.created_at ? new Date(requestItem.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
     const relDateFormatted = dateOfRelease || requestItem.date_of_release || requestItem.release_date || '—';
     const resolvedStudentName = requestItem.student_name || requestItem.user_full_name || requestItem.student_id || 'Student';
-    const orNum = activeOrNumber || requestItem.or_number || requestItem.receipt_reference_number || (payments && payments[0]?.receipt_reference_number) || '';
+    const reqPayments = requestItem.payments || [];
+    const orNum =
+      activeOrNumber ||
+      requestItem.or_number ||
+      requestItem.receipt_reference_number ||
+      (Array.isArray(reqPayments) && reqPayments[0]?.receipt_reference_number) ||
+      '';
     return {
       studentName: resolvedStudentName,
       course: requestItem.course || requestItem.program || '—',
@@ -287,7 +293,7 @@ export default function ProcessRequestModal({
       dateOfRelease: relDateFormatted,
       orNumber: orNum,
     };
-  }, [requestItem, dateOfRelease, activeOrNumber, payments]);
+  }, [requestItem, dateOfRelease, activeOrNumber]);
 
   const statusOptions = useMemo(() => {
     const role = String(user?.role || '').trim().toUpperCase();
