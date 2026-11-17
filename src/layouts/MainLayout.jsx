@@ -79,6 +79,21 @@ export default function MainLayout({ children }) {
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-y-auto overflow-x-hidden">
+        {/* Top Header Bar for Desktop */}
+        <header className="hidden md:flex bg-white border-b border-slate-200/80 px-6 py-2.5 items-center justify-between sticky top-0 z-40 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <span className="font-bold text-sm text-[#0B0B36]">
+              {isAdminDashboard ? 'Admin Portal' : isStaffDashboard ? 'Staff Portal' : isStudentDashboard ? 'Student Portal' : 'RegQuest'}
+            </span>
+            <span className="text-[11px] bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full font-semibold capitalize border border-slate-200">
+              {user?.role}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <NotificationBell variant="light" dropdownPositionClass="top-full right-0 mt-2" />
+          </div>
+        </header>
+
         <main className={`flex-1 w-full ${isAdminDashboard || isStudentDashboard || isStaffDashboard ? 'p-0 max-w-none' : isStudentView ? 'px-4 sm:px-8 pt-4 sm:pt-6 pb-6 max-w-7xl mx-auto' : 'p-6 sm:p-8 max-w-7xl mx-auto'}`}>
           {children ? children : <Outlet />}
         </main>
