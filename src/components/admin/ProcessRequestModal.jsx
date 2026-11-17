@@ -112,6 +112,10 @@ export default function ProcessRequestModal({
   });
 
   // Payment Proof States
+  const latestPayment = Array.isArray(requestItem?.payments) && requestItem.payments.length > 0
+    ? requestItem.payments[requestItem.payments.length - 1]
+    : null;
+
   const [paymentProof, setPaymentProof] = useState(null);
   const [walkinOrNumber, setWalkinOrNumber] = useState('');
   const [showInlineReceipt, setShowInlineReceipt] = useState(false);
@@ -125,13 +129,23 @@ export default function ProcessRequestModal({
       s === 'READY_FOR_RELEASE' ||
       s === 'CLAIMED' ||
       s === 'RELEASED';
-    if (requestItem?.payment_status === 'VERIFIED' || (isPastPayment && requestItem?.or_number)) {
+    if (
+      requestItem?.payment_status === 'VERIFIED' ||
+      latestPayment?.status === 'VERIFIED' ||
+      (isPastPayment && (requestItem?.or_number || latestPayment?.receipt_reference_number))
+    ) {
       return 'VERIFIED';
     }
-    if (requestItem?.payment_status === 'REJECTED') {
+    if (requestItem?.payment_status === 'REJECTED' || latestPayment?.status === 'REJECTED') {
       return 'REJECTED';
     }
-    if (requestItem?.receipt_image || requestItem?.or_number || requestItem?.payment_status === 'PAYMENT_SUBMITTED') {
+    if (
+      requestItem?.receipt_image ||
+      requestItem?.or_number ||
+      latestPayment?.receipt_image ||
+      latestPayment?.receipt_reference_number ||
+      requestItem?.payment_status === 'PAYMENT_SUBMITTED'
+    ) {
       return 'PENDING';
     }
     return 'NOT_SUBMITTED';
@@ -142,6 +156,7 @@ export default function ProcessRequestModal({
     paymentProof?.receiptImage ||
     paymentProof?.receiptDataUrl ||
     requestItem?.receipt_image ||
+    latestPayment?.receipt_image ||
     null;
 
   const [receiptBlobUrl, setReceiptBlobUrl] = useState(null);
@@ -188,6 +203,8 @@ export default function ProcessRequestModal({
     walkinOrNumber.trim() ||
     paymentProof?.receiptReferenceNumber ||
     requestItem?.or_number ||
+    requestItem?.receipt_reference_number ||
+    latestPayment?.receipt_reference_number ||
     ''
   );
 
@@ -228,7 +245,6 @@ export default function ProcessRequestModal({
 
   const canOverrideStatus = Boolean(
     isClearanceVerified &&
-    isPaymentVerified &&
     (!isPersistedTerminal || isAdmin)
   );
 
@@ -261,8 +277,6 @@ export default function ProcessRequestModal({
         toast.warning('Cannot change status: This request is already completed or closed.');
       } else if (!isClearanceVerified) {
         toast.warning('Cannot change status: Please verify student clearance first.');
-      } else {
-        toast.warning('Cannot change status: Payment must be verified first.');
       }
       return;
     }
@@ -2043,9 +2057,9 @@ export default function ProcessRequestModal({
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                       </svg>
                       <span>
-                        {!isClearanceVerified
-                          ? 'Locked: Clearance not yet verified'
-                          : 'Locked: Payment not yet verified'}
+                        {isPersistedTerminal && !isAdmin
+                          ? 'Locked: Request completed'
+                          : 'Locked: Clearance not yet verified'}
                       </span>
                     </span>
                   )}
@@ -2061,10 +2075,10 @@ export default function ProcessRequestModal({
                         : ''
                     }`}
                     title={
-                      !isClearanceVerified
+                      isPersistedTerminal && !isAdmin
+                        ? 'Manual status override is locked: Request is already completed.'
+                        : !isClearanceVerified
                         ? 'Manual status override is locked: Please verify student clearance first.'
-                        : !isPaymentVerified
-                        ? 'Manual status override is locked: Payment must be verified first.'
                         : 'Select status to override'
                     }
                   >
@@ -2088,9 +2102,9 @@ export default function ProcessRequestModal({
                       <line x1="12" y1="8" x2="12.01" y2="8" />
                     </svg>
                     <span>
-                      {!isClearanceVerified
-                        ? 'Manual status override cannot be changed until clearance is verified.'
-                        : 'Manual status override cannot be changed until student payment is verified.'}
+                      {isPersistedTerminal && !isAdmin
+                        ? 'Manual status override is locked for completed requests.'
+                        : 'Manual status override cannot be changed until clearance is verified.'}
                     </span>
                   </p>
                 )}

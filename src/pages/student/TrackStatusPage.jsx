@@ -212,13 +212,21 @@ export default function TrackStatusPage() {
   }, [rawRequests, user]);
 
   // Split student requests into Active vs History
-  // Automatically move Claimed / Released requests directly to History!
+  // Automatically move Claimed / Released and Cancelled requests directly to History!
   const activeStudentRequests = useMemo(() => {
-    return studentRequests.filter((r) => !isClaimedStatus(r) && !isRequestArchived(r, archivedMap));
+    return studentRequests.filter((r) => {
+      const norm = normalizeToBackendStatus(r?.status);
+      if (norm === REQUEST_STATUS.RELEASED || norm === REQUEST_STATUS.CANCELLED) return false;
+      return !isClaimedStatus(r) && !isRequestArchived(r, archivedMap);
+    });
   }, [studentRequests, archivedMap]);
 
   const historyStudentRequests = useMemo(() => {
-    return studentRequests.filter((r) => isClaimedStatus(r) || isRequestArchived(r, archivedMap));
+    return studentRequests.filter((r) => {
+      const norm = normalizeToBackendStatus(r?.status);
+      if (norm === REQUEST_STATUS.RELEASED || norm === REQUEST_STATUS.CANCELLED) return true;
+      return isClaimedStatus(r) || isRequestArchived(r, archivedMap);
+    });
   }, [studentRequests, archivedMap]);
 
   // Displayed requests in the selector based on active tab
@@ -442,7 +450,7 @@ export default function TrackStatusPage() {
         const p = profiles[user?.username] || profiles[user?.student_id] || profiles[user?.id] || profiles[matchedRequest?.student_id];
         if (p?.full_name && !isIdNumber(p.full_name)) studentName = p.full_name;
         else if (p?.name && !isIdNumber(p.name)) studentName = p.name;
-      } catch {}
+      } catch { }
     }
     if (isIdNumber(studentName)) {
       if (user?.username === '2023301564' || String(matchedRequest.student_id) === '2023301564') {
@@ -459,7 +467,7 @@ export default function TrackStatusPage() {
         const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
         const p = profiles[user?.username] || profiles[user?.student_id] || profiles[user?.id];
         if (p?.course || p?.program) course = p.course || p.program;
-      } catch {}
+      } catch { }
     }
     if (!course) {
       course = 'BS in Information Technology';
@@ -553,19 +561,17 @@ export default function TrackStatusPage() {
                   setSelectedTrackId(first.tracking_number || first.trackingId || String(first.id));
                 }
               }}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                activeQueueTab === 'active'
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${activeQueueTab === 'active'
                   ? 'bg-[#0B0B36] text-white shadow-md'
                   : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-              }`}
+                }`}
             >
               <span>Active Requests</span>
               <span
-                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                  activeQueueTab === 'active'
+                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${activeQueueTab === 'active'
                     ? 'bg-amber-400 text-slate-900'
                     : 'bg-slate-200 text-slate-700'
-                }`}
+                  }`}
               >
                 {activeStudentRequests.length}
               </span>
@@ -580,11 +586,10 @@ export default function TrackStatusPage() {
                   setSelectedTrackId(first.tracking_number || first.trackingId || String(first.id));
                 }
               }}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                activeQueueTab === 'history'
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${activeQueueTab === 'history'
                   ? 'bg-[#0B0B36] text-white shadow-md'
                   : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-              }`}
+                }`}
             >
               <span>Request History</span>
             </button>
@@ -789,244 +794,242 @@ export default function TrackStatusPage() {
             )}
 
             <div className="track-timeline-card">
-            {/* Header Row: Tracking ID on left, Estimate Completion on right */}
-            <div className="track-card-header">
-              <div className="min-w-0 w-full sm:w-auto">
-                <span className="track-card-lbl">Official Tracking ID</span>
-                <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 mt-1">
-                  <span className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight break-all sm:break-normal">
-                    {matchedRequest.tracking_number || matchedRequest.trackingId || matchedRequest.id}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleCopyTrackingId}
-                    className="track-copy-btn"
-                    title="Copy Tracking ID"
-                  >
-                    {copied ? '✓ Copied' : '📋 Copy'}
-                  </button>
-                  <span className={`status-pill ${getStatusPillClass(matchedRequest.status)}`}>
-                    {displayStatus}
-                  </span>
-                  {isClaimedStatus(matchedRequest.status) && activeQueueTab !== 'history' && (
+              {/* Header Row: Tracking ID on left, Estimate Completion on right */}
+              <div className="track-card-header">
+                <div className="min-w-0 w-full sm:w-auto">
+                  <span className="track-card-lbl">Official Tracking ID</span>
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 mt-1">
+                    <span className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight break-all sm:break-normal">
+                      {matchedRequest.tracking_number || matchedRequest.trackingId || matchedRequest.id}
+                    </span>
                     <button
                       type="button"
-                      onClick={() => handleMarkDone(matchedRequest)}
-                      className="px-2.5 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-md shadow-xs transition-all flex items-center gap-1 cursor-pointer"
-                      title="Mark as Done and move to Request History"
+                      onClick={handleCopyTrackingId}
+                      className="track-copy-btn"
+                      title="Copy Tracking ID"
                     >
-                      <span>✓ Done</span>
+                      {copied ? '✓ Copied' : '📋 Copy'}
                     </button>
-                  )}
+                    <span className={`status-pill ${getStatusPillClass(matchedRequest.status)}`}>
+                      {displayStatus}
+                    </span>
+                    {isClaimedStatus(matchedRequest.status) && activeQueueTab !== 'history' && (
+                      <button
+                        type="button"
+                        onClick={() => handleMarkDone(matchedRequest)}
+                        className="px-2.5 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-md shadow-xs transition-all flex items-center gap-1 cursor-pointer"
+                        title="Mark as Done and move to Request History"
+                      >
+                        <span>✓ Done</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="text-left sm:text-right w-full sm:w-auto pt-2 sm:pt-0 border-t border-slate-200/70 sm:border-t-0">
+                  <div className="track-card-est-title">Estimated Release</div>
+                  <div className="track-card-est-date">{estimatedCompletion}</div>
                 </div>
               </div>
-              <div className="text-left sm:text-right w-full sm:w-auto pt-2 sm:pt-0 border-t border-slate-200/70 sm:border-t-0">
-                <div className="track-card-est-title">Estimated Release</div>
-                <div className="track-card-est-date">{estimatedCompletion}</div>
-              </div>
-            </div>
 
-            {/* Dynamic Details Metadata Grid */}
-            <div className="track-info-grid">
-              <div className="track-info-item">
-                <span className="track-info-lbl">Document Requested</span>
-                <span className="track-info-val" title={resolveRequestDocType(matchedRequest, matchedCred)}>
-                  {resolveRequestDocType(matchedRequest, matchedCred)}
-                </span>
+              {/* Dynamic Details Metadata Grid */}
+              <div className="track-info-grid">
+                <div className="track-info-item">
+                  <span className="track-info-lbl">Document Requested</span>
+                  <span className="track-info-val" title={resolveRequestDocType(matchedRequest, matchedCred)}>
+                    {resolveRequestDocType(matchedRequest, matchedCred)}
+                  </span>
+                </div>
+                <div className="track-info-item">
+                  <span className="track-info-lbl">Copies / Quantity</span>
+                  <span className="track-info-val">
+                    {matchedRequest.copies || '1 copy'}
+                  </span>
+                </div>
+                <div className="track-info-item">
+                  <span className="track-info-lbl">Amount Due / Paid</span>
+                  <span className="track-info-val text-[#0B0B36]">
+                    {matchedRequest.assessed_amount || matchedRequest.amount || (matchedCred?.price ? `₱${parseFloat(matchedCred.price).toFixed(0)}` : '₱100.00')}
+                  </span>
+                </div>
+                <div className="track-info-item">
+                  <span className="track-info-lbl">Date Submitted</span>
+                  <span className="track-info-val">
+                    {matchedRequest.request_date || (matchedRequest.created_at ? matchedRequest.created_at.split('T')[0] : 'N/A')}
+                  </span>
+                </div>
               </div>
-              <div className="track-info-item">
-                <span className="track-info-lbl">Copies / Quantity</span>
-                <span className="track-info-val">
-                  {matchedRequest.copies || '1 copy'}
-                </span>
-              </div>
-              <div className="track-info-item">
-                <span className="track-info-lbl">Amount Due / Paid</span>
-                <span className="track-info-val text-[#0B0B36]">
-                  {matchedRequest.assessed_amount || matchedRequest.amount || (matchedCred?.price ? `₱${parseFloat(matchedCred.price).toFixed(0)}` : '₱100.00')}
-                </span>
-              </div>
-              <div className="track-info-item">
-                <span className="track-info-lbl">Date Submitted</span>
-                <span className="track-info-val">
-                  {matchedRequest.request_date || (matchedRequest.created_at ? matchedRequest.created_at.split('T')[0] : 'N/A')}
-                </span>
-              </div>
-            </div>
 
-            {/* Vertical Status Timeline Only */}
-            <div className="track-timeline">
-              {DEFAULT_TIMELINE_STEPS.map((step, index) => {
-                const isPastOrCurrent = index <= currentStepIndex;
-                const isCurrent = index === currentStepIndex;
+              {/* Vertical Status Timeline Only */}
+              <div className="track-timeline">
+                {DEFAULT_TIMELINE_STEPS.map((step, index) => {
+                  const isPastOrCurrent = index <= currentStepIndex;
+                  const isCurrent = index === currentStepIndex;
 
-                let dateText = 'Pending';
-                let stepDesc = '';
+                  let dateText = 'Pending';
+                  let stepDesc = '';
 
-                if (index === 0) {
-                  // Step 0: Pending (Review & Clearance Verification)
-                  if (currentStepIndex > 0) {
-                    dateText = 'Verified';
-                    stepDesc = 'Clearance reviewed and verified by Registrar Staff.';
-                  } else {
-                    dateText = matchedRequest.created_at
-                      ? new Date(matchedRequest.created_at).toLocaleDateString('en-US', {
+                  if (index === 0) {
+                    // Step 0: Pending (Review & Clearance Verification)
+                    if (currentStepIndex > 0) {
+                      dateText = 'Verified';
+                      stepDesc = 'Clearance reviewed and verified by Registrar Staff.';
+                    } else {
+                      dateText = matchedRequest.created_at
+                        ? new Date(matchedRequest.created_at).toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric',
                           year: 'numeric',
                         })
-                      : 'Submitted';
-                    stepDesc = 'Request submitted. Staff is verifying uploaded clearance and calculating payment fee.';
+                        : 'Submitted';
+                      stepDesc = 'Request submitted. Staff is verifying uploaded clearance and calculating payment fee.';
+                    }
+                  } else if (index === 1) {
+                    // Step 1: Pending Payment (Pay at Cashier & Submit OR)
+                    if (currentStepIndex > 1) {
+                      dateText = 'Verified';
+                      stepDesc = 'Payment completed at Cashier and Official Receipt submitted.';
+                    } else if (isCurrent) {
+                      dateText = 'Ready for Payment';
+                      stepDesc = 'Clearance verified. Awaiting Cashier payment and payment verification.';
+                    } else {
+                      dateText = 'Pending Approval';
+                      stepDesc = 'Awaiting clearance verification and payment assessment by Staff.';
+                    }
+                  } else if (index === 2) {
+                    // Step 2: For Processing (Payment Verified by Staff)
+                    if (currentStepIndex > 2) {
+                      dateText = 'Verified';
+                      stepDesc = 'Official Receipt verified by Staff. Document preparation queued.';
+                    } else if (isCurrent) {
+                      dateText = 'Payment Verified';
+                      stepDesc = 'Staff verified Official Receipt. Request queued for document processing.';
+                    } else {
+                      dateText = 'Awaiting Payment';
+                      stepDesc = 'Staff verification of Official Receipt is strictly required.';
+                    }
+                  } else if (index === 3) {
+                    // Step 3: Processing (Document Preparation & Printing)
+                    if (currentStepIndex > 3) {
+                      dateText = 'Completed';
+                      stepDesc = 'Credential document prepared and printed.';
+                    } else if (isCurrent) {
+                      dateText = isOnHold ? 'On Hold' : 'In Progress';
+                      stepDesc = isOnHold
+                        ? 'Temporarily on hold for verification.'
+                        : 'Staff is currently preparing and printing your credential document.';
+                    } else {
+                      dateText = 'Queued';
+                      stepDesc = 'Document preparation and printing begins once payment is verified.';
+                    }
+                  } else if (index === 4) {
+                    // Step 4: Releasing (Ready for Claiming)
+                    if (isCurrent) {
+                      dateText = 'Ready for Pickup';
+                      stepDesc = 'Your credential is ready! You may claim your document at the Registrar window.';
+                    } else if (currentStepIndex > 4) {
+                      dateText = 'Claimed / Released';
+                      stepDesc = 'Document claimed and released to student.';
+                    } else {
+                      dateText = `Target: ${estimatedCompletion}`;
+                      stepDesc = 'Document will be available for pickup once released.';
+                    }
                   }
-                } else if (index === 1) {
-                  // Step 1: Pending Payment (Pay at Cashier & Submit OR)
-                  if (currentStepIndex > 1) {
-                    dateText = 'Verified';
-                    stepDesc = 'Payment completed at Cashier and Official Receipt submitted.';
-                  } else if (isCurrent) {
-                    dateText = 'Ready for Payment';
-                    stepDesc = 'Clearance verified. Awaiting Cashier payment and payment verification.';
-                  } else {
-                    dateText = 'Pending Approval';
-                    stepDesc = 'Awaiting clearance verification and payment assessment by Staff.';
-                  }
-                } else if (index === 2) {
-                  // Step 2: For Processing (Payment Verified by Staff)
-                  if (currentStepIndex > 2) {
-                    dateText = 'Verified';
-                    stepDesc = 'Official Receipt verified by Staff. Document preparation queued.';
-                  } else if (isCurrent) {
-                    dateText = 'Payment Verified';
-                    stepDesc = 'Staff verified Official Receipt. Request queued for document processing.';
-                  } else {
-                    dateText = 'Awaiting Payment';
-                    stepDesc = 'Staff verification of Official Receipt is strictly required.';
-                  }
-                } else if (index === 3) {
-                  // Step 3: Processing (Document Preparation & Printing)
-                  if (currentStepIndex > 3) {
-                    dateText = 'Completed';
-                    stepDesc = 'Credential document prepared and printed.';
-                  } else if (isCurrent) {
-                    dateText = isOnHold ? 'On Hold' : 'In Progress';
-                    stepDesc = isOnHold
-                      ? 'Temporarily on hold for verification.'
-                      : 'Staff is currently preparing and printing your credential document.';
-                  } else {
-                    dateText = 'Queued';
-                    stepDesc = 'Document preparation and printing begins once payment is verified.';
-                  }
-                } else if (index === 4) {
-                  // Step 4: Releasing (Ready for Claiming)
-                  if (isCurrent) {
-                    dateText = 'Ready for Pickup';
-                    stepDesc = 'Your credential is ready! You may claim your document at the Registrar window.';
-                  } else if (currentStepIndex > 4) {
-                    dateText = 'Claimed / Released';
-                    stepDesc = 'Document claimed and released to student.';
-                  } else {
-                    dateText = `Target: ${estimatedCompletion}`;
-                    stepDesc = 'Document will be available for pickup once released.';
-                  }
-                }
 
-                return (
-                  <div key={step.id} className="track-step-node">
-                    {/* Icon Circle */}
-                    <div
-                      className={`track-node-icon ${
-                        isCurrent && isOnHold
-                          ? 'on-hold'
-                          : isPastOrCurrent
-                          ? 'active'
-                          : ''
-                      }`}
-                    >
-                      {isCurrent && isOnHold ? (
-                        <svg className="w-4 h-4 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01" />
-                        </svg>
-                      ) : isPastOrCurrent ? (
-                        <div className="w-3 h-3 rounded-full border-2 border-white flex items-center justify-center">
-                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                        </div>
-                      ) : (
-                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <circle cx="12" cy="12" r="9" strokeWidth={2} />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 7v5l3 3" />
-                        </svg>
-                      )}
-                    </div>
-
-                    {/* Node Content */}
-                    <div className="track-node-content flex-1">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                        <h3 className={`track-node-title ${isCurrent ? 'text-[#0B0B36]' : 'text-slate-800'}`}>
-                          {step.name} <span className="text-xs font-normal text-slate-500 hidden sm:inline">({step.label})</span>
-                        </h3>
-                        <span
-                          className={`text-xs font-bold ${
-                            isCurrent && isOnHold
-                              ? 'text-amber-700'
-                              : isPastOrCurrent
-                              ? 'text-[#0B0B36]'
-                              : 'text-slate-400'
+                  return (
+                    <div key={step.id} className="track-step-node">
+                      {/* Icon Circle */}
+                      <div
+                        className={`track-node-icon ${isCurrent && isOnHold
+                            ? 'on-hold'
+                            : isPastOrCurrent
+                              ? 'active'
+                              : ''
                           }`}
-                        >
-                          {dateText}
-                        </span>
+                      >
+                        {isCurrent && isOnHold ? (
+                          <svg className="w-4 h-4 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01" />
+                          </svg>
+                        ) : isPastOrCurrent ? (
+                          <div className="w-3 h-3 rounded-full border-2 border-white flex items-center justify-center">
+                            <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                          </div>
+                        ) : (
+                          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="9" strokeWidth={2} />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 7v5l3 3" />
+                          </svg>
+                        )}
                       </div>
-                      <p className="track-node-desc">
-                        {stepDesc}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
 
-          {/* Action button below track status card */}
-          <div className="track-claim-stub-action-wrap flex flex-wrap items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => setShowClaimStubModal(true)}
-              className="track-claim-stub-btn"
-            >
-              Claim Stub
-            </button>
-            {displayStatus === 'Pending' && (
+                      {/* Node Content */}
+                      <div className="track-node-content flex-1">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                          <h3 className={`track-node-title ${isCurrent ? 'text-[#0B0B36]' : 'text-slate-800'}`}>
+                            {step.name} <span className="text-xs font-normal text-slate-500 hidden sm:inline">({step.label})</span>
+                          </h3>
+                          <span
+                            className={`text-xs font-bold ${isCurrent && isOnHold
+                                ? 'text-amber-700'
+                                : isPastOrCurrent
+                                  ? 'text-[#0B0B36]'
+                                  : 'text-slate-400'
+                              }`}
+                          >
+                            {dateText}
+                          </span>
+                        </div>
+                        <p className="track-node-desc">
+                          {stepDesc}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Action button below track status card */}
+            <div className="track-claim-stub-action-wrap flex flex-wrap items-center gap-2.5">
               <button
                 type="button"
-                onClick={handleCancelRequest}
-                className="px-4 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-                title="Cancel your pending document request"
+                onClick={() => setShowClaimStubModal(true)}
+                className="track-claim-stub-btn"
               >
-                <span>✕ Cancel Request</span>
+                Claim Stub
               </button>
-            )}
-            {displayStatus === 'Claimed' && activeQueueTab !== 'history' && (
-              <button
-                type="button"
-                onClick={() => handleMarkDone(matchedRequest)}
-                className="px-5 py-2.5 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-                title="Mark request as Done and move to Request History"
-              >
-                <span>✓ Done</span>
-              </button>
-            )}
-            {activeQueueTab === 'history' && (
-              <button
-                type="button"
-                onClick={() => handleRestoreRequest(matchedRequest)}
-                className="px-4 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-                title="Restore to Active Requests"
-              >
-                <span>↩ Restore to Active</span>
-              </button>
-            )}
-          </div>
-        </>
+              {displayStatus === 'Pending' && (
+                <button
+                  type="button"
+                  onClick={handleCancelRequest}
+                  className="px-4 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                  title="Cancel your pending document request"
+                >
+                  <span>✕ Cancel Request</span>
+                </button>
+              )}
+              {displayStatus === 'Claimed' && activeQueueTab !== 'history' && (
+                <button
+                  type="button"
+                  onClick={() => handleMarkDone(matchedRequest)}
+                  className="px-5 py-2.5 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                  title="Mark request as Done and move to Request History"
+                >
+                  <span>✓ Done</span>
+                </button>
+              )}
+              {activeQueueTab === 'history' && (
+                <button
+                  type="button"
+                  onClick={() => handleRestoreRequest(matchedRequest)}
+                  className="px-4 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                  title="Restore to Active Requests"
+                >
+                  <span>↩ Restore to Active</span>
+                </button>
+              )}
+            </div>
+          </>
         ) : urlTrackId.trim() ? (
           /* Case 2: Tracking ID searched but not found */
           <div className="track-empty-card">

@@ -6,6 +6,7 @@ import { ROLES } from '../../constants/roles';
 import { ROUTES } from '../../constants/routes';
 import usersApi from '../../api/users';
 import auditApi from '../../api/audit';
+import authApi from '../../api/auth';
 import { getProcessedActions } from '../../api/requests';
 import useToast from '../../hooks/useToast';
 
@@ -314,7 +315,7 @@ export default function StaffProfileModal({ isOpen, onClose }) {
   };
 
   // Change Password Handler (Optional)
-  const handleChangePassword = (e) => {
+  const handleChangePassword = async (e) => {
     e?.preventDefault();
     setPasswordError('');
 
@@ -337,20 +338,28 @@ export default function StaffProfileModal({ isOpen, onClose }) {
 
     setIsChangingPassword(true);
     try {
-      const customPasswords = JSON.parse(localStorage.getItem('regquest_custom_passwords') || '{}');
-      const userKey = user?.username || employeeId || user?.id || '';
+      await authApi.changePassword(
+        currentPassword.trim(),
+        newPassword.trim(),
+        confirmPassword.trim()
+      );
 
-      const record = {
-        originalPassword: currentPassword.trim(),
-        newPassword: newPassword.trim(),
-        updatedAt: new Date().toISOString(),
-      };
+      try {
+        const customPasswords = JSON.parse(localStorage.getItem('regquest_custom_passwords') || '{}');
+        const userKey = user?.username || employeeId || user?.id || '';
 
-      if (userKey) customPasswords[userKey] = record;
-      if (user?.email) customPasswords[user.email.toLowerCase()] = record;
-      if (employeeId) customPasswords[employeeId] = record;
+        const record = {
+          originalPassword: currentPassword.trim(),
+          newPassword: newPassword.trim(),
+          updatedAt: new Date().toISOString(),
+        };
 
-      localStorage.setItem('regquest_custom_passwords', JSON.stringify(customPasswords));
+        if (userKey) customPasswords[userKey] = record;
+        if (user?.email) customPasswords[user.email.toLowerCase()] = record;
+        if (employeeId) customPasswords[employeeId] = record;
+
+        localStorage.setItem('regquest_custom_passwords', JSON.stringify(customPasswords));
+      } catch {}
 
       setPasswordSuccess(true);
       toast.success('Password updated successfully! You can now use your new password.');
@@ -360,7 +369,14 @@ export default function StaffProfileModal({ isOpen, onClose }) {
       setTimeout(() => setPasswordSuccess(false), 3000);
     } catch (err) {
       console.warn('Password change failed:', err);
-      setPasswordError('Failed to save password change.');
+      const errMsg =
+        err.response?.data?.detail ||
+        err.response?.data?.new_password?.[0] ||
+        err.response?.data?.confirm_password?.[0] ||
+        err.response?.data?.current_password?.[0] ||
+        err.message ||
+        'Failed to save password change.';
+      setPasswordError(errMsg);
     } finally {
       setIsChangingPassword(false);
     }

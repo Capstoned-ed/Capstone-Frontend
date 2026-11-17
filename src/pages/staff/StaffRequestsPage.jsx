@@ -250,283 +250,292 @@ export default function StaffRequestsPage() {
       .filter(isValidRequest)
       .filter((r) => Boolean(String(r.tracking_number || '').trim()))
       .map((r, idx) => {
-      const user = userMap.get(r.user);
-      const cred = credTypeMap.get(r.credential_type);
+        const user = userMap.get(r.user);
+        const cred = credTypeMap.get(r.credential_type);
 
-      let cachedClearancePreview = null;
-      let cachedClearanceFileName = null;
-      let cachedClearanceIsPdf = false;
-      let matchedStored = null;
-      try {
-        const storedList = JSON.parse(localStorage.getItem('regquest_stored_requests') || '[]');
-        matchedStored = storedList.find(
-          (s) =>
-            String(s.id) === String(r.id) ||
-            String(s.id) === String(r.rawId) ||
-            String(s.id) === String(r.tracking_number) ||
-            String(s.tracking_number) === String(r.tracking_number) ||
-            String(s.tracking_number) === String(r.id) ||
-            String(s.rawId) === String(r.id) ||
-            String(s.rawId) === String(r.rawId)
-        );
-        if (matchedStored?.clearance_preview) {
-          cachedClearancePreview = matchedStored.clearance_preview;
-          cachedClearanceFileName = matchedStored.clearance_file_name;
-          cachedClearanceIsPdf = matchedStored.clearance_is_pdf;
-        }
-      } catch {}
-
-      const localClearance = getClearanceAttachment([
-        r.tracking_number,
-        r.id,
-        r.rawId,
-        r.student_id,
-        r.user,
-        String(r.user),
-      ]);
-
-      const userClearance =
-        clearanceMap.get(r.user) ||
-        clearanceMap.get(String(r.user)) ||
-        clearanceMap.get(r.student_id) ||
-        (user ? clearanceMap.get(user.id) : null) ||
-        (user ? clearanceMap.get(String(user.id)) : null) ||
-        (user ? clearanceMap.get(user.student_id) : null) ||
-        (user ? clearanceMap.get(user.username) : null);
-
-      const effectiveClearancePreview =
-        r.clearance_preview ||
-        localClearance?.dataUrl ||
-        cachedClearancePreview ||
-        userClearance?.file ||
-        null;
-
-      const effectiveClearanceIsPdf =
-        Boolean(r.clearance_is_pdf) ||
-        Boolean(localClearance?.meta?.isPdf) ||
-        Boolean(localClearance?.dataUrl?.startsWith('data:application/pdf')) ||
-        Boolean(cachedClearanceIsPdf) ||
-        Boolean(r.clearance_file_name?.toLowerCase().endsWith('.pdf'));
-
-      const effectiveClearanceFileName =
-        r.clearance_file_name ||
-        localClearance?.meta?.fileName ||
-        cachedClearanceFileName ||
-        (userClearance?.file ? 'Clearance Document' : null);
-
-      let profileName = null;
-      let profileStudentId = null;
-      try {
-        const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
-        const p =
-          profiles[r.user] ||
-          profiles[r.student_id] ||
-          (user ? profiles[user.id] : null) ||
-          (user ? profiles[user.username] : null);
-        if (p) {
-          profileName = p.full_name || [p.first_name, p.last_name].filter(Boolean).join(' ');
-          profileStudentId = p.student_id || p.username;
-        }
-      } catch {}
-
-      const userFullName = user
-        ? [user.first_name, user.last_name].filter(Boolean).join(' ')
-        : '';
-
-      const fallbackKnownName =
-        (user?.username === '2023301564' || r.student_id === '2023301564' || r.student_name === '2023301564' || r.user === 11 || String(r.user) === '11')
-          ? 'Daisy Traya'
-          : (user?.username === 'Love' || r.student_name === 'Love' || r.user === 2 || String(r.user) === '2')
-          ? 'Love'
-          : null;
-
-      const isStudentNameId =
-        !r.student_name ||
-        r.student_name === 'Student' ||
-        /^\d{6,}$/.test(r.student_name) ||
-        r.student_name === r.student_id ||
-        (user && r.student_name === user.username);
-
-      const studentName = !isStudentNameId
-        ? r.student_name
-        : (userFullName || profileName || fallbackKnownName || (user?.username && !/^\d{6,}$/.test(user.username) ? user.username : null) || r.student_name || (r.student_id ? `Student (${r.student_id})` : 'Student'));
-
-      const studentId =
-        (r.student_id && /^\d+$/.test(r.student_id))
-          ? r.student_id
-          : profileStudentId || user?.student_id || user?.username || (r.user === 11 || String(r.user) === '11' ? '2023301564' : null) || (r.user === 2 || String(r.user) === '2' ? '20231029' : null) || (r.user ? String(r.user) : 'N/A');
-
-      const documentType = resolveRequestDocType(r, cred);
-
-      const amount =
-        matchedStored?.assessed_amount ||
-        matchedStored?.amount ||
-        r.assessed_amount ||
-        r.amount ||
-        (cred?.price ? `P${parseFloat(cred.price).toFixed(0)}` : 'P0');
-
-      const requestDate = r.request_date || (r.created_at ? r.created_at.split('T')[0] : 'N/A');
-      const releaseDate =
-        matchedStored?.date_of_release ||
-        matchedStored?.release_date ||
-        r.date_of_release ||
-        r.release_date ||
-        calculateReleaseDate(r.created_at, cred?.processing_days);
-
-      let claimedMap = {};
-      try {
-        claimedMap = JSON.parse(localStorage.getItem('regquest_claimed_requests') || '{}');
-      } catch {}
-
-      const myIdKeys = [
-        user?.username,
-        user?.full_name,
-        user?.id,
-        user?.userId,
-        [user?.first_name, user?.last_name].filter(Boolean).join(' '),
-      ]
-        .filter(Boolean)
-        .map((v) => String(v).trim().toLowerCase());
-
-      const rKeys = [
-        r.id !== undefined && r.id !== null ? String(r.id) : null,
-        r.rawId !== undefined && r.rawId !== null ? String(r.rawId) : null,
-        r.tracking_number !== undefined && r.tracking_number !== null ? String(r.tracking_number) : null,
-      ].filter(Boolean);
-
-      const isClaimedByMe = isRequestAssignedToUser(r, user, assignments, users) || rKeys.some((k) => {
-        const claimVal = claimedMap[k];
-        if (claimVal) {
-          const cStr = String(claimVal).trim().toLowerCase();
-          if (cStr === 'true' || cStr === '1' || cStr === 'claimed' || myIdKeys.includes(cStr)) {
-            return true;
+        let cachedClearancePreview = null;
+        let cachedClearanceFileName = null;
+        let cachedClearanceIsPdf = false;
+        let matchedStored = null;
+        try {
+          const storedList = JSON.parse(localStorage.getItem('regquest_stored_requests') || '[]');
+          matchedStored = storedList.find(
+            (s) =>
+              String(s.id) === String(r.id) ||
+              String(s.id) === String(r.rawId) ||
+              String(s.id) === String(r.tracking_number) ||
+              String(s.tracking_number) === String(r.tracking_number) ||
+              String(s.tracking_number) === String(r.id) ||
+              String(s.rawId) === String(r.id) ||
+              String(s.rawId) === String(r.rawId)
+          );
+          if (matchedStored?.clearance_preview) {
+            cachedClearancePreview = matchedStored.clearance_preview;
+            cachedClearanceFileName = matchedStored.clearance_file_name;
+            cachedClearanceIsPdf = matchedStored.clearance_is_pdf;
           }
-        }
-        const assignVal = assignments[k];
-        if (assignVal) {
-          const aStr = String(assignVal).trim().toLowerCase();
-          if (
-            myIdKeys.includes(aStr) ||
-            (aStr && myIdKeys.some((m) => m && m.length >= 4 && (aStr.includes(m) || m.includes(aStr))))
-          ) {
-            return true;
+        } catch { }
+
+        const localClearance = getClearanceAttachment([
+          r.tracking_number,
+          r.id,
+          r.rawId,
+          r.student_id,
+          r.user,
+          String(r.user),
+        ]);
+
+        const userClearance =
+          clearanceMap.get(r.user) ||
+          clearanceMap.get(String(r.user)) ||
+          clearanceMap.get(r.student_id) ||
+          (user ? clearanceMap.get(user.id) : null) ||
+          (user ? clearanceMap.get(String(user.id)) : null) ||
+          (user ? clearanceMap.get(user.student_id) : null) ||
+          (user ? clearanceMap.get(user.username) : null);
+
+        const effectiveClearancePreview =
+          r.clearance_preview ||
+          localClearance?.dataUrl ||
+          cachedClearancePreview ||
+          userClearance?.file ||
+          null;
+
+        const effectiveClearanceIsPdf =
+          Boolean(r.clearance_is_pdf) ||
+          Boolean(localClearance?.meta?.isPdf) ||
+          Boolean(localClearance?.dataUrl?.startsWith('data:application/pdf')) ||
+          Boolean(cachedClearanceIsPdf) ||
+          Boolean(r.clearance_file_name?.toLowerCase().endsWith('.pdf'));
+
+        const effectiveClearanceFileName =
+          r.clearance_file_name ||
+          localClearance?.meta?.fileName ||
+          cachedClearanceFileName ||
+          (userClearance?.file ? 'Clearance Document' : null);
+
+        let profileName = null;
+        let profileStudentId = null;
+        try {
+          const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+          const p =
+            profiles[r.user] ||
+            profiles[r.student_id] ||
+            (user ? profiles[user.id] : null) ||
+            (user ? profiles[user.username] : null);
+          if (p) {
+            profileName = p.full_name || [p.first_name, p.last_name].filter(Boolean).join(' ');
+            profileStudentId = p.student_id || p.username;
           }
+        } catch { }
+
+        const userFullName = user
+          ? [user.first_name, user.last_name].filter(Boolean).join(' ')
+          : '';
+
+        const fallbackKnownName =
+          (user?.username === '2023301564' || r.student_id === '2023301564' || r.student_name === '2023301564' || r.user === 11 || String(r.user) === '11')
+            ? 'Daisy Traya'
+            : (user?.username === 'Love' || r.student_name === 'Love' || r.user === 2 || String(r.user) === '2')
+              ? 'Love'
+              : null;
+
+        const isStudentNameId =
+          !r.student_name ||
+          r.student_name === 'Student' ||
+          /^\d{6,}$/.test(r.student_name) ||
+          r.student_name === r.student_id ||
+          (user && r.student_name === user.username);
+
+        const studentName = !isStudentNameId
+          ? r.student_name
+          : (userFullName || profileName || fallbackKnownName || (user?.username && !/^\d{6,}$/.test(user.username) ? user.username : null) || r.student_name || (r.student_id ? `Student (${r.student_id})` : 'Student'));
+
+        const studentId =
+          (r.student_id && /^\d+$/.test(r.student_id))
+            ? r.student_id
+            : profileStudentId || user?.student_id || user?.username || (r.user === 11 || String(r.user) === '11' ? '2023301564' : null) || (r.user === 2 || String(r.user) === '2' ? '20231029' : null) || (r.user ? String(r.user) : 'N/A');
+
+        const documentType = resolveRequestDocType(r, cred);
+
+        const amount =
+          matchedStored?.assessed_amount ||
+          matchedStored?.amount ||
+          r.assessed_amount ||
+          r.amount ||
+          (cred?.price ? `P${parseFloat(cred.price).toFixed(0)}` : 'P0');
+
+        const requestDate = r.request_date || (r.created_at ? r.created_at.split('T')[0] : 'N/A');
+        const releaseDate =
+          matchedStored?.date_of_release ||
+          matchedStored?.release_date ||
+          r.date_of_release ||
+          r.release_date ||
+          calculateReleaseDate(r.created_at, cred?.processing_days);
+
+        let claimedMap = {};
+        try {
+          claimedMap = JSON.parse(localStorage.getItem('regquest_claimed_requests') || '{}');
+        } catch { }
+
+        const myIdKeys = [
+          user?.username,
+          user?.full_name,
+          user?.id,
+          user?.userId,
+          [user?.first_name, user?.last_name].filter(Boolean).join(' '),
+        ]
+          .filter(Boolean)
+          .map((v) => String(v).trim().toLowerCase());
+
+        const rKeys = [
+          r.id !== undefined && r.id !== null ? String(r.id) : null,
+          r.rawId !== undefined && r.rawId !== null ? String(r.rawId) : null,
+          r.tracking_number !== undefined && r.tracking_number !== null ? String(r.tracking_number) : null,
+        ].filter(Boolean);
+
+        const isClaimedByMe = isRequestAssignedToUser(r, user, assignments, users) || rKeys.some((k) => {
+          const claimVal = claimedMap[k];
+          if (claimVal) {
+            const cStr = String(claimVal).trim().toLowerCase();
+            if (cStr === 'true' || cStr === '1' || cStr === 'claimed' || myIdKeys.includes(cStr)) {
+              return true;
+            }
+          }
+          const assignVal = assignments[k];
+          if (assignVal) {
+            const aStr = String(assignVal).trim().toLowerCase();
+            if (
+              myIdKeys.includes(aStr) ||
+              (aStr && myIdKeys.some((m) => m && m.length >= 4 && (aStr.includes(m) || m.includes(aStr))))
+            ) {
+              return true;
+            }
+          }
+          return false;
+        });
+
+        // When Registrar assigns staff, registrar verified all -> 'For Processing'
+        // When Staff claims/assigns to self, staff must verify all -> 'Pending'
+        const assignedByRegistrarStatus =
+          assignments[`status_${r.id}`] ||
+          assignments[`status_${String(r.id)}`] ||
+          assignments[`status_${r.rawId}`] ||
+          assignments[`status_${String(r.rawId)}`] ||
+          assignments[`status_${r.tracking_number}`] ||
+          assignments[`status_${String(r.tracking_number)}`];
+
+        const isNonPending = (s) => s && String(s).trim().toUpperCase() !== 'PENDING';
+        const effectiveRawStatus =
+          (isNonPending(matchedStored?.status) ? matchedStored.status : null) ||
+          (isNonPending(r.status) ? r.status : null) ||
+          assignedByRegistrarStatus ||
+          matchedStored?.status ||
+          r.status ||
+          'Pending';
+
+        return {
+          rawId: r.rawId || r.id,
+          id: r.tracking_number || r.id,
+          tracking_number: r.tracking_number || r.id,
+          user: r.user,
+          student_name: studentName,
+          student_id: studentId,
+          document_type: documentType,
+          copies: r.copies || '1 copy',
+          status: formatStatusDisplay(effectiveRawStatus),
+          created_at: r.created_at,
+          request_date: requestDate,
+          release_date: releaseDate,
+          date_of_release: releaseDate,
+          amount,
+          assessed_amount: matchedStored?.assessed_amount || r.assessed_amount || amount,
+          verified_by_name: matchedStored?.verified_by_name || r.verified_by_name || null,
+          purpose: r.purpose || r.remarks || 'Official Academic Credential Request',
+          remarks: matchedStored?.remarks || r.remarks || '',
+          clearance_preview: effectiveClearancePreview,
+          clearance_id: r.clearance_id || userClearance?.id || null,
+          clearance_status:
+            matchedStored?.clearance_status ||
+            r.clearance_status ||
+            (effectiveClearancePreview ? 'PENDING' : null),
+          clearance_file_name: effectiveClearanceFileName,
+          clearance_is_pdf: effectiveClearanceIsPdf,
+          photo_preview: r.photo_preview || null,
+          payment_status: matchedStored?.payment_status || r.payment_status || null,
+          payment_proof: matchedStored?.payment_proof || r.payment_proof || null,
+          or_number: matchedStored?.or_number || r.or_number || '',
+          receipt_image: matchedStored?.receipt_image || r.receipt_image || null,
+          is_confirmed: Boolean(matchedStored?.is_confirmed || r.is_confirmed),
+          confirmed_for_payment: Boolean(matchedStored?.confirmed_for_payment || r.confirmed_for_payment),
+          assigned_staff: (() => {
+            const rawAssigned =
+              assignments[r.id] ||
+              assignments[String(r.id)] ||
+              assignments[r.tracking_number] ||
+              assignments[String(r.tracking_number)] ||
+              assignments[r.rawId] ||
+              assignments[String(r.rawId)] ||
+              (isClaimedByMe ? (user?.full_name || user?.username || '') : '') ||
+              matchedStored?.assigned_staff ||
+              r.assigned_staff ||
+              '';
+            if (!rawAssigned) return '';
+            const userObj = userMap.get(rawAssigned) || userMap.get(Number(rawAssigned));
+            if (userObj) {
+              const uName = [userObj.first_name, userObj.last_name].filter(Boolean).join(' ').trim();
+              if (uName) return uName;
+            }
+            return rawAssigned;
+          })(),
+          assigned_at:
+            assignmentTimestamps[String(r.id)] ||
+            assignmentTimestamps[String(r.tracking_number)] ||
+            assignmentTimestamps[String(r.rawId)] ||
+            (typeof window !== 'undefined' && getStaffAssignmentTimestamps()[String(r.id)]) ||
+            (typeof window !== 'undefined' && getStaffAssignmentTimestamps()[String(r.tracking_number)]) ||
+            (typeof window !== 'undefined' && getStaffAssignmentTimestamps()[String(r.rawId)]) ||
+            (r.assigned_at ? new Date(r.assigned_at).getTime() : 0) ||
+            (matchedStored?.assigned_at ? new Date(matchedStored.assigned_at).getTime() : 0) ||
+            (r.accepted_at ? new Date(r.accepted_at).getTime() : 0) ||
+            (matchedStored?.accepted_at ? new Date(matchedStored.accepted_at).getTime() : 0) ||
+            0,
+          updated_at:
+            matchedStored?.updated_at ||
+            matchedStored?.updatedAt ||
+            r.updated_at ||
+            r.updatedAt ||
+            null,
+          is_approved: Boolean(
+            matchedStored?.is_approved !== undefined
+              ? matchedStored.is_approved
+              : (r.is_approved !== undefined ? r.is_approved : false)
+          ),
+          is_auto_approved: Boolean(
+            matchedStored?.is_auto_approved !== undefined
+              ? matchedStored.is_auto_approved
+              : (r.is_auto_approved !== undefined ? r.is_auto_approved : false)
+          ),
+          approved_by_name:
+            matchedStored?.approved_by_name ||
+            r.approved_by_name ||
+            '',
+          approved_at:
+            matchedStored?.approved_at ||
+            r.approved_at ||
+            null,
+          payments: r.payments || matchedStored?.payments || [],
+          raw: r,
+        };
+      })
+      .filter((r) => {
+        const sName = String(r.student_name || '').toLowerCase();
+        const sId = String(r.student_id || '').toLowerCase();
+        if (/^student\s*#?\s*[1-4]$/i.test(sName) || /^student\s*#?\s*[1-4]$/i.test(sId)) {
+          return false;
         }
-        return false;
+        return true;
       });
-
-      // When Registrar assigns staff, registrar verified all -> 'For Processing'
-      // When Staff claims/assigns to self, staff must verify all -> 'Pending'
-      const assignedByRegistrarStatus =
-        assignments[`status_${r.id}`] ||
-        assignments[`status_${String(r.id)}`] ||
-        assignments[`status_${r.rawId}`] ||
-        assignments[`status_${String(r.rawId)}`] ||
-        assignments[`status_${r.tracking_number}`] ||
-        assignments[`status_${String(r.tracking_number)}`];
-
-      const isNonPending = (s) => s && String(s).trim().toUpperCase() !== 'PENDING';
-      const effectiveRawStatus =
-        (isNonPending(matchedStored?.status) ? matchedStored.status : null) ||
-        (isNonPending(r.status) ? r.status : null) ||
-        assignedByRegistrarStatus ||
-        matchedStored?.status ||
-        r.status ||
-        'Pending';
-
-      return {
-        rawId: r.rawId || r.id,
-        id: r.tracking_number || r.id,
-        tracking_number: r.tracking_number || r.id,
-        user: r.user,
-        student_name: studentName,
-        student_id: studentId,
-        document_type: documentType,
-        copies: r.copies || '1 copy',
-        status: formatStatusDisplay(effectiveRawStatus),
-        created_at: r.created_at,
-        request_date: requestDate,
-        release_date: releaseDate,
-        date_of_release: releaseDate,
-        amount,
-        assessed_amount: matchedStored?.assessed_amount || r.assessed_amount || amount,
-        verified_by_name: matchedStored?.verified_by_name || r.verified_by_name || null,
-        purpose: r.purpose || r.remarks || 'Official Academic Credential Request',
-        remarks: matchedStored?.remarks || r.remarks || '',
-        clearance_preview: effectiveClearancePreview,
-        clearance_id: r.clearance_id || userClearance?.id || null,
-        clearance_status:
-          matchedStored?.clearance_status ||
-          r.clearance_status ||
-          (effectiveClearancePreview ? 'PENDING' : null),
-        clearance_file_name: effectiveClearanceFileName,
-        clearance_is_pdf: effectiveClearanceIsPdf,
-        photo_preview: r.photo_preview || null,
-        payment_status: matchedStored?.payment_status || r.payment_status || null,
-        payment_proof: matchedStored?.payment_proof || r.payment_proof || null,
-        or_number: matchedStored?.or_number || r.or_number || '',
-        receipt_image: matchedStored?.receipt_image || r.receipt_image || null,
-        is_confirmed: Boolean(matchedStored?.is_confirmed || r.is_confirmed),
-        confirmed_for_payment: Boolean(matchedStored?.confirmed_for_payment || r.confirmed_for_payment),
-        assigned_staff:
-          assignments[r.id] ||
-          assignments[String(r.id)] ||
-          assignments[r.tracking_number] ||
-          assignments[String(r.tracking_number)] ||
-          assignments[r.rawId] ||
-          assignments[String(r.rawId)] ||
-          (isClaimedByMe ? (user?.full_name || user?.username || '') : '') ||
-          matchedStored?.assigned_staff ||
-          r.assigned_staff ||
-          '',
-        assigned_at:
-          assignmentTimestamps[String(r.id)] ||
-          assignmentTimestamps[String(r.tracking_number)] ||
-          assignmentTimestamps[String(r.rawId)] ||
-          (typeof window !== 'undefined' && getStaffAssignmentTimestamps()[String(r.id)]) ||
-          (typeof window !== 'undefined' && getStaffAssignmentTimestamps()[String(r.tracking_number)]) ||
-          (typeof window !== 'undefined' && getStaffAssignmentTimestamps()[String(r.rawId)]) ||
-          (r.assigned_at ? new Date(r.assigned_at).getTime() : 0) ||
-          (matchedStored?.assigned_at ? new Date(matchedStored.assigned_at).getTime() : 0) ||
-          (r.accepted_at ? new Date(r.accepted_at).getTime() : 0) ||
-          (matchedStored?.accepted_at ? new Date(matchedStored.accepted_at).getTime() : 0) ||
-          0,
-        updated_at:
-          matchedStored?.updated_at ||
-          matchedStored?.updatedAt ||
-          r.updated_at ||
-          r.updatedAt ||
-          null,
-        is_approved: Boolean(
-          matchedStored?.is_approved !== undefined
-            ? matchedStored.is_approved
-            : (r.is_approved !== undefined ? r.is_approved : false)
-        ),
-        is_auto_approved: Boolean(
-          matchedStored?.is_auto_approved !== undefined
-            ? matchedStored.is_auto_approved
-            : (r.is_auto_approved !== undefined ? r.is_auto_approved : false)
-        ),
-        approved_by_name:
-          matchedStored?.approved_by_name ||
-          r.approved_by_name ||
-          '',
-        approved_at:
-          matchedStored?.approved_at ||
-          r.approved_at ||
-          null,
-        payments: r.payments || matchedStored?.payments || [],
-        raw: r,
-      };
-    })
-    .filter((r) => {
-      const sName = String(r.student_name || '').toLowerCase();
-      const sId = String(r.student_id || '').toLowerCase();
-      if (/^student\s*#?\s*[1-4]$/i.test(sName) || /^student\s*#?\s*[1-4]$/i.test(sId)) {
-        return false;
-      }
-      return true;
-    });
 
     return built.sort(sortRequestsNewestFirst);
   }, [rawRequests, userMap, credTypeMap, clearanceMap, assignments, assignmentTimestamps]);
@@ -738,7 +747,7 @@ export default function StaffRequestsPage() {
         requestsApi.transition(targetId, {
           status: backendStatus,
           remarks: preserveDocTagInRemarks(item, note || 'Batch updated by staff'),
-        }).catch(() => {});
+        }).catch(() => { });
       }
     }
 
@@ -875,7 +884,7 @@ export default function StaffRequestsPage() {
             in_process_queue: true,
           }, { throwOnError: false });
         });
-      } catch {}
+      } catch { }
 
       recordRequestActivityTimestamp(trackingNo || reqId || rawId, now);
     }
@@ -905,12 +914,12 @@ export default function StaffRequestsPage() {
           (r.tracking_number && selectedKeys.has(String(r.tracking_number)));
         return matches
           ? {
-              ...r,
-              assigned_staff: staffName,
-              assigned_at: now,
-              accepted_at: now,
-              updated_at: nowIso,
-            }
+            ...r,
+            assigned_staff: staffName,
+            assigned_at: now,
+            accepted_at: now,
+            updated_at: nowIso,
+          }
           : r;
       })
     );
@@ -1078,7 +1087,7 @@ export default function StaffRequestsPage() {
             in_process_queue: true,
           }, { throwOnError: false });
         });
-      } catch {}
+      } catch { }
 
       // 6. Update raw requests state immediately
       setRawRequests((prev) =>
@@ -1091,13 +1100,13 @@ export default function StaffRequestsPage() {
             String(r.tracking_number) === String(reqId);
           return matches
             ? {
-                ...r,
-                assigned_staff: staffName,
-                assigned_at: now,
-                accepted_at: now,
-                updated_at: nowIso,
-                status: currentStatus,
-              }
+              ...r,
+              assigned_staff: staffName,
+              assigned_at: now,
+              accepted_at: now,
+              updated_at: nowIso,
+              status: currentStatus,
+            }
             : r;
         })
       );
@@ -1155,30 +1164,30 @@ export default function StaffRequestsPage() {
     setRawRequests((prev) =>
       prev.map((r) =>
         String(r.id) === String(updatedReq.rawId) ||
-        String(r.id) === String(updatedReq.id) ||
-        String(r.rawId) === String(updatedReq.rawId) ||
-        String(r.tracking_number) === String(updatedReq.id) ||
-        String(r.tracking_number) === String(updatedReq.tracking_number)
+          String(r.id) === String(updatedReq.id) ||
+          String(r.rawId) === String(updatedReq.rawId) ||
+          String(r.tracking_number) === String(updatedReq.id) ||
+          String(r.tracking_number) === String(updatedReq.tracking_number)
           ? {
-              ...r,
-              ...updatedReq,
-              updated_at: updatedReq.updated_at || nowIso,
-              status: updatedReq.status || r.status,
-              assigned_staff: updatedReq.assigned_staff || r.assigned_staff,
-              assigned_at: updatedReq.assigned_at || r.assigned_at,
-              accepted_at: updatedReq.accepted_at || r.accepted_at,
-              remarks: updatedReq.remarks ?? r.remarks,
-              payment_status: updatedReq.payment_status ?? r.payment_status,
-              or_number: updatedReq.or_number ?? r.or_number,
-              clearance_status: updatedReq.clearance_status ?? r.clearance_status,
-              is_confirmed: updatedReq.is_confirmed ?? r.is_confirmed,
-              confirmed_for_payment: updatedReq.confirmed_for_payment ?? r.confirmed_for_payment,
-              assessed_amount: updatedReq.assessed_amount ?? r.assessed_amount,
-              amount: updatedReq.amount ?? updatedReq.assessed_amount ?? r.amount,
-              release_date: updatedReq.release_date ?? updatedReq.date_of_release ?? r.release_date,
-              date_of_release: updatedReq.date_of_release ?? updatedReq.release_date ?? r.date_of_release,
-              verified_by_name: updatedReq.verified_by_name ?? r.verified_by_name,
-            }
+            ...r,
+            ...updatedReq,
+            updated_at: updatedReq.updated_at || nowIso,
+            status: updatedReq.status || r.status,
+            assigned_staff: updatedReq.assigned_staff || r.assigned_staff,
+            assigned_at: updatedReq.assigned_at || r.assigned_at,
+            accepted_at: updatedReq.accepted_at || r.accepted_at,
+            remarks: updatedReq.remarks ?? r.remarks,
+            payment_status: updatedReq.payment_status ?? r.payment_status,
+            or_number: updatedReq.or_number ?? r.or_number,
+            clearance_status: updatedReq.clearance_status ?? r.clearance_status,
+            is_confirmed: updatedReq.is_confirmed ?? r.is_confirmed,
+            confirmed_for_payment: updatedReq.confirmed_for_payment ?? r.confirmed_for_payment,
+            assessed_amount: updatedReq.assessed_amount ?? r.assessed_amount,
+            amount: updatedReq.amount ?? updatedReq.assessed_amount ?? r.amount,
+            release_date: updatedReq.release_date ?? updatedReq.date_of_release ?? r.release_date,
+            date_of_release: updatedReq.date_of_release ?? updatedReq.release_date ?? r.date_of_release,
+            verified_by_name: updatedReq.verified_by_name ?? r.verified_by_name,
+          }
           : r
       )
     );
@@ -1202,8 +1211,8 @@ export default function StaffRequestsPage() {
     const trackingNo = selectedRequest.tracking_number || selectedRequest.id;
     const effectiveStatus =
       selectedRequest.status &&
-      String(selectedRequest.status).toLowerCase() !== 'pending' &&
-      String(newStatus).toLowerCase() === 'pending'
+        String(selectedRequest.status).toLowerCase() !== 'pending' &&
+        String(newStatus).toLowerCase() === 'pending'
         ? selectedRequest.status
         : newStatus;
 
@@ -1295,9 +1304,9 @@ export default function StaffRequestsPage() {
       setRawRequests((prev) =>
         prev.map((r) =>
           String(r.id) === String(targetId) ||
-          String(r.rawId) === String(targetId) ||
-          String(r.tracking_number) === String(trackingNo) ||
-          String(r.id) === String(selectedRequest.id)
+            String(r.rawId) === String(targetId) ||
+            String(r.tracking_number) === String(trackingNo) ||
+            String(r.id) === String(selectedRequest.id)
             ? { ...r, ...fullPatch, updated_at: nowIso }
             : r
         )
@@ -1337,11 +1346,10 @@ export default function StaffRequestsPage() {
               setSelectedIds(new Set());
               loadData();
             }}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-              activeTab === 'active'
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${activeTab === 'active'
                 ? 'bg-[#0B0B36] text-white shadow-sm'
                 : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
+              }`}
           >
             <span>Active Requests</span>
           </button>
@@ -1355,11 +1363,10 @@ export default function StaffRequestsPage() {
               setStatusFilter('');
               loadData();
             }}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-              activeTab === 'history'
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${activeTab === 'history'
                 ? 'bg-[#0B0B36] text-white shadow-sm'
                 : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
+              }`}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1385,34 +1392,34 @@ export default function StaffRequestsPage() {
         <>
           {/* Card 1: My Assigned Requests */}
           <div ref={myAssignedRef} className="scroll-mt-6">
-          <StaffRequestsTable
-            title="My Assigned Requests"
-            subtitle="Requests assigned to you that are ready for processing"
-            badgeCount={assignedRequests.length}
-            loading={loading}
-            error={error}
-            filteredRequests={assignedRequests}
-            totalRequestsCount={assignedRequests.length}
-            getStatusBadge={getStatusBadge}
-            onOpenProcess={handleOpenProcess}
-            actionType="view"
-            onArchive={handleArchiveRequest}
-            emptyMessage="No requests currently assigned to you for processing."
-            enableSelection={true}
-            isSelectionMode={selectionModeTable === 'assigned'}
-            onToggleSelectionMode={() => {
-              if (selectionModeTable === 'assigned') {
-                setSelectionModeTable(null);
-                setSelectedIds(new Set());
-              } else {
-                setSelectionModeTable('assigned');
-                setSelectedIds(new Set());
-              }
-            }}
-            selectedIds={selectedIds}
-            onToggleSelect={handleToggleSelect}
-            onToggleSelectAll={() => handleToggleSelectAll(assignedRequests.slice(0, 10))}
-          />
+            <StaffRequestsTable
+              title="My Assigned Requests"
+              subtitle="Requests assigned to you that are ready for processing"
+              badgeCount={assignedRequests.length}
+              loading={loading}
+              error={error}
+              filteredRequests={assignedRequests}
+              totalRequestsCount={assignedRequests.length}
+              getStatusBadge={getStatusBadge}
+              onOpenProcess={handleOpenProcess}
+              actionType="view"
+              onArchive={handleArchiveRequest}
+              emptyMessage="No requests currently assigned to you for processing."
+              enableSelection={true}
+              isSelectionMode={selectionModeTable === 'assigned'}
+              onToggleSelectionMode={() => {
+                if (selectionModeTable === 'assigned') {
+                  setSelectionModeTable(null);
+                  setSelectedIds(new Set());
+                } else {
+                  setSelectionModeTable('assigned');
+                  setSelectedIds(new Set());
+                }
+              }}
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleSelect}
+              onToggleSelectAll={() => handleToggleSelectAll(assignedRequests.slice(0, 10))}
+            />
           </div>
 
           {/* Card 2: Unassigned Requests Queue */}
@@ -1502,12 +1509,12 @@ export default function StaffRequestsPage() {
 
           <div className="flex items-center gap-2">
             {selectionModeTable === 'unassigned' ||
-            selectedRequestsList.every(
-              (r) =>
-                !r.assigned_staff ||
-                r.assigned_staff.trim() === '' ||
-                r.assigned_staff.toLowerCase() === 'unassigned'
-            ) ? (
+              selectedRequestsList.every(
+                (r) =>
+                  !r.assigned_staff ||
+                  r.assigned_staff.trim() === '' ||
+                  r.assigned_staff.toLowerCase() === 'unassigned'
+              ) ? (
               <button
                 type="button"
                 onClick={handleBatchClaimAndProcess}
