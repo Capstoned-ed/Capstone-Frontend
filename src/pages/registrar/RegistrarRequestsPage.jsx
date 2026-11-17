@@ -456,7 +456,7 @@ export default function RegistrarRequestsPage() {
           }
         } catch {}
 
-        const assignedStaff =
+        const rawAssignedStaff =
           assignments[r.id] ||
           assignments[String(r.id)] ||
           assignments[r.tracking_number] ||
@@ -467,6 +467,25 @@ export default function RegistrarRequestsPage() {
           matchedStored?.assigned_staff ||
           claimedStaff ||
           '';
+
+        let assignedStaff = rawAssignedStaff;
+        if (rawAssignedStaff) {
+          const matchedMember = staffMembers.find(
+            (s) =>
+              s.username === rawAssignedStaff ||
+              String(s.id) === String(rawAssignedStaff) ||
+              s.name.toLowerCase() === String(rawAssignedStaff).toLowerCase()
+          );
+          if (matchedMember) {
+            assignedStaff = matchedMember.name;
+          } else {
+            const userObj = userMap.get(rawAssignedStaff) || userMap.get(Number(rawAssignedStaff));
+            if (userObj) {
+              const uName = [userObj.first_name, userObj.last_name].filter(Boolean).join(' ').trim();
+              if (uName) assignedStaff = uName;
+            }
+          }
+        }
 
         return {
           rawId: r.rawId || r.id,
@@ -538,7 +557,7 @@ export default function RegistrarRequestsPage() {
         return true;
       })
       .sort(sortRequestsNewestFirst);
-  }, [rawRequests, userMap, credTypeMap, clearanceMap, assignments, activityTimestamps, assignmentTimestamps]);
+  }, [rawRequests, userMap, staffMembers, credTypeMap, clearanceMap, assignments, activityTimestamps, assignmentTimestamps]);
 
   const batchOptions = useMemo(() => {
     const batchesMap = new Map();

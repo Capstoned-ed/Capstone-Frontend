@@ -1113,7 +1113,13 @@ export function getArchivedRequestsMap() {
 export function isRequestArchived(req, archivedMap = null) {
   if (!req) return false;
   if (req.is_archived || req.archived_to_history) return true;
-  if (normalizeToBackendStatus(req.status) === REQUEST_STATUS.RELEASED) return true;
+  const statusNorm = normalizeToBackendStatus(req.status);
+  if (
+    statusNorm === REQUEST_STATUS.RELEASED ||
+    statusNorm === REQUEST_STATUS.CANCELLED
+  ) {
+    return true;
+  }
   const map = archivedMap || getArchivedRequestsMap();
   const keys = [req.id, req.rawId, req.tracking_number, req.trackingId]
     .filter((k) => k !== undefined && k !== null && String(k).trim() !== '')
