@@ -92,7 +92,7 @@ export default function PredictedInsightCard() {
         return 'bg-rose-50 text-rose-800 border-rose-200';
       case 'moderate':
       default:
-        return 'bg-[#00007F]/8 text-[#00007F] border-[#00007F]/20';
+        return 'bg-[#00007F]/10 text-[#00007F] border-[#00007F]/20';
     }
   };
 
@@ -197,10 +197,10 @@ export default function PredictedInsightCard() {
                   return (
                     <div
                       key={idx}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-2xs border ${
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-sm border ${
                         isPeak
-                          ? 'bg-[#FEC956]/20 border-[#FEC956]/80 text-slate-900'
-                          : 'bg-white border-slate-200/80 text-slate-700'
+                          ? 'bg-[#FEC956]/25 border-[#FEC956] text-slate-900'
+                          : 'bg-white border-slate-200 text-slate-700'
                       }`}
                     >
                       <span className="font-bold text-[#00007F]">{item.weekday.slice(0, 3)}:</span>
