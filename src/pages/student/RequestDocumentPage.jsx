@@ -862,10 +862,16 @@ export default function RequestDocumentPage() {
   // Step 2 -> Step 3 (Submit Request)
   const handleSubmitRequest = async (e) => {
     e.preventDefault();
+    if (submitting) return;
 
     if (selectedDocs.length === 0) {
       toast.warning('Please select at least one document to request.');
       setCurrentStep(1);
+      return;
+    }
+
+    if (currentDocDetails.totalCopies < 1) {
+      toast.warning('Document copies must be at least 1.');
       return;
     }
 
