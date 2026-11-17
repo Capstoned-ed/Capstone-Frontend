@@ -306,9 +306,29 @@ export default function RequestDocumentPage() {
       if (coe) return coe.id;
     }
 
-    // 3. For any other Certification options (GPA, Earned Units, Endorsement, Subjects w/ grades, General Certification)
-    // Map to a valid DB credential type (CAR / id: 4 or COE / id: 5) so the backend accepts the foreign key
-    if (lower.includes('cert') || lower.includes('gpa') || lower.includes('unit') || lower.includes('endorsement') || lower.includes('grade') || lower.includes('auth')) {
+    if (lower.includes('authentication') || lower.includes('auth')) {
+      const auth = typesList.find((t) => t.code?.toUpperCase() === 'AUTH' || t.name.toLowerCase().includes('authentication'));
+      if (auth) return auth.id;
+    }
+    if (lower.includes('gpa')) {
+      const gpa = typesList.find((t) => t.code?.toUpperCase() === 'GPA' || t.name.toLowerCase().includes('gpa'));
+      if (gpa) return gpa.id;
+    }
+    if (lower.includes('earned') || lower.includes('unit')) {
+      const units = typesList.find((t) => t.code?.toUpperCase() === 'UNITS' || t.name.toLowerCase().includes('earned unit'));
+      if (units) return units.id;
+    }
+    if (lower.includes('endorsement') || lower.includes('endorse')) {
+      const end = typesList.find((t) => t.code?.toUpperCase() === 'ENDORSE' || t.name.toLowerCase().includes('endorsement'));
+      if (end) return end.id;
+    }
+    if (lower.includes('subject') || lower.includes('grade')) {
+      const gr = typesList.find((t) => t.code?.toUpperCase() === 'GRADES' || t.name.toLowerCase().includes('grade'));
+      if (gr) return gr.id;
+    }
+
+    // 3. Fallback for general Certification option
+    if (lower.includes('cert')) {
       const certType = typesList.find((t) => t.code?.toUpperCase() === 'CAR' || t.code?.toUpperCase() === 'COE' || t.name.toLowerCase().includes('car') || t.name.toLowerCase().includes('enrolled'));
       if (certType) return certType.id;
     }
@@ -319,30 +339,48 @@ export default function RequestDocumentPage() {
     return typesList[0]?.id || 'TOR';
   };
 
-  // Get document info, price, and database type ID
+  // Helper to read live DB price by code or keyword for checkbox display
+  const getLiveCredentialPrice = (codeKey, fallbackPrice) => {
+    const match = credentialTypes.find(
+      (t) => String(t.code || '').toUpperCase() === String(codeKey).toUpperCase()
+    );
+    if (match && match.price !== undefined && match.price !== null && !isNaN(parseFloat(match.price))) {
+      const num = parseFloat(match.price);
+      return Number.isInteger(num) ? String(num) : num.toFixed(2);
+    }
+    return String(fallbackPrice);
+  };
+
+  // Get document info, price, processing days, and database type ID (authoritative DB first)
   const getDocumentItemInfo = (docName, typesList = []) => {
-    if (!docName) return { title: '', description: '', unitPrice: 80, typeId: 1 };
+    if (!docName) return { title: '', description: '', unitPrice: 80, processingDays: 3, docCode: '', typeId: 1 };
     let cleanTitle = docName;
     let desc = 'Official academic credential';
     let unitPrice = 80;
+    let processingDays = 3;
+    let docCode = '';
     const lower = docName.toLowerCase();
 
     if (lower.includes('transcript') || lower.includes('tor')) {
       cleanTitle = 'Transcript of Records (TOR)';
       desc = 'Official academic record of courses taken and grades earned.';
       unitPrice = 125;
+      processingDays = 7;
     } else if (lower.includes('honorable') || lower.includes('dismissal') || lower.includes('hd')) {
       cleanTitle = 'Honorable Dismissal';
       desc = 'Certificate of honorable dismissal and transfer credentials.';
       unitPrice = 100;
+      processingDays = 5;
     } else if (lower.includes('evaluation') || lower.includes('eval')) {
       cleanTitle = 'Evaluation';
       desc = 'Curriculum evaluation of academic credits and standing.';
       unitPrice = 50;
+      processingDays = 3;
     } else if (lower.includes('authentication') || lower.includes('auth')) {
       cleanTitle = 'Authentication';
       desc = 'Official verification and certified authentication of university records.';
       unitPrice = 5;
+      processingDays = 2;
     } else if (lower.includes('gpa')) {
       cleanTitle = 'Certification - GPA';
       desc = 'Official certification of your overall Grade Point Average and academic standing.';
@@ -362,31 +400,43 @@ export default function RequestDocumentPage() {
     } else if (lower.includes('enrolled') || lower.includes('coe')) {
       cleanTitle = 'Certification - Officially enrolled';
       desc = 'Certificate verifying active enrollment and academic load for the current semester.';
-      unitPrice = 50;
+      unitPrice = 80;
     } else if (lower === 'car' || lower === 'certification - car' || lower.includes('- car')) {
       cleanTitle = 'Certification - CAR';
       desc = 'Cumulative Academic Record summarizing your complete academic history.';
-      unitPrice = 75;
+      unitPrice = 80;
+      processingDays = 5;
     } else if (lower.startsWith('cert')) {
-      cleanTitle = 'Certification (P80)';
+      cleanTitle = 'Certification';
       desc = 'Official university certification for academic or professional use.';
       unitPrice = 80;
     }
 
-    // Check if an exact DB credential type exists matching the chosen name
-    const exactDb = typesList.find((t) => t.name.toLowerCase() === docName.toLowerCase());
-    if (exactDb) {
-      cleanTitle = exactDb.name;
-      if (exactDb.description) desc = exactDb.description;
-      if (exactDb.price) unitPrice = parseFloat(exactDb.price) || unitPrice;
-    }
+    const typeId = resolveCredentialTypeId(docName, typesList);
 
-    const typeId = resolveCredentialTypeId(cleanTitle, typesList);
+    // Prioritize live database CredentialType fields (price, processing_days, doc_code, description)
+    const matchedDb =
+      typesList.find((t) => String(t.id) === String(typeId)) ||
+      typesList.find((t) => t.name && t.name.toLowerCase() === docName.toLowerCase());
+
+    if (matchedDb) {
+      if (matchedDb.name) cleanTitle = matchedDb.name;
+      if (matchedDb.description) desc = matchedDb.description;
+      if (matchedDb.price !== undefined && matchedDb.price !== null && !isNaN(parseFloat(matchedDb.price))) {
+        unitPrice = parseFloat(matchedDb.price);
+      }
+      if (matchedDb.processing_days !== undefined && matchedDb.processing_days !== null) {
+        processingDays = Number(matchedDb.processing_days) || processingDays;
+      }
+      docCode = matchedDb.doc_code || matchedDb.code || '';
+    }
 
     return {
       title: cleanTitle,
       description: desc,
       unitPrice,
+      processingDays,
+      docCode,
       typeId,
     };
   };
@@ -979,16 +1029,21 @@ export default function RequestDocumentPage() {
       const exactDocTitle = currentDocDetails.title || primaryDoc || 'Document Request';
       const cleanPurpose = purposeInput || selectedPurposes.join(', ') || 'Official Academic Credential Request';
       const formattedRemarks = `[${exactDocTitle}] ${cleanPurpose}`;
-      const docCode = resolveDocCodes(selectedDocs);
+      const docCode = resolveDocCodes(selectedDocs, credentialTypes);
 
-      // Submit directly to backend API so it persists in the database for Admin and Staff
+      // Submit directly to backend API so it persists in the database for Admin and Staff.
+      // For single-document requests, let Django CredentialRequest.save() read CredentialType.doc_code directly from DB;
+      // only pass custom_doc_code when combining multiple documents.
       if (targetCredTypeId) {
         try {
-          createdItem = await requestsApi.create({
+          const createPayload = {
             credential_type: targetCredTypeId,
             remarks: formattedRemarks,
-            custom_doc_code: docCode,
-          });
+          };
+          if (selectedDocs.length > 1 && docCode) {
+            createPayload.custom_doc_code = docCode;
+          }
+          createdItem = await requestsApi.create(createPayload);
         } catch (apiErr) {
           console.warn('Backend create request returned validation response:', apiErr);
           if (apiErr.response) {
@@ -1500,7 +1555,7 @@ export default function RequestDocumentPage() {
                             onChange={handleToggleEvaluation}
                             className="ustp-checkbox-input"
                           />
-                          <span>Evaluation (P50)</span>
+                          <span>Evaluation (P{getLiveCredentialPrice('EVAL', 50)})</span>
                         </label>
                       );
                     })()}
@@ -1518,7 +1573,7 @@ export default function RequestDocumentPage() {
                             onChange={handleToggleHonorableDismissal}
                             className="ustp-checkbox-input"
                           />
-                          <span>Honorable Dismissal (P100)</span>
+                          <span>Honorable Dismissal (P{getLiveCredentialPrice('HD', 100)})</span>
                         </label>
                       );
                     })()}
@@ -1536,7 +1591,7 @@ export default function RequestDocumentPage() {
                             onChange={handleToggleTranscript}
                             className="ustp-checkbox-input"
                           />
-                          <span>Transcript of Records (P125/pg)</span>
+                          <span>Transcript of Records (P{getLiveCredentialPrice('TOR', 125)}/pg)</span>
                         </label>
                       );
                     })()}
@@ -1554,7 +1609,7 @@ export default function RequestDocumentPage() {
                             onChange={handleToggleAuthentication}
                             className="ustp-checkbox-input"
                           />
-                          <span>Authentication (P5/pg)</span>
+                          <span>Authentication (P{getLiveCredentialPrice('AUTH', 5)}/pg)</span>
                         </label>
                       );
                     })()}
@@ -1618,7 +1673,7 @@ export default function RequestDocumentPage() {
                   <div className="ustp-doc-col">
                     {/* General Certification - Header without box */}
                     <div className="ustp-doc-label cursor-default select-none pointer-events-none pl-0">
-                      <span className="font-bold text-slate-800">Certification (P80)</span>
+                      <span className="font-bold text-slate-800">Certification (P{getLiveCredentialPrice('CAR', 80)})</span>
                     </div>
 
                     {/* Specific Certification Sub-options */}

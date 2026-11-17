@@ -1199,24 +1199,58 @@ export function preserveDocTagInRemarks(requestOrRemarks, newRemarks = '') {
 }
 
 const DOC_CODE_RULES = [
-  { match: (s) => /transcript|tor/i.test(s), code: '1' },
-  { match: (s) => /honorable|dismissal|hd/i.test(s), code: '2' },
-  { match: (s) => /evaluation|eval/i.test(s), code: '5' },
-  { match: (s) => /authentication|auth/i.test(s), code: '6' },
-  { match: (s) => /car/i.test(s), code: '4F' },
-  { match: (s) => /gpa/i.test(s), code: '4B' },
-  { match: (s) => /officially\s*enrolled|enrolled|coe/i.test(s), code: '4A' },
-  { match: (s) => /earned\s*units|earned|units/i.test(s), code: '4D' },
-  { match: (s) => /grades|subject/i.test(s), code: '4G' },
-  { match: (s) => /cert/i.test(s), code: '4' },
+  { match: (s) => /transcript|tor/i.test(s), code: '1', dbCode: 'TOR' },
+  { match: (s) => /honorable|dismissal|\bhd\b/i.test(s), code: '2', dbCode: 'HD' },
+  { match: (s) => /evaluation|\beval\b/i.test(s), code: '5', dbCode: 'EVAL' },
+  { match: (s) => /authentication|\bauth\b/i.test(s), code: '10', dbCode: 'AUTH' },
+  { match: (s) => /\bcar\b/i.test(s), code: '4f', dbCode: 'CAR' },
+  { match: (s) => /\bgpa\b/i.test(s), code: '4b', dbCode: 'GPA' },
+  { match: (s) => /officially\s*enrolled|enrolled|\bcoe\b/i.test(s), code: '4a', dbCode: 'COE' },
+  { match: (s) => /earned\s*units|earned|\bunits\b/i.test(s), code: '4d', dbCode: 'UNITS' },
+  { match: (s) => /endorsement|\bendorse\b/i.test(s), code: '4m', dbCode: 'ENDORSE' },
+  { match: (s) => /grades|subject/i.test(s), code: '4g', dbCode: 'GRADES' },
+  { match: (s) => /cert/i.test(s), code: '4', dbCode: 'CERT' },
 ];
 
-export function resolveDocCodes(docNames = []) {
+export function resolveDocCodes(docNames = [], credentialTypes = []) {
   const list = Array.isArray(docNames) ? docNames : [docNames];
+  const liveTypes = Array.isArray(credentialTypes) ? credentialTypes : [];
   const codes = [];
+
   list.forEach((name) => {
     if (!name) return;
     const str = String(name).trim();
+    const lower = str.toLowerCase();
+
+    // 1. Prioritize exact or code match against live DB CredentialType records
+    let liveMatch = liveTypes.find(
+      (t) =>
+        (t.name && t.name.toLowerCase() === lower) ||
+        (t.code && t.code.toLowerCase() === lower)
+    );
+
+    if (!liveMatch && liveTypes.length > 0) {
+      for (const rule of DOC_CODE_RULES) {
+        if (rule.match(str)) {
+          liveMatch = liveTypes.find(
+            (t) =>
+              (t.code && t.code.toUpperCase() === rule.dbCode) ||
+              (t.name && rule.match(t.name))
+          );
+          if (liveMatch) break;
+        }
+      }
+    }
+
+    if (liveMatch) {
+      const liveCode = String(liveMatch.doc_code || liveMatch.code || '').trim();
+      if (liveCode && !codes.includes(liveCode)) {
+        codes.push(liveCode);
+      }
+      return;
+    }
+
+    // 2. Offline fallback rules only if live DB catalog was unavailable
     for (const rule of DOC_CODE_RULES) {
       if (rule.match(str)) {
         if (!codes.includes(rule.code)) {

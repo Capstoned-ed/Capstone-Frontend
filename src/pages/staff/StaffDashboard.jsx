@@ -892,29 +892,29 @@ export default function StaffDashboard() {
             {metrics.total > 0 ? (
               <>
                 <p className="staff-dash-insight-item">
-                  <span className="text-white text-base leading-none">•</span>
+                  <span className="text-[#00007F] text-base leading-none">•</span>
                   <span>
-                    Current registrar workload: <strong className="font-bold text-white">{metrics.total} total {metrics.total === 1 ? 'request' : 'requests'}</strong> ({metrics.pending} pending, {metrics.processing} in progress).
+                    Current registrar workload: <strong className="font-bold text-slate-900">{metrics.total} total {metrics.total === 1 ? 'request' : 'requests'}</strong> ({metrics.pending} pending, {metrics.processing} in progress).
                   </span>
                 </p>
                 {targetedSection.cards.length > 0 && (
                   <p className="staff-dash-insight-item">
-                    <span className="text-white text-base leading-none">•</span>
+                    <span className="text-[#00007F] text-base leading-none">•</span>
                     <span>
-                      Primary requested document: <strong className="font-bold text-white">{targetedSection.topDocName}</strong> ({targetedSection.cards[0].count} {targetedSection.cards[0].count === 1 ? 'copy' : 'copies'} requested).
+                      Primary requested document: <strong className="font-bold text-slate-900">{targetedSection.topDocName}</strong> ({targetedSection.cards[0].count} {targetedSection.cards[0].count === 1 ? 'copy' : 'copies'} requested).
                     </span>
                   </p>
                 )}
                 <p className="staff-dash-insight-item">
-                  <span className="text-white text-base leading-none">•</span>
+                  <span className="text-[#00007F] text-base leading-none">•</span>
                   <span>
-                    Ready for collection: <strong className="font-bold text-white">{metrics.forRelease} {metrics.forRelease === 1 ? 'document' : 'documents'}</strong> ready for release.
+                    Ready for collection: <strong className="font-bold text-slate-900">{metrics.forRelease} {metrics.forRelease === 1 ? 'document' : 'documents'}</strong> ready for release.
                   </span>
                 </p>
               </>
             ) : (
               <p className="staff-dash-insight-item">
-                <span className="text-white text-base leading-none">•</span>
+                <span className="text-[#00007F] text-base leading-none">•</span>
                 <span>
                   No document requests currently in the pipeline. New student submissions will appear here automatically.
                 </span>
