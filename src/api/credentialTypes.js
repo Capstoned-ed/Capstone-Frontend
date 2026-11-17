@@ -172,53 +172,27 @@ export function compareCredentialCodes(a, b) {
 }
 
 function mergeCredentialCatalog(backendList = []) {
-  const overrides = getOverrides();
-  const customList = getCustomTypes();
-  const matchedBackendIds = new Set();
-
-  const mergedStandard = REQUEST_FORM_CREDENTIAL_TYPES.map((def) => {
-    const backendItem = matchBackendRecord(def, backendList);
-    if (backendItem?.id !== undefined) {
-      matchedBackendIds.add(String(backendItem.id));
-    }
-    const id = backendItem?.id ?? def.id;
-    const localPatch = overrides[String(id)] || overrides[String(def.id)] || {};
-
-    return {
-      ...def,
-      id,
-      doc_code: localPatch.doc_code || def.doc_code || backendItem?.doc_code,
-      is_active: backendItem?.is_active ?? def.is_active,
-      ...localPatch,
-    };
-  });
-
   const isStandaloneCertification = (item) => {
     const codeUpper = String(item?.code || '').trim().toUpperCase();
     const nameLower = String(item?.name || '').trim().toLowerCase();
     return codeUpper === 'CERT' || nameLower === 'certification';
   };
 
-  const extraBackend = backendList
-    .filter((b) => !matchedBackendIds.has(String(b.id)) && !isStandaloneCertification(b))
-    .map((b) => ({
-      ...b,
-      ...(overrides[String(b.id)] || {}),
-    }));
+  // Authoritative mode: when the Django CredentialType DB returns records,
+  // use them directly without overwriting codes, prices, or processing_days
+  // with hardcoded defaults or stale localStorage overrides.
+  if (Array.isArray(backendList) && backendList.length > 0) {
+    return backendList
+      .filter((b) => b && !isStandaloneCertification(b))
+      .map((b) => ({
+        ...b,
+        doc_code: b.doc_code || b.code || '',
+      }))
+      .sort(compareCredentialCodes);
+  }
 
-  const extraCustom = customList
-    .filter(
-      (c) =>
-        !isStandaloneCertification(c) &&
-        !mergedStandard.some((m) => String(m.id) === String(c.id) || m.code === c.code) &&
-        !extraBackend.some((b) => String(b.id) === String(c.id) || b.code === c.code)
-    )
-    .map((c) => ({
-      ...c,
-      ...(overrides[String(c.id)] || {}),
-    }));
-
-  return [...extraCustom, ...mergedStandard, ...extraBackend].sort(compareCredentialCodes);
+  // Offline / unreachable fallback only
+  return [...REQUEST_FORM_CREDENTIAL_TYPES].sort(compareCredentialCodes);
 }
 
 export const VOLUME_CREDENTIAL_SERIES = [
@@ -284,8 +258,7 @@ export const credentialTypesApi = {
   async get(id) {
     try {
       const response = await apiClient.get(`/api/credential-types/${id}/`);
-      const overrides = getOverrides();
-      return { ...response.data, ...(overrides[String(id)] || {}) };
+      return response.data;
     } catch {
       const all = await this.list();
       return all.find((t) => String(t.id) === String(id)) || null;
@@ -293,45 +266,28 @@ export const credentialTypesApi = {
   },
 
   async create(data) {
+    const response = await apiClient.post('/api/credential-types/', data);
     try {
-      const response = await apiClient.post('/api/credential-types/', data);
-      saveOverride(response.data.id, response.data);
-      return response.data;
-    } catch {
-      const created = {
-        id: Date.now(),
-        code: data.code,
-        name: data.name,
-        description: data.description || '',
-        price: data.price,
-        processing_days: data.processing_days || 3,
-        is_active: data.is_active ?? true,
-      };
-      saveCustomType(created);
-      return created;
-    }
+      localStorage.removeItem(OVERRIDES_KEY);
+      localStorage.removeItem(CUSTOM_KEY);
+    } catch {}
+    return response.data;
   },
 
   async update(id, updates) {
-    saveOverride(id, updates);
+    const response = await apiClient.patch(`/api/credential-types/${id}/`, updates);
     try {
-      const response = await apiClient.patch(`/api/credential-types/${id}/`, updates);
-      return { ...response.data, ...updates };
-    } catch {
-      const all = await this.list();
-      const existing = all.find((t) => String(t.id) === String(id)) || { id };
-      return { ...existing, ...updates };
-    }
+      localStorage.removeItem(OVERRIDES_KEY);
+    } catch {}
+    return response.data;
   },
 
   async deactivate(id) {
-    saveOverride(id, { is_active: false });
+    const response = await apiClient.delete(`/api/credential-types/${id}/`);
     try {
-      const response = await apiClient.delete(`/api/credential-types/${id}/`);
-      return response.data;
-    } catch {
-      return { id, is_active: false };
-    }
+      localStorage.removeItem(OVERRIDES_KEY);
+    } catch {}
+    return response.data;
   },
 };
 

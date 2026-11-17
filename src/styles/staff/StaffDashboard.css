@@ -46,7 +46,7 @@
 }
 
 .staff-dash-targeted-card {
-  @apply bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 sm:p-7;
+  @apply bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 sm:p-7;
 }
 
 .staff-dash-targeted-header {
@@ -74,7 +74,7 @@
 }
 
 .staff-dash-doc-card {
-  @apply bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow;
+  @apply bg-white border border-slate-200/80 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow;
 }
 
 .staff-dash-doc-card-top {
@@ -114,7 +114,7 @@
 }
 
 .staff-dash-metric-card {
-  @apply bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-5 hover:shadow-md transition-shadow;
+  @apply bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 sm:p-5 hover:shadow-md transition-shadow;
 }
 
 .staff-dash-metric-card.pending {
@@ -154,7 +154,7 @@
 }
 
 .staff-dash-insight-card {
-  @apply bg-[#DDE3FF] rounded-2xl p-6 border border-[#C5D0FF] shadow-sm;
+  @apply bg-white rounded-2xl p-6 border border-slate-200 border-l-4 border-l-[#00007F] shadow-sm;
 }
 
 .staff-dash-insight-header {
@@ -162,15 +162,15 @@
 }
 
 .staff-dash-insight-icon {
-  @apply w-10 h-10 rounded-xl bg-[#BAC7FF] flex items-center justify-center text-[#2A3CB8] shrink-0 shadow-sm;
+  @apply w-10 h-10 rounded-xl bg-[#00007F]/10 flex items-center justify-center text-[#00007F] shrink-0;
 }
 
 .staff-dash-insight-title {
-  @apply text-lg font-bold text-[#0A0A7C];
+  @apply text-lg font-bold text-slate-900;
 }
 
 .staff-dash-insight-body {
-  @apply bg-[#7084D8]/85 rounded-xl p-5 text-white shadow-sm mt-3.5 space-y-2 text-xs sm:text-sm font-normal;
+  @apply bg-slate-50/80 rounded-xl p-5 text-slate-700 border border-slate-200/80 mt-3.5 space-y-2 text-xs sm:text-sm font-normal;
 }
 
 .staff-dash-insight-item {
@@ -178,7 +178,7 @@
 }
 
 .staff-dash-calendar-card {
-  @apply bg-[#EAF0FE] rounded-2xl p-6 border border-[#D5E0FA] shadow-sm;
+  @apply bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm;
 }
 
 .staff-dash-calendar-top {

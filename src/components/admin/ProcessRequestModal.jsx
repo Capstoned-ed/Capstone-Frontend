@@ -93,6 +93,7 @@ export default function ProcessRequestModal({
     d.setDate(d.getDate() + 5);
     return d.toISOString().split('T')[0];
   });
+  const [turnaroundHint, setTurnaroundHint] = useState('');
   const [verifiedByName, setVerifiedByName] = useState(defaultStaffName);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [showClaimStubModal, setShowClaimStubModal] = useState(false);
@@ -463,6 +464,62 @@ export default function ProcessRequestModal({
 
     if (requestItem.date_of_release || requestItem.release_date) {
       setDateOfRelease(requestItem.date_of_release || requestItem.release_date);
+      setTurnaroundHint('');
+    } else {
+      // Prefill estimated release date using ML Turnaround Prediction (with safe fallback to CredentialType.processing_days)
+      const credCode =
+        requestItem.credential_type_details?.code ||
+        requestItem.credential_code ||
+        requestItem.document_type ||
+        'TOR';
+      const reqDate = requestItem.created_at
+        ? String(requestItem.created_at).substring(0, 10)
+        : undefined;
+      const fallbackDays = Number(
+        requestItem.credential_type_details?.processing_days ||
+        requestItem.processing_days ||
+        5
+      );
+
+      const addBusinessDays = (startIso, days) => {
+        const d = startIso ? new Date(startIso) : new Date();
+        const safeBase = isNaN(d.getTime()) ? new Date() : d;
+        const target = Math.max(1, Math.ceil(Number(days) || 3));
+        let added = 0;
+        while (added < target) {
+          safeBase.setDate(safeBase.getDate() + 1);
+          const wd = safeBase.getDay();
+          if (wd !== 0 && wd !== 6) added += 1;
+        }
+        return safeBase.toISOString().split('T')[0];
+      };
+
+      setDateOfRelease(addBusinessDays(reqDate, fallbackDays));
+      setTurnaroundHint(`Catalog est: ${fallbackDays} operating days`);
+
+      requestsApi
+        .predictTurnaround({
+          credentialType: credCode,
+          dateRequested: reqDate,
+          purpose: requestItem.purpose || 'Employment',
+          numDocuments: Number(requestItem.copies) || 1,
+        })
+        .then((res) => {
+          if (ignore || !res) return;
+          const predDays = res.predicted_processing_time;
+          if (res.estimated_completion_date) {
+            setDateOfRelease(String(res.estimated_completion_date).substring(0, 10));
+          } else if (predDays) {
+            setDateOfRelease(addBusinessDays(reqDate, predDays));
+          }
+          if (predDays) {
+            const label = res.is_fallback ? 'Catalog est' : 'ML est';
+            setTurnaroundHint(`${label}: ~${predDays} operating days`);
+          }
+        })
+        .catch(() => {
+          // Graceful fallback already applied via CredentialType.processing_days
+        });
     }
     if (requestItem.verified_by_name) {
       setVerifiedByName(requestItem.verified_by_name);
@@ -1716,9 +1773,15 @@ export default function ProcessRequestModal({
                     <input
                       type="date"
                       value={dateOfRelease}
-                      onChange={(e) => setDateOfRelease(e.target.value)}
+                      onChange={(e) => {
+                        setDateOfRelease(e.target.value);
+                        setTurnaroundHint('');
+                      }}
                       className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-600 bg-white"
                     />
+                    {turnaroundHint && (
+                      <p className="text-[10px] text-slate-500 mt-1">{turnaroundHint}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Verified by *</label>
