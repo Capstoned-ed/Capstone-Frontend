@@ -266,28 +266,6 @@ export default function useDashboardData() {
           };
         });
 
-        // Add Unassigned Queue summary if there are active unassigned requests
-        const unassignedReqs = validRequests.filter((r) =>
-          !activeStaff.some((staff) => isRequestAssignedToUser(r, staff, assignments, users))
-        );
-        if (unassignedReqs.length > 0) {
-          const unassignedCompleted = unassignedReqs.filter((r) => isCompletedRequest(r, archivedMap)).length;
-          const unassignedRemaining = unassignedReqs.filter((r) => !isCompletedRequest(r, archivedMap));
-          const unassignedForProcessing = unassignedRemaining.filter(isForProcessingRequest).length;
-          const unassignedProcessing = unassignedRemaining.filter(isProcessingRequest).length;
-          const unassignedPending = unassignedRemaining.filter(
-            (r) => !isForProcessingRequest(r) && !isProcessingRequest(r)
-          ).length;
-
-          computedStaffMetrics.unshift({
-            name: 'Unassigned / Queue',
-            completed: unassignedCompleted,
-            forProcessing: unassignedForProcessing,
-            processing: unassignedProcessing,
-            pending: unassignedPending,
-          });
-        }
-
         setStaffMetrics(computedStaffMetrics);
 
         // -------------------------------------------------------------
