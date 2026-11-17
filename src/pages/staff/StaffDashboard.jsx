@@ -103,6 +103,7 @@ export default function StaffDashboard() {
   }, [selectedCalendarDate]);
 
   const loadDashboardData = useCallback(async () => {
+    if (!user) return;
     try {
       const isStaffUser = String(user?.role || '').toLowerCase() === 'staff';
       const requestsParam = isStaffUser
@@ -327,8 +328,8 @@ export default function StaffDashboard() {
       : requestsList;
 
     return list
-      .filter((r) => !isRequestArchived(r, archivedMap))
-      .filter((r) => isRequestAssignedToUser(r, user, assignments, usersList))
+      .filter((r) => !isRequestArchived(r, {}))
+      .filter((r) => isRequestAssignedToUser(r, user, {}, usersList))
       .sort((a, b) => {
         const getAssignTime = (item) => {
           const keys = [item.tracking_number, item.id, item.rawId].filter(Boolean).map(String);
@@ -384,36 +385,39 @@ export default function StaffDashboard() {
   // All requests assigned to this user (or all requests for admin/master) - UNFILTERED by selected calendar date
   const allUserRequests = useMemo(() => {
     if (String(user?.role || '').toLowerCase() === 'staff') {
-      return requestsList.filter((r) => isRequestAssignedToUser(r, user, assignments, usersList));
+      return requestsList.filter((r) => isRequestAssignedToUser(r, user, {}, usersList));
     }
-    return requestsList.filter((r) => !isRequestArchived(r, archivedMap));
-  }, [user, requestsList, assignments, usersList, archivedMap]);
+    return requestsList;
+  }, [user, requestsList, usersList]);
 
   const metrics = useMemo(() => {
     const isStaffRole = String(user?.role || '').toLowerCase() === 'staff';
-    const completedSource = isStaffRole ? allUserRequests : requestsList;
+    const allAssigned = isStaffRole ? allUserRequests : requestsList;
 
-    const total = targetRequestsForMetrics.length;
+    const total = allAssigned.length;
     const pending = targetRequestsForMetrics.filter((r) => {
-      const s = (r.status || '').toLowerCase();
-      return s.includes('pending') || s.includes('received');
+      const norm = normalizeToBackendStatus(r.rawStatus || r.status);
+      return norm === REQUEST_STATUS.PENDING || norm === REQUEST_STATUS.PAYMENT_PENDING;
     }).length;
     const processing = targetRequestsForMetrics.filter((r) => {
-      const s = (r.status || '').toLowerCase();
-      return s.includes('processing') || s.includes('preparation');
+      const norm = normalizeToBackendStatus(r.rawStatus || r.status);
+      return norm === REQUEST_STATUS.PROCESSING || norm === REQUEST_STATUS.PAYMENT_VERIFIED;
     }).length;
     const onHold = targetRequestsForMetrics.filter((r) => {
-      const s = (r.status || '').toLowerCase();
-      return s.includes('hold') || s.includes('verification');
+      const norm = normalizeToBackendStatus(r.rawStatus || r.status);
+      return (
+        norm === REQUEST_STATUS.REQUIREMENTS_VERIFICATION ||
+        norm === REQUEST_STATUS.REQUIREMENTS_REJECTED ||
+        String(r.status || '').toLowerCase().includes('hold')
+      );
     }).length;
     const forRelease = targetRequestsForMetrics.filter((r) => {
-      const s = (r.status || '').toLowerCase();
-      return s.includes('release') || s.includes('pickup') || s.includes('ready');
+      const norm = normalizeToBackendStatus(r.rawStatus || r.status);
+      return norm === REQUEST_STATUS.READY_FOR_RELEASE;
     }).length;
-    const completed = completedSource.filter((r) => {
-      const s = (r.status || '').toLowerCase();
-      const raw = (r.rawStatus || '').toLowerCase();
-      return s.includes('claimed') || s === 'completed' || raw === 'released' || isClaimedStatus(r.rawStatus || r.status);
+    const completed = allAssigned.filter((r) => {
+      const norm = normalizeToBackendStatus(r.rawStatus || r.status);
+      return norm === REQUEST_STATUS.RELEASED || isClaimedStatus(r.rawStatus || r.status);
     }).length;
 
     return { total, pending, processing, onHold, forRelease, completed };

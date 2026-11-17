@@ -44,9 +44,30 @@ test.describe('Fresh Incognito Context Verification (Login -> All 4 Dashboards)'
     await page.route('**/api/users/**', (route: any) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: sampleUsers, count: sampleUsers.length }) })
     );
-    await page.route('**/api/requests/**', (route: any) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: sampleRequests, count: sampleRequests.length }) })
-    );
+    await page.route('**/api/requests/**', (route: any) => {
+      const url = route.request().url();
+      // Simulate a 2-page DRF paginated response where RELEASED requests live on Page 2
+      if (url.includes('page=2')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            count: sampleRequests.length,
+            next: null,
+            results: sampleRequests.slice(3),
+          }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          count: sampleRequests.length,
+          next: 'http://localhost:8000/api/requests/?page=2',
+          results: sampleRequests.slice(0, 3),
+        }),
+      });
+    });
     await page.route('**/api/credential-types/**', (route: any) =>
       route.fulfill({
         status: 200,
@@ -126,12 +147,12 @@ test.describe('Fresh Incognito Context Verification (Login -> All 4 Dashboards)'
 
     const metricCards = page.locator('.staff-dash-metric-card');
     await expect(metricCards).toHaveCount(6);
-    await expect(metricCards.nth(0).locator('.staff-dash-metric-val')).toHaveText('3'); // Active assigned
+    await expect(metricCards.nth(0).locator('.staff-dash-metric-val')).toHaveText('4'); // All assigned (3 active + 1 released)
     await expect(metricCards.nth(1).locator('.staff-dash-metric-val')).toHaveText('1'); // Pending
     await expect(metricCards.nth(2).locator('.staff-dash-metric-val')).toHaveText('1'); // Processing
     await expect(metricCards.nth(3).locator('.staff-dash-metric-val')).toHaveText('0'); // On Hold
     await expect(metricCards.nth(4).locator('.staff-dash-metric-val')).toHaveText('1'); // For Release
-    await expect(metricCards.nth(5).locator('.staff-dash-metric-val')).toHaveText('1'); // Completed Today (RELEASED!)
+    await expect(metricCards.nth(5).locator('.staff-dash-metric-val')).toHaveText('1'); // Completed Today (from Page 2 RELEASED!)
 
     expect(errors).toEqual([]);
     await context.close();

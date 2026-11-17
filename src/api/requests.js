@@ -844,8 +844,25 @@ export const requestsApi = {
   list: async (params = {}, user = null) => {
     let backendResults = [];
     try {
-      const response = await apiClient.get('/api/requests/', { params });
-      const rawList = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+      const requestParams = { page_size: 1000, ...params };
+      const response = await apiClient.get('/api/requests/', { params: requestParams });
+      const rawList = Array.isArray(response.data) ? [...response.data] : [...(response.data?.results || [])];
+
+      // Follow DRF pagination if the backend returns paginated pages so older RELEASED requests are never dropped
+      let nextUrl = !Array.isArray(response.data) ? response.data?.next : null;
+      let pageGuard = 0;
+      while (nextUrl && pageGuard < 20) {
+        pageGuard += 1;
+        try {
+          const nextRes = await apiClient.get(nextUrl);
+          const nextItems = Array.isArray(nextRes.data) ? nextRes.data : (nextRes.data?.results || []);
+          rawList.push(...nextItems);
+          nextUrl = !Array.isArray(nextRes.data) ? nextRes.data?.next : null;
+        } catch {
+          break;
+        }
+      }
+
       backendResults = rawList.map((b) => {
         const latestBackendPayment = Array.isArray(b.payments) && b.payments.length > 0 ? b.payments[0] : null;
         return {
