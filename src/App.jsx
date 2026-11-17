@@ -132,7 +132,7 @@ export default function App() {
                   <Route path={ROUTES.STUDENT.PROFILE} element={<StudentProfilePage />} />
                 </Route>
 
-                <Route element={<RoleRoute allowedRoles={[ROLES.STAFF, ROLES.REGISTRAR, ROLES.ADMIN]} />}>
+                <Route element={<RoleRoute allowedRoles={[ROLES.STAFF, ROLES.REGISTRAR]} />}>
                   <Route path="/staff" element={<Navigate to={ROUTES.STAFF.DASHBOARD} replace />} />
                   <Route path={ROUTES.STAFF.DASHBOARD} element={<StaffDashboard />} />
                   <Route path={ROUTES.STAFF.CALENDAR} element={<ProcessingCalendarPage />} />

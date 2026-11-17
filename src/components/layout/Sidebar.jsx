@@ -144,7 +144,7 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           ),
         },
         {
-          label: 'Batch Staff Assignment',
+          label: 'Requests & Assignment',
           to: ROUTES.REGISTRAR.REQUESTS,
           icon: (
             <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
