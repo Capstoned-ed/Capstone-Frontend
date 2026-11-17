@@ -56,7 +56,7 @@ export default function CredentialDeleteDialog({
           <p className="text-xs text-slate-500 leading-relaxed max-w-sm mx-auto mb-6">
             Are you sure you want to deactivate{' '}
             <strong className="text-slate-800">
-              {credentialType.name} ({credentialType.code})
+              {credentialType.name} ({credentialType.doc_code || credentialType.code})
             </strong>
             ? Students will no longer be able to submit new requests for this document.
           </p>

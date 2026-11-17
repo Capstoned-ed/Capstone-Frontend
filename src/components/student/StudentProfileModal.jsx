@@ -107,6 +107,16 @@ export default function StudentProfileModal({ isOpen, onClose }) {
     (user?.username && !/^\d{6,}$/.test(user.username) ? user.username : null) ||
     'Juan De Letchi';
 
+  const nameParts = String(displayName || '').trim().split(/\s+/).filter(Boolean);
+  const firstName =
+    user?.first_name ||
+    cachedProfile?.first_name ||
+    (nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : nameParts[0] || '');
+  const lastName =
+    user?.last_name ||
+    cachedProfile?.last_name ||
+    (nameParts.length > 1 ? nameParts[nameParts.length - 1] : '');
+
   const studentId =
     user?.student_id ||
     cachedProfile?.student_id ||
@@ -546,17 +556,30 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
                   {/* Left Column */}
                   <div className="space-y-4">
-                    {/* Full Name */}
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        Full Name
-                      </label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={displayName}
-                        className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2.5 text-sm text-slate-500 outline-none select-text cursor-not-allowed font-medium"
-                      />
+                    {/* First Name & Last Name */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                          First Name
+                        </label>
+                        <input
+                          type="text"
+                          readOnly
+                          value={firstName}
+                          className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2.5 text-sm text-slate-500 outline-none select-text cursor-not-allowed font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                          Last Name
+                        </label>
+                        <input
+                          type="text"
+                          readOnly
+                          value={lastName}
+                          className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2.5 text-sm text-slate-500 outline-none select-text cursor-not-allowed font-medium"
+                        />
+                      </div>
                     </div>
 
                     {/* Email */}
