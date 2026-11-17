@@ -129,6 +129,17 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
   // Resolve form attributes
   const studentName = resolveStudentRealName();
 
+  const resolvedSignatoryName = useMemo(() => {
+    const raw =
+      requestData?.approved_by_name ||
+      requestData?.approvedByName ||
+      requestData?.registrar_name ||
+      '';
+    if (!raw) return 'Jonalin T. Lagrada, MPSM';
+    const stripped = raw.replace(/^Auto-Approved\s*\((.*)\)$/i, '$1').trim();
+    return stripped || 'Jonalin T. Lagrada, MPSM';
+  }, [requestData]);
+
   // Dynamic font sizing so the whole complete name always fits without truncation
   const nameFontSize = useMemo(() => {
     const len = studentName ? studentName.length : 0;
@@ -624,7 +635,7 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
                   Approved:
                 </span>
                 <div className="ustp-sign-line-text" style={{ textAlign: 'center' }}>
-                  Jonalin T. Lagrada, MPSM
+                  {resolvedSignatoryName}
                 </div>
                 <div className="ustp-sign-subcaption">
                   University Registrar

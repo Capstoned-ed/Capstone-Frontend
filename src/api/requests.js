@@ -1027,6 +1027,19 @@ export const requestsApi = {
     const response = await apiClient.get('/api/credentials/ml-health/');
     return response.data;
   },
+
+  /**
+   * Approve a credential request as Registrar or Admin.
+   * @param {string|number} id
+   * @returns {Promise<Object>}
+   */
+  approve: async (id) => {
+    const response = await apiClient.post(`/api/requests/${id}/approve/`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('regquest_requests_updated'));
+    }
+    return response.data;
+  },
 };
 
 export default requestsApi;

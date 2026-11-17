@@ -18,6 +18,7 @@ import requestsApi, {
   logProcessedAction,
 } from '../../api/requests';
 import usersApi from '../../api/users';
+import settingsApi from '../../api/settings';
 import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
 import {
@@ -131,6 +132,56 @@ export default function RegistrarDashboard() {
       window.removeEventListener('storage', handleArchivedUpdate);
     };
   }, []);
+
+  const [autoApprove, setAutoApprove] = useState(true);
+  const [signatoryName, setSignatoryName] = useState('University Registrar');
+  const [togglingSettings, setTogglingSettings] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    settingsApi.getRegistrarApproval().then((data) => {
+      if (!active || !data) return;
+      setAutoApprove(Boolean(data.auto_approve_requests));
+      if (data.active_registrar_name || data.default_signatory_name) {
+        setSignatoryName(data.active_registrar_name || data.default_signatory_name);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleToggleAutoApprove = async () => {
+    if (togglingSettings) return;
+    const nextVal = !autoApprove;
+    setTogglingSettings(true);
+    setAutoApprove(nextVal);
+    try {
+      const res = await settingsApi.updateRegistrarApproval(nextVal);
+      if (res && res.auto_approve_requests !== undefined) {
+        setAutoApprove(Boolean(res.auto_approve_requests));
+        if (res.active_registrar_name) {
+          setSignatoryName(res.active_registrar_name);
+        }
+      }
+      toast.success(
+        nextVal
+          ? 'Auto-Approval Enabled: Staff confirmations automatically approve requests.'
+          : 'Auto-Approval Disabled: Requests will pause for manual Registrar approval.'
+      );
+      window.dispatchEvent(
+        new CustomEvent('regquest_settings_updated', {
+          detail: { auto_approve_requests: nextVal },
+        })
+      );
+    } catch (err) {
+      console.error('Failed to update registrar auto-approval:', err);
+      setAutoApprove(!nextVal);
+      toast.error('Failed to update approval setting. Please try again.');
+    } finally {
+      setTogglingSettings(false);
+    }
+  };
 
   const handleArchiveRequest = (item) => {
     if (!item) return;
@@ -391,13 +442,66 @@ export default function RegistrarDashboard() {
 
         {/* Banner Text Content */}
         <div className="admin-banner-content">
-          <h1 className="admin-banner-title">
-            Registrar{' '}
-            <span className="admin-banner-title-highlight">Dashboard</span>
-          </h1>
-          <p className="admin-banner-subtitle">
-            Manage requests, approvals, and operations
-          </p>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
+            <div>
+              <h1 className="admin-banner-title">
+                Registrar{' '}
+                <span className="admin-banner-title-highlight">Dashboard</span>
+              </h1>
+              <p className="admin-banner-subtitle">
+                Manage requests, approvals, and operations
+              </p>
+            </div>
+
+            {/* Auto-Approval Toggle Control */}
+            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-3 sm:px-4 sm:py-2.5 flex items-center justify-between gap-3.5 shadow-lg">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`w-2.5 h-2.5 rounded-full ${autoApprove ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}
+                />
+                <div className="text-left">
+                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>Auto-Approve Requests (Delegated to Staff)</span>
+                    <span
+                      data-testid="auto-approve-status"
+                      className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded ${
+                        autoApprove
+                          ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-400/40'
+                          : 'bg-amber-500/30 text-amber-300 border border-amber-400/40'
+                      }`}
+                    >
+                      {autoApprove ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-white/70">
+                    {autoApprove
+                      ? `Signatory: ${signatoryName}`
+                      : 'Requires manual Registrar approval before release'}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoApprove}
+                aria-label="Toggle auto-approve requests"
+                data-testid="auto-approve-toggle"
+                disabled={togglingSettings}
+                onClick={handleToggleAutoApprove}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 ${
+                  autoApprove ? 'bg-emerald-500' : 'bg-slate-600'
+                } ${togglingSettings ? 'opacity-60 cursor-not-allowed' : ''}`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                    autoApprove ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
