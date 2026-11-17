@@ -32,7 +32,7 @@ export default function CredentialTypeCard({ credentialType, onRequest }) {
         {/* Top Header: Code badge & Price */}
         <div className="credential-card-top">
           <span className="badge-code">
-            {credentialType.code}
+            {credentialType.doc_code || credentialType.code}
           </span>
           <span className="credential-card-price">
             {formatCurrency(credentialType.price)}
