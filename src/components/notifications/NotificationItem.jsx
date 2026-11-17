@@ -171,14 +171,20 @@ export default function NotificationItem({
   const fullTimeText = formatFullDateTime(created_at);
 
   const getActionInfo = () => {
+    // Admin is a system administrator, NOT an operational request processor.
+    if (user?.role === ROLES.ADMIN) {
+      return null;
+    }
+
+    const trackParam = related_object_id ? `?trackId=${related_object_id}` : '';
+
     if (related_object_type === 'CredentialRequest') {
-      if (user?.role === ROLES.STAFF || user?.role === ROLES.REGISTRAR) {
+      if (user?.role === ROLES.REGISTRAR) {
+        return { label: 'View Requests →', path: `${ROUTES.REGISTRAR.REQUESTS}${trackParam}` };
+      }
+      if (user?.role === ROLES.STAFF) {
         return { label: 'Process Request →', path: ROUTES.STAFF.REQUESTS };
       }
-      if (user?.role === ROLES.ADMIN) {
-        return null;
-      }
-      const trackParam = related_object_id ? `?trackId=${related_object_id}` : '';
       if (event_type === 'PAYMENT_PENDING') {
         return {
           label: 'Download Form & Pay →',
@@ -188,10 +194,21 @@ export default function NotificationItem({
       return { label: 'Track Request →', path: `${ROUTES.STUDENT.REQUESTS}${trackParam}` };
     }
     if (related_object_type === 'StudentClearance') {
-      if (user?.role === ROLES.STAFF || user?.role === ROLES.REGISTRAR || user?.role === ROLES.ADMIN) {
+      if (user?.role === ROLES.REGISTRAR) {
+        return { label: 'View Requests →', path: `${ROUTES.REGISTRAR.REQUESTS}${trackParam}` };
+      }
+      if (user?.role === ROLES.STAFF) {
         return { label: 'View Requests →', path: ROUTES.STAFF.REQUESTS };
       }
       return { label: 'Request Document →', path: ROUTES.STUDENT.NEW_REQUEST };
+    }
+    if (related_object_type === 'Payment') {
+      if (user?.role === ROLES.REGISTRAR) {
+        return { label: 'View Requests →', path: `${ROUTES.REGISTRAR.REQUESTS}${trackParam}` };
+      }
+      if (user?.role === ROLES.STAFF) {
+        return { label: 'Process Request →', path: ROUTES.STAFF.REQUESTS };
+      }
     }
     return null;
   };
@@ -204,6 +221,10 @@ export default function NotificationItem({
 
     if (!is_read && onMarkRead) {
       onMarkRead(id);
+    }
+
+    if (user?.role === ROLES.ADMIN) {
+      return;
     }
 
     if (actionInfo?.path) {

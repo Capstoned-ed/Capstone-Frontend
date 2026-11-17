@@ -442,66 +442,13 @@ export default function RegistrarDashboard() {
 
         {/* Banner Text Content */}
         <div className="admin-banner-content">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
-            <div>
-              <h1 className="admin-banner-title">
-                Registrar{' '}
-                <span className="admin-banner-title-highlight">Dashboard</span>
-              </h1>
-              <p className="admin-banner-subtitle">
-                Manage requests, approvals, and operations
-              </p>
-            </div>
-
-            {/* Auto-Approval Toggle Control */}
-            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-3 sm:px-4 sm:py-2.5 flex items-center justify-between gap-3.5 shadow-lg">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className={`w-2.5 h-2.5 rounded-full ${autoApprove ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}
-                />
-                <div className="text-left">
-                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <span>Auto-Approve Requests (Delegated to Staff)</span>
-                    <span
-                      data-testid="auto-approve-status"
-                      className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded ${
-                        autoApprove
-                          ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-400/40'
-                          : 'bg-amber-500/30 text-amber-300 border border-amber-400/40'
-                      }`}
-                    >
-                      {autoApprove ? 'ON' : 'OFF'}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-white/70">
-                    {autoApprove
-                      ? `Signatory: ${signatoryName}`
-                      : 'Requires manual Registrar approval before release'}
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                role="switch"
-                aria-checked={autoApprove}
-                aria-label="Toggle auto-approve requests"
-                data-testid="auto-approve-toggle"
-                disabled={togglingSettings}
-                onClick={handleToggleAutoApprove}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 ${
-                  autoApprove ? 'bg-emerald-500' : 'bg-slate-600'
-                } ${togglingSettings ? 'opacity-60 cursor-not-allowed' : ''}`}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                    autoApprove ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-          </div>
+          <h1 className="admin-banner-title">
+            Registrar{' '}
+            <span className="admin-banner-title-highlight">Dashboard</span>
+          </h1>
+          <p className="admin-banner-subtitle">
+            Manage requests, approvals, and operations
+          </p>
         </div>
       </div>
 
@@ -671,11 +618,60 @@ export default function RegistrarDashboard() {
         {/* Section 4: Requests Card (Latest 5 Requests with "See More" leading to Batch Staff Assignment) */}
         <section id="requests" className="admin-section">
           <div className="requests-list-card">
-            <div className="requests-list-header">
-              <h3 className="requests-list-title">Requests</h3>
-              <p className="requests-list-subtitle">
-                Review and manage latest document requests from students
-              </p>
+            <div className="requests-list-header flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h3 className="requests-list-title">Requests</h3>
+                <p className="requests-list-subtitle">
+                  Review and manage latest document requests from students
+                </p>
+              </div>
+
+              {/* Auto-Approval Toggle Pill */}
+              <div className="bg-slate-50 border border-slate-200/90 rounded-xl px-3 py-1.5 flex items-center gap-3 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-2 h-2 rounded-full ${autoApprove ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}
+                  />
+                  <div className="text-left">
+                    <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5 leading-none">
+                      <span>Auto-Approve Requests</span>
+                      <span
+                        data-testid="auto-approve-status"
+                        className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded ${
+                          autoApprove
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : 'bg-amber-100 text-amber-800 border border-amber-300'
+                        }`}
+                      >
+                        {autoApprove ? 'ON' : 'OFF'}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      Signatory: <span className="font-medium text-slate-700">{signatoryName || 'University Registrar'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={autoApprove}
+                  aria-label="Toggle auto-approve requests"
+                  data-testid="auto-approve-toggle"
+                  disabled={togglingSettings}
+                  onClick={handleToggleAutoApprove}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${
+                    autoApprove ? 'bg-emerald-600' : 'bg-slate-300'
+                  } ${togglingSettings ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                      autoApprove ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
 
             <div className="table-responsive">
