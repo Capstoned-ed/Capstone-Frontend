@@ -15,7 +15,9 @@ export default function CredentialTypeFormModal({
   const toast = useToast();
   const isEditing = Boolean(credentialType?.id);
 
-  const [code, setCode] = useState(() => credentialType?.code || '');
+  const [code, setCode] = useState(
+    () => credentialType?.doc_code || credentialType?.code || ''
+  );
   const [name, setName] = useState(() => credentialType?.name || '');
   const [description, setDescription] = useState(() => credentialType?.description || '');
   const [price, setPrice] = useState(() =>
@@ -69,7 +71,8 @@ export default function CredentialTypeFormModal({
     setFieldErrors({});
 
     const payload = {
-      code: code.trim().toUpperCase(),
+      code: isEditing && credentialType?.code ? credentialType.code : code.trim().toUpperCase(),
+      doc_code: code.trim(),
       name: name.trim(),
       description: description.trim(),
       price: parseFloat(price).toFixed(2),

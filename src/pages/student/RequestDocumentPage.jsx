@@ -80,8 +80,33 @@ export default function RequestDocumentPage() {
     return '';
   };
 
+  const splitFullName = (nameStr) => {
+    const parts = String(nameStr || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length <= 1) return { first: parts[0] || '', last: '' };
+    return {
+      first: parts.slice(0, -1).join(' '),
+      last: parts[parts.length - 1],
+    };
+  };
+
+  const resolveStudentNameParts = (u) => {
+    if (u?.first_name) {
+      return { first: u.first_name, last: u.last_name || '' };
+    }
+    try {
+      const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+      const p = profiles[u?.username] || profiles[u?.userId] || profiles[u?.id];
+      if (p?.first_name) {
+        return { first: p.first_name, last: p.last_name || '' };
+      }
+    } catch {}
+    return splitFullName(resolveStudentName(u));
+  };
+
   // Form State (Step 1)
   const [fullName, setFullName] = useState(() => resolveStudentName(user));
+  const [firstName, setFirstName] = useState(() => resolveStudentNameParts(user).first);
+  const [lastName, setLastName] = useState(() => resolveStudentNameParts(user).last);
   const [course, setCourse] = useState(user?.program || 'BS in Information Technology');
 
   const [dateOfRequest, setDateOfRequest] = useState(() => new Date().toISOString().split('T')[0]);
@@ -111,6 +136,9 @@ export default function RequestDocumentPage() {
     const resolved = resolveStudentName(user);
     if (resolved && resolved !== 'Juan Dela Cruz') {
       setFullName(resolved);
+      const parts = resolveStudentNameParts(user);
+      setFirstName(parts.first);
+      setLastName(parts.last);
     }
     if (user?.program) {
       setCourse(user.program);
@@ -1147,7 +1175,13 @@ export default function RequestDocumentPage() {
                   <input
                     type="text"
                     value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFullName(val);
+                      const parts = splitFullName(val);
+                      setFirstName(parts.first);
+                      setLastName(parts.last);
+                    }}
                     required
                     className="ustp-underline-field ustp-flex-1"
                   />
@@ -1978,11 +2012,29 @@ export default function RequestDocumentPage() {
                   <h3 className="review-sub-title">Personal Data:</h3>
                   <div className="review-fields-grid">
                     <div>
-                      <label className="review-input-label">Full Name</label>
+                      <label className="review-input-label">First Name</label>
                       <input
                         type="text"
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
+                        value={firstName}
+                        onChange={(e) => {
+                          const nextFirst = e.target.value;
+                          setFirstName(nextFirst);
+                          setFullName([nextFirst.trim(), lastName.trim()].filter(Boolean).join(' '));
+                        }}
+                        className="review-pill-input"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="review-input-label">Last Name</label>
+                      <input
+                        type="text"
+                        value={lastName}
+                        onChange={(e) => {
+                          const nextLast = e.target.value;
+                          setLastName(nextLast);
+                          setFullName([firstName.trim(), nextLast.trim()].filter(Boolean).join(' '));
+                        }}
                         className="review-pill-input"
                       />
                     </div>

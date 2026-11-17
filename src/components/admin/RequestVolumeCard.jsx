@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
+import { VOLUME_CREDENTIAL_SERIES } from '../../api/credentialTypes';
 
 // Function to compute clean, dynamic integer Y-axis ticks scaled to data
 function computeYAxis(maxVal, isMonthly) {
@@ -58,6 +59,9 @@ export default function RequestVolumeCard({
 
   const isMonthly = activePeriod === 'monthly';
   const currentData = isMonthly ? monthlyData : dailyData;
+  const activeSeries = VOLUME_CREDENTIAL_SERIES.filter((series) =>
+    currentData.some((d) => (d[series.key] || 0) > 0)
+  );
 
   // Colors matching the photo legend exactly
   const colors = {
@@ -147,28 +151,14 @@ export default function RequestVolumeCard({
         </div>
       </div>
 
-      {/* Legend Row */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-slate-600 mb-6">
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.transcript }} />
-          <span>Transcript of Records</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.dismissal }} />
-          <span>Honorable Dismissal</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.evaluation }} />
-          <span>Evaluation</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.car }} />
-          <span>CAR</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.enrolled }} />
-          <span>Officially Enrolled</span>
-        </div>
+      {/* Legend Row (only credentials with requests in current period) */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-slate-600 mb-6">
+        {activeSeries.map((series) => (
+          <div key={series.key} className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: series.color }} />
+            <span>{series.label}</span>
+          </div>
+        ))}
         <div className="flex items-center gap-1.5">
           <span className="w-4 h-0.5 bg-black" />
           <span>Total Requests (Line)</span>
@@ -223,13 +213,11 @@ export default function RequestVolumeCard({
               const x = getXCoord(i) - barWidth / 2;
               let currentYOffset = paddingTop + chartHeight;
 
-              const stackOrder = [
-                { key: 'transcript', color: colors.transcript, val: d.transcript || 0 },
-                { key: 'dismissal', color: colors.dismissal, val: d.dismissal || 0 },
-                { key: 'evaluation', color: colors.evaluation, val: d.evaluation || 0 },
-                { key: 'car', color: colors.car, val: d.car || 0 },
-                { key: 'enrolled', color: colors.enrolled, val: d.enrolled || 0 },
-              ];
+              const stackOrder = VOLUME_CREDENTIAL_SERIES.map((series) => ({
+                key: series.key,
+                color: series.color,
+                val: d[series.key] || 0,
+              }));
 
               return (
                 <g
@@ -310,11 +298,11 @@ export default function RequestVolumeCard({
         {hoveredItem ? (
           <>
             <span className="font-bold text-slate-900">{hoveredItem.label} Breakdown:</span>
-            <span>Transcript: <strong>{hoveredItem.transcript || 0}</strong></span>
-            <span>Dismissal: <strong>{hoveredItem.dismissal || 0}</strong></span>
-            <span>Evaluation: <strong>{hoveredItem.evaluation || 0}</strong></span>
-            <span>CAR: <strong>{hoveredItem.car || 0}</strong></span>
-            <span>Enrolled: <strong>{hoveredItem.enrolled || 0}</strong></span>
+            {VOLUME_CREDENTIAL_SERIES.filter((s) => (hoveredItem[s.key] || 0) > 0).map((series) => (
+              <span key={series.key}>
+                {series.shortLabel}: <strong>{hoveredItem[series.key] || 0}</strong>
+              </span>
+            ))}
             <span className="text-[#0B0B36] font-bold">Total Requests: {hoveredItem.totalLine || 0}</span>
           </>
         ) : (

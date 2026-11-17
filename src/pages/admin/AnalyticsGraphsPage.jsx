@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import requestsApi, { getStoredRequests, isValidRequest } from '../../api/requests';
+import {
+  VOLUME_CREDENTIAL_SERIES,
+  getVolumeDocKey,
+  createEmptyVolumeBucket,
+  sumVolumeBucket,
+} from '../../api/credentialTypes';
 import '../../styles/admin/AnalyticsGraphsPage.css';
 
 // Helper to safely convert an ISO string, Date object, or date string into local YYYY-MM-DD
@@ -44,13 +50,10 @@ function computeYAxis(maxVal, isMonthly) {
   return { maxY: targetMax, yTicks: ticks };
 }
 
-const DOC_ROWS = [
-  { key: 'transcript', name: 'Transcript of Record' },
-  { key: 'dismissal', name: 'Honorable Dismissal' },
-  { key: 'evaluation', name: 'Evaluation' },
-  { key: 'car', name: 'CAR' },
-  { key: 'enrolled', name: 'Officially Enrolled' },
-];
+const DOC_ROWS = VOLUME_CREDENTIAL_SERIES.map((s) => ({
+  key: s.key,
+  name: s.label,
+}));
 
 export default function AnalyticsGraphsPage() {
   // Always starts on Daily View when first opened
@@ -93,29 +96,7 @@ export default function AnalyticsGraphsPage() {
 
   // Dynamically map each request to its corresponding document type key
   const getDocTypeKey = useCallback(
-    (req) => {
-      const credId = req.credential_type || req.credential;
-      const cred = credTypes.find(
-        (c) => c.id === credId || c.code === credId || String(c.id) === String(credId)
-      );
-      const code = (cred?.code || req.document_type || req.credential_name || '').toUpperCase();
-      const name = (cred?.name || req.document_type || req.credential_name || '').toUpperCase();
-
-      if (code === 'TOR' || code.includes('TOR') || name.includes('TRANSCRIPT')) return 'transcript';
-      if (code === 'HD' || code.includes('HD') || name.includes('HONORABLE') || name.includes('DISMISSAL')) return 'dismissal';
-      if (code === 'EVAL' || code.includes('EVAL') || name.includes('EVALUATION')) return 'evaluation';
-      if (code === 'CAR' || code.includes('CAR') || name.includes('CERTIFICATE OF ACADEMIC')) return 'car';
-      if (
-        code === 'COE' ||
-        code.includes('COE') ||
-        code.includes('ENR') ||
-        name.includes('ENROLL') ||
-        name.includes('OFFICIALLY')
-      )
-        return 'enrolled';
-
-      return 'transcript';
-    },
+    (req) => getVolumeDocKey(req, credTypes),
     [credTypes]
   );
 
@@ -134,16 +115,7 @@ export default function AnalyticsGraphsPage() {
       const d = new Date(monday);
       d.setDate(monday.getDate() + idx);
       const dateStr = toLocalDateStr(d);
-      return {
-        label,
-        dateStr,
-        transcript: 0,
-        dismissal: 0,
-        evaluation: 0,
-        car: 0,
-        enrolled: 0,
-        totalLine: 0,
-      };
+      return createEmptyVolumeBucket({ label, dateStr });
     });
 
     const dateIndexMap = {};
@@ -164,7 +136,7 @@ export default function AnalyticsGraphsPage() {
 
     return daysData.map((d) => ({
       ...d,
-      totalLine: d.transcript + d.dismissal + d.evaluation + d.car + d.enrolled,
+      totalLine: sumVolumeBucket(d),
     }));
   }, [requestsList, getDocTypeKey]);
 
@@ -175,15 +147,7 @@ export default function AnalyticsGraphsPage() {
     const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     // Initialize 12 months with 0
-    const monthsData = monthLabels.map((label) => ({
-      label,
-      transcript: 0,
-      dismissal: 0,
-      evaluation: 0,
-      car: 0,
-      enrolled: 0,
-      totalLine: 0,
-    }));
+    const monthsData = monthLabels.map((label) => createEmptyVolumeBucket({ label }));
 
     // Populate counts strictly from live requests
     requestsList.forEach((r) => {
@@ -200,12 +164,19 @@ export default function AnalyticsGraphsPage() {
 
     return monthsData.map((d) => ({
       ...d,
-      totalLine: d.transcript + d.dismissal + d.evaluation + d.car + d.enrolled,
+      totalLine: sumVolumeBucket(d),
     }));
   }, [requestsList, getDocTypeKey]);
 
   const isMonthly = viewMode === 'monthly';
   const currentData = isMonthly ? dynamicMonthlyData : dynamicDailyData;
+  const activeSeries = useMemo(
+    () =>
+      VOLUME_CREDENTIAL_SERIES.filter((series) =>
+        currentData.some((d) => (d[series.key] || 0) > 0)
+      ),
+    [currentData]
+  );
 
   // Chart Geometry & Dynamic Scales
   const svgWidth = isMonthly ? 860 : 720;
@@ -295,28 +266,14 @@ export default function AnalyticsGraphsPage() {
       <div className="analytics-card">
         <h2 className="analytics-card-title">Request Volume</h2>
 
-        {/* Legend Row matching reference photo */}
+        {/* Legend Row (only credentials with requests in current period) */}
         <div className="analytics-legend-row">
-          <div className="analytics-legend-item">
-            <span className="analytics-legend-box" style={{ backgroundColor: colors.transcript }} />
-            <span>Transcript of records</span>
-          </div>
-          <div className="analytics-legend-item">
-            <span className="analytics-legend-box" style={{ backgroundColor: colors.dismissal }} />
-            <span>Honorable Dismissal</span>
-          </div>
-          <div className="analytics-legend-item">
-            <span className="analytics-legend-box" style={{ backgroundColor: colors.evaluation }} />
-            <span>Evaluation</span>
-          </div>
-          <div className="analytics-legend-item">
-            <span className="analytics-legend-box" style={{ backgroundColor: colors.car }} />
-            <span>CAR</span>
-          </div>
-          <div className="analytics-legend-item">
-            <span className="analytics-legend-box" style={{ backgroundColor: colors.enrolled }} />
-            <span>Officially enrolled</span>
-          </div>
+          {activeSeries.map((series) => (
+            <div key={series.key} className="analytics-legend-item">
+              <span className="analytics-legend-box" style={{ backgroundColor: series.color }} />
+              <span>{series.label}</span>
+            </div>
+          ))}
         </div>
 
         {/* Stacked Bar Chart SVG */}
@@ -352,27 +309,6 @@ export default function AnalyticsGraphsPage() {
               const x = getXCoord(i) - barWidth / 2;
               let currentBottom = 0;
 
-              const enrolledH = ((d.enrolled || 0) / maxY) * chartHeight;
-              const carH = ((d.car || 0) / maxY) * chartHeight;
-              const evalH = ((d.evaluation || 0) / maxY) * chartHeight;
-              const dismH = ((d.dismissal || 0) / maxY) * chartHeight;
-              const tranH = ((d.transcript || 0) / maxY) * chartHeight;
-
-              const enrolledY = getYCoord(currentBottom + (d.enrolled || 0));
-              currentBottom += d.enrolled || 0;
-
-              const carY = getYCoord(currentBottom + (d.car || 0));
-              currentBottom += d.car || 0;
-
-              const evalY = getYCoord(currentBottom + (d.evaluation || 0));
-              currentBottom += d.evaluation || 0;
-
-              const dismY = getYCoord(currentBottom + (d.dismissal || 0));
-              currentBottom += d.dismissal || 0;
-
-              const tranY = getYCoord(currentBottom + (d.transcript || 0));
-              currentBottom += d.transcript || 0;
-
               return (
                 <g
                   key={`bar-group-${d.label}`}
@@ -380,26 +316,23 @@ export default function AnalyticsGraphsPage() {
                   onMouseLeave={() => setHoveredItem(null)}
                   className="cursor-pointer"
                 >
-                  {/* Officially Enrolled (Bottom) */}
-                  {(d.enrolled || 0) > 0 && (
-                    <rect x={x} y={enrolledY} width={barWidth} height={enrolledH} fill={colors.enrolled} />
-                  )}
-                  {/* CAR */}
-                  {(d.car || 0) > 0 && (
-                    <rect x={x} y={carY} width={barWidth} height={carH} fill={colors.car} />
-                  )}
-                  {/* Evaluation */}
-                  {(d.evaluation || 0) > 0 && (
-                    <rect x={x} y={evalY} width={barWidth} height={evalH} fill={colors.evaluation} />
-                  )}
-                  {/* Honorable Dismissal */}
-                  {(d.dismissal || 0) > 0 && (
-                    <rect x={x} y={dismY} width={barWidth} height={dismH} fill={colors.dismissal} />
-                  )}
-                  {/* Transcript of records (Top) */}
-                  {(d.transcript || 0) > 0 && (
-                    <rect x={x} y={tranY} width={barWidth} height={tranH} fill={colors.transcript} />
-                  )}
+                  {VOLUME_CREDENTIAL_SERIES.map((series) => {
+                    const val = d[series.key] || 0;
+                    if (val <= 0) return null;
+                    const segH = (val / maxY) * chartHeight;
+                    const segY = getYCoord(currentBottom + val);
+                    currentBottom += val;
+                    return (
+                      <rect
+                        key={`seg-${series.key}`}
+                        x={x}
+                        y={segY}
+                        width={barWidth}
+                        height={segH}
+                        fill={series.color}
+                      />
+                    );
+                  })}
 
                   {/* X-axis label */}
                   <text
@@ -421,11 +354,11 @@ export default function AnalyticsGraphsPage() {
           {hoveredItem ? (
             <>
               <span className="font-bold text-slate-900">{hoveredItem.label} Breakdown:</span>
-              <span>Transcript: <strong>{hoveredItem.transcript}</strong></span>
-              <span>Dismissal: <strong>{hoveredItem.dismissal}</strong></span>
-              <span>Evaluation: <strong>{hoveredItem.evaluation}</strong></span>
-              <span>CAR: <strong>{hoveredItem.car}</strong></span>
-              <span>Enrolled: <strong>{hoveredItem.enrolled}</strong></span>
+              {VOLUME_CREDENTIAL_SERIES.filter((s) => (hoveredItem[s.key] || 0) > 0).map((series) => (
+                <span key={series.key}>
+                  {series.shortLabel}: <strong>{hoveredItem[series.key] || 0}</strong>
+                </span>
+              ))}
               <span className="text-[#0B0B36] font-extrabold">Total: {hoveredItem.totalLine}</span>
             </>
           ) : (
@@ -550,18 +483,26 @@ export default function AnalyticsGraphsPage() {
               </tr>
             </thead>
             <tbody className="breakdown-tbody">
-              {DOC_ROWS.map((row) => {
-                const rowTotal = currentData.reduce((sum, col) => sum + (col[row.key] || 0), 0);
-                return (
-                  <tr key={row.key}>
-                    <td className="td-doc-type">{row.name}</td>
-                    {currentData.map((col) => (
-                      <td key={`${row.key}-${col.label}`}>{col[row.key] || 0}</td>
-                    ))}
-                    <td className="td-total">{rowTotal.toLocaleString()}</td>
-                  </tr>
-                );
-              })}
+              {activeSeries.length === 0 ? (
+                <tr>
+                  <td colSpan={currentData.length + 2} className="text-center text-slate-400 py-6">
+                    No credential requests recorded for this period.
+                  </td>
+                </tr>
+              ) : (
+                activeSeries.map((row) => {
+                  const rowTotal = currentData.reduce((sum, col) => sum + (col[row.key] || 0), 0);
+                  return (
+                    <tr key={row.key}>
+                      <td className="td-doc-type">{row.label}</td>
+                      {currentData.map((col) => (
+                        <td key={`${row.key}-${col.label}`}>{col[row.key] || 0}</td>
+                      ))}
+                      <td className="td-total">{rowTotal.toLocaleString()}</td>
+                    </tr>
+                  );
+                })
+              )}
 
               {/* Total Footer Row */}
               <tr className="breakdown-total-row">
