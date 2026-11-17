@@ -521,6 +521,12 @@ export default function RegistrarRequestsPage() {
           receipt_image: matchedStored?.receipt_image || r.receipt_image || null,
           is_confirmed: Boolean(matchedStored?.is_confirmed || r.is_confirmed),
           confirmed_for_payment: Boolean(matchedStored?.confirmed_for_payment || r.confirmed_for_payment),
+          is_approved: Boolean(matchedStored?.is_approved !== undefined ? matchedStored.is_approved : r.is_approved),
+          is_auto_approved: Boolean(matchedStored?.is_auto_approved !== undefined ? matchedStored.is_auto_approved : r.is_auto_approved),
+          approved_by_name: matchedStored?.approved_by_name || r.approved_by_name || '',
+          approved_at: matchedStored?.approved_at || r.approved_at || null,
+          payments: r.payments || matchedStored?.payments || [],
+          raw: r,
         };
       })
       .filter((r) => {
