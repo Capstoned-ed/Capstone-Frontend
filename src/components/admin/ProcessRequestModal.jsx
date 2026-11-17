@@ -46,6 +46,7 @@ export default function ProcessRequestModal({
     const raw = item?.clearance_status;
     if (raw === 'VERIFIED' || raw === 'APPROVED') return 'VERIFIED';
     if (raw === 'REJECTED' || raw === 'NOT_VERIFIED') return 'REJECTED';
+    if (raw === 'PENDING') return 'PENDING';
     const st = String(item?.status || '').trim().toUpperCase();
     const isPastPending = Boolean(
       item?.is_confirmed ||

@@ -9,6 +9,7 @@ import BatchUpdateModal from '../../components/common/BatchUpdateModal';
 import TablePagination from '../../components/common/TablePagination';
 import { StaffRequestsTable } from '../../components/staff';
 import useToast from '../../hooks/useToast';
+import settingsApi from '../../api/settings';
 import {
   REQUEST_STATUS,
   REQUEST_STATUSES,
@@ -81,6 +82,51 @@ export default function RegistrarRequestsPage() {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [batchModalOpen, setBatchModalOpen] = useState(false);
+
+  const [autoApprove, setAutoApprove] = useState(true);
+  const [signatoryName, setSignatoryName] = useState('');
+  const [togglingSettings, setTogglingSettings] = useState(false);
+
+  useEffect(() => {
+    settingsApi.getRegistrarApproval().then((data) => {
+      setAutoApprove(Boolean(data?.auto_approve_requests ?? true));
+      const sigName = data?.active_registrar_name || data?.signatory_name || data?.default_signatory_name;
+      if (sigName) {
+        setSignatoryName(sigName);
+      } else if (currentUser) {
+        const fallbackName = [currentUser.first_name, currentUser.last_name].filter(Boolean).join(' ') || currentUser.username;
+        setSignatoryName(fallbackName);
+      }
+    }).catch(() => {
+      setAutoApprove(true);
+      if (currentUser) {
+        const fallbackName = [currentUser.first_name, currentUser.last_name].filter(Boolean).join(' ') || currentUser.username;
+        setSignatoryName(fallbackName);
+      }
+    });
+  }, [currentUser]);
+
+  const handleToggleAutoApprove = async () => {
+    if (togglingSettings) return;
+    setTogglingSettings(true);
+    const nextVal = !autoApprove;
+    try {
+      const res = await settingsApi.updateRegistrarApproval(nextVal);
+      setAutoApprove(Boolean(res?.auto_approve_requests ?? nextVal));
+      const resSig = res?.active_registrar_name || res?.signatory_name || res?.default_signatory_name;
+      if (resSig) setSignatoryName(resSig);
+      toast.success(
+        nextVal
+          ? 'Auto-Approval Enabled: Requests are auto-approved upon staff confirmation.'
+          : 'Auto-Approval Disabled: Requests will pause for manual Registrar approval.'
+      );
+    } catch {
+      setAutoApprove(nextVal);
+      toast.info(`Auto-approval ${nextVal ? 'enabled' : 'disabled'}.`);
+    } finally {
+      setTogglingSettings(false);
+    }
+  };
 
   const handleToggleSelect = (rawOrId) => {
     const key = String(rawOrId);
@@ -528,8 +574,8 @@ export default function RegistrarRequestsPage() {
           clearance_preview: effectiveClearancePreview,
           clearance_id: r.clearance_id || userClearance?.id || null,
           clearance_status:
-            matchedStored?.clearance_status ||
             r.clearance_status ||
+            matchedStored?.clearance_status ||
             (effectiveClearancePreview ? 'PENDING' : null),
           clearance_file_name: effectiveClearanceFileName,
           clearance_is_pdf: effectiveClearanceIsPdf,
@@ -558,6 +604,24 @@ export default function RegistrarRequestsPage() {
       })
       .sort(sortRequestsNewestFirst);
   }, [rawRequests, userMap, staffMembers, credTypeMap, clearanceMap, assignments, activityTimestamps, assignmentTimestamps]);
+
+  // Handle notification navigation: auto-select request if trackId in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const trackId = params.get('trackId') || params.get('reqId');
+    if (trackId && requests.length > 0) {
+      const found = requests.find(
+        (r) =>
+          String(r.tracking_number || '').toUpperCase() === String(trackId).toUpperCase() ||
+          String(r.id || '').toUpperCase() === String(trackId).toUpperCase() ||
+          String(r.rawId || '').toUpperCase() === String(trackId).toUpperCase()
+      );
+      if (found) {
+        setSelectedRequest(found);
+        setProcessModalOpen(true);
+      }
+    }
+  }, [requests]);
 
   const batchOptions = useMemo(() => {
     const batchesMap = new Map();
@@ -1528,34 +1592,83 @@ export default function RegistrarRequestsPage() {
                 : 'Review and approve/reject credential requests from students'}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setIsSelectionMode((prev) => !prev);
-              if (isSelectionMode) setSelectedIds(new Set());
-            }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              isSelectionMode
-                ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
-                : 'bg-indigo-50 text-indigo-950 border border-indigo-200 hover:bg-indigo-100'
-            }`}
-          >
-            {isSelectionMode ? (
-              <>
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                <span>Cancel Selection</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                </svg>
-                <span>Select Multiple</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Auto-Approval Toggle Pill */}
+            <div className="bg-slate-50 border border-slate-200/90 rounded-xl px-3 py-1.5 flex items-center gap-3 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <div
+                  className={`w-2 h-2 rounded-full ${autoApprove ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}
+                />
+                <div className="text-left">
+                  <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5 leading-none">
+                    <span>Auto-Approve Requests</span>
+                    <span
+                      data-testid="auto-approve-status"
+                      className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded ${
+                        autoApprove
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : 'bg-amber-100 text-amber-800 border border-amber-300'
+                      }`}
+                    >
+                      {autoApprove ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    Signatory: <span className="font-medium text-slate-700">{signatoryName || 'University Registrar'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoApprove}
+                aria-label="Toggle auto-approve requests"
+                data-testid="auto-approve-toggle"
+                disabled={togglingSettings}
+                onClick={handleToggleAutoApprove}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${
+                  autoApprove ? 'bg-emerald-600' : 'bg-slate-300'
+                } ${togglingSettings ? 'opacity-60 cursor-not-allowed' : ''}`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                    autoApprove ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsSelectionMode((prev) => !prev);
+                if (isSelectionMode) setSelectedIds(new Set());
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                isSelectionMode
+                  ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                  : 'bg-indigo-50 text-indigo-950 border border-indigo-200 hover:bg-indigo-100'
+              }`}
+            >
+              {isSelectionMode ? (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span>Cancel Selection</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  <span>Select Multiple</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         <div

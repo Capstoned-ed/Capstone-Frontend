@@ -425,18 +425,6 @@ export function getClearanceAttachment(candidateKeys = []) {
     } catch {}
   }
 
-  // Fallback to latest
-  try {
-    const latest = localStorage.getItem('regquest_latest_clearance_file');
-    if (latest) {
-      let meta = {};
-      try {
-        meta = JSON.parse(localStorage.getItem('regquest_latest_clearance_meta') || '{}');
-      } catch {}
-      return { dataUrl: latest, meta };
-    }
-  } catch {}
-
   return null;
 }
 
@@ -466,14 +454,50 @@ export async function resolveClearancePreview(requestItem) {
     };
   }
 
-  // 2. Check local client-side storage cache by identifiers
+  // 2. Direct backend preview URL via authenticated apiClient (strictly our own API/media origin)
+  if (requestItem.clearance_preview) {
+    const previewUrl = String(requestItem.clearance_preview);
+    const apiBase = String(apiClient.defaults?.baseURL || '').replace(/\/$/, '');
+    const isInternalBackendUrl =
+      previewUrl.startsWith('/') ||
+      previewUrl.includes('/api/') ||
+      previewUrl.includes('/media/') ||
+      (apiBase && previewUrl.startsWith(apiBase));
+
+    if (isInternalBackendUrl) {
+      try {
+        const response = await apiClient.get(previewUrl, {
+          responseType: 'blob',
+          timeout: 5000,
+        });
+        const rawBlob = response.data;
+        const headerType =
+          response.headers?.['content-type'] ||
+          response.headers?.get?.('content-type') ||
+          rawBlob.type;
+        const contentType = await detectBlobMimeType(rawBlob, headerType);
+        const isPdf = contentType === 'application/pdf' || Boolean(requestItem.clearance_is_pdf);
+        const finalBlob = new Blob([rawBlob], { type: contentType });
+        const blobUrl = window.URL.createObjectURL(finalBlob);
+        return {
+          url: blobUrl,
+          isPdf,
+          isImage: !isPdf,
+          fileName: requestItem.clearance_file_name || (isPdf ? 'Clearance_Document.pdf' : 'Clearance_Photo.jpg'),
+          status: requestItem.clearance_status || 'PENDING',
+          cleanup: () => window.URL.revokeObjectURL(blobUrl),
+        };
+      } catch (err) {
+        console.warn('Authenticated clearance download preview notice:', err);
+      }
+    }
+  }
+
+  // 3. Check local client-side storage cache strictly bound to this request
   const candidateKeys = [
     requestItem.tracking_number,
     requestItem.id,
     requestItem.rawId,
-    requestItem.student_id,
-    requestItem.user,
-    requestItem.student_name,
   ].filter(Boolean);
 
   const localRecord = getClearanceAttachment(candidateKeys);
@@ -493,7 +517,7 @@ export async function resolveClearancePreview(requestItem) {
     };
   }
 
-  // 3. Try fetching authenticated blob from backend if clearance_id is known
+  // 4. Try fetching authenticated blob from backend if clearance_id is known
   const clearanceId = requestItem.clearance_id;
   if (clearanceId) {
     try {

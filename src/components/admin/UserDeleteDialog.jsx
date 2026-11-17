@@ -1,12 +1,26 @@
 import React, { useState } from 'react';
 import usersApi from '../../api/users';
 import useToast from '../../hooks/useToast';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function UserDeleteDialog({ user, isOpen, onClose, onUserDeactivated }) {
   const toast = useToast();
+  const { user: currentUser } = useAuth();
   const [loading, setLoading] = useState(false);
 
   if (!isOpen || !user) return null;
+
+  const isSelf = currentUser && (
+    String(user.id) === String(currentUser.id) ||
+    String(user.id) === String(currentUser.userId) ||
+    (user.username && currentUser.username && user.username.toLowerCase() === currentUser.username.toLowerCase())
+  );
+
+  if (isSelf) {
+    onClose();
+    toast.error('You cannot deactivate your own administrative account.');
+    return null;
+  }
 
   const displayName = user.first_name && user.last_name
     ? `${user.first_name} ${user.last_name}`

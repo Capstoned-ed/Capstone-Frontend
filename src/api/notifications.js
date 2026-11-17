@@ -345,9 +345,19 @@ export function isNotificationForUser(notification, user) {
   // RULE 3: CURRENT USER IS ADMIN
   // -------------------------------------------------------------
   if (role === 'admin') {
-    // Admin should never see personal student request messages
+    // Admin is a system/account administrator, NOT an operational request processor.
+    // Filter out operational request processing, clearance review, and payment receipts.
+    const isRequestProcessingEvent =
+      notification.event_type === 'REQUEST_CREATED' ||
+      notification.event_type === 'CLEARANCE_SUBMITTED' ||
+      notification.event_type === 'PAYMENT_SUBMITTED' ||
+      notification.related_object_type === 'CredentialRequest' ||
+      notification.related_object_type === 'StudentClearance' ||
+      notification.related_object_type === 'Payment';
+
+    if (isRequestProcessingEvent) return false;
     if (isPersonalRequestMsg) return false;
-    if (targetRole === 'student') return false;
+    if (targetRole === 'student' || targetRole === 'staff') return false;
     if (targetRoles.length > 0 && !targetRoles.includes('admin')) return false;
 
     // Direct targeting check if notification was explicitly addressed to a specific admin

@@ -733,7 +733,7 @@ export function saveStoredRequest(requestItem, user = null) {
       target_role: 'student',
     });
 
-    // 2. Notification for Staff (Operational queue alert)
+    // 2. Notification for Staff & Registrar (Operational queue alert; Admin excluded)
     saveStoredNotification({
       event_type: 'REQUEST_CREATED',
       message: `Incoming Request: ${studentName} (${requestItem.student_id || 'Student'}) requested ${docTitle} (${trackingCode}).`,
@@ -741,15 +741,6 @@ export function saveStoredRequest(requestItem, user = null) {
       related_object_id: trackingCode,
       target_roles: ['staff', 'registrar'],
       target_role: 'staff',
-    });
-
-    // 3. Notification for Admin (Institutional volume audit)
-    saveStoredNotification({
-      event_type: 'REQUEST_CREATED',
-      message: `System Audit: New document request (${trackingCode}) logged for ${studentName} (${docTitle}).`,
-      related_object_type: 'CredentialRequest',
-      related_object_id: trackingCode,
-      target_role: 'admin',
     });
 
     if (typeof window !== 'undefined') {
