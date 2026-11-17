@@ -253,6 +253,11 @@ export default function StaffDashboard() {
             assigned_at: r.assigned_at || null,
             accepted_at: r.accepted_at || null,
             photo_preview: r.photo_preview || null,
+            is_approved: Boolean(r.is_approved),
+            is_auto_approved: Boolean(r.is_auto_approved),
+            approved_by_name: r.approved_by_name || '',
+            approved_at: r.approved_at || null,
+            payments: r.payments || [],
             raw: r,
           };
         })

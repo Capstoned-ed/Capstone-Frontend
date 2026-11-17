@@ -273,6 +273,66 @@ export default function ProcessRequestModal({
     if (newStatus) setLocalStatus(normalizeStatus(newStatus));
   }, [newStatus]);
 
+  const [localIsApproved, setLocalIsApproved] = useState(() => Boolean(requestItem?.is_approved));
+  const [localIsAutoApproved, setLocalIsAutoApproved] = useState(() => Boolean(requestItem?.is_auto_approved));
+  const [localApprovedByName, setLocalApprovedByName] = useState(() => requestItem?.approved_by_name || '');
+
+  useEffect(() => {
+    setLocalIsApproved(Boolean(requestItem?.is_approved));
+    setLocalIsAutoApproved(Boolean(requestItem?.is_auto_approved));
+    setLocalApprovedByName(requestItem?.approved_by_name || '');
+  }, [requestItem?.is_approved, requestItem?.is_auto_approved, requestItem?.approved_by_name]);
+
+  const isApproved = localIsApproved;
+  const isAutoApproved = localIsAutoApproved;
+  const approvedByName = localApprovedByName;
+  const isRegistrarOrAdmin =
+    String(user?.role || '').toLowerCase() === 'registrar' ||
+    String(user?.role || '').toLowerCase() === 'admin';
+
+  const [approvingRequest, setApprovingRequest] = useState(false);
+
+  const handleApproveRequest = async () => {
+    if (approvingRequest) return;
+    const targetRawId = requestItem.rawId || requestItem.id;
+    setApprovingRequest(true);
+    try {
+      const approverName =
+        user?.full_name ||
+        `${user?.first_name || ''} ${user?.last_name || ''}`.trim() ||
+        user?.username ||
+        'Registrar';
+
+      if (targetRawId && !String(targetRawId).startsWith('fallback_')) {
+        await requestsApi.approve(targetRawId);
+      }
+      requestItem.is_approved = true;
+      requestItem.is_auto_approved = false;
+      requestItem.approved_by_name = approverName;
+      setLocalIsApproved(true);
+      setLocalIsAutoApproved(false);
+      setLocalApprovedByName(approverName);
+      updateStoredRequest(
+        requestItem.id || targetRawId,
+        {
+          is_approved: true,
+          is_auto_approved: false,
+          approved_by_name: approverName,
+        },
+        { fallbackItem: requestItem }
+      );
+      toast.success(`Request approved by ${approverName}!`);
+      if (typeof onStatusUpdated === 'function') {
+        onStatusUpdated(requestItem);
+      }
+    } catch (err) {
+      console.error('Failed to approve request:', err);
+      toast.error('Failed to approve request. Please try again.');
+    } finally {
+      setApprovingRequest(false);
+    }
+  };
+
   const claimStubDetails = useMemo(() => {
     if (!requestItem) return null;
     const reqDateFormatted = requestItem.request_date || (requestItem.created_at ? new Date(requestItem.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
@@ -292,8 +352,9 @@ export default function ProcessRequestModal({
       credentialRequested: `${requestItem.document_type || 'Document'} (${requestItem.copies || 1} ${requestItem.copies > 1 ? 'copies' : 'copy'})`,
       dateOfRelease: relDateFormatted,
       orNumber: orNum,
+      approvedByName: approvedByName || 'University Registrar',
     };
-  }, [requestItem, dateOfRelease, activeOrNumber]);
+  }, [requestItem, dateOfRelease, activeOrNumber, approvedByName]);
 
   const statusOptions = useMemo(() => {
     const role = String(user?.role || '').trim().toUpperCase();
@@ -1654,10 +1715,37 @@ export default function ProcessRequestModal({
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-slate-500 mb-1">Approved by</label>
-                    <div className="px-3 py-2 text-xs bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-semibold">
-                      Jonalin T. Lagrada, MPSM
-                    </div>
+                    <label className="block font-bold text-slate-700 mb-1">Approved by</label>
+                    {isApproved ? (
+                      <div className="px-3 py-2 text-xs bg-emerald-50 border border-emerald-200 text-emerald-900 font-semibold rounded-lg flex items-center justify-between shadow-2xs">
+                        <span className="truncate" title={approvedByName}>
+                          {isAutoApproved
+                            ? `Auto-Approved (${approvedByName || 'University Registrar'})`
+                            : (approvedByName || 'University Registrar')}
+                        </span>
+                        <span className="text-[10px] bg-emerald-200/80 text-emerald-900 font-extrabold px-1.5 py-0.5 rounded shrink-0 ml-1">
+                          Approved
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="px-3 py-2 text-xs bg-amber-50 border border-amber-200 text-amber-800 font-semibold rounded-lg flex-1 truncate">
+                          Pending Registrar Approval
+                        </div>
+                        {isRegistrarOrAdmin && (
+                          <button
+                            type="button"
+                            data-testid="approve-request-btn"
+                            disabled={approvingRequest || isPersistedTerminal}
+                            onClick={handleApproveRequest}
+                            className="px-3 py-2 bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs rounded-lg shadow-sm transition-all cursor-pointer whitespace-nowrap"
+                            title="Approve this credential request"
+                          >
+                            {approvingRequest ? 'Approving...' : 'Approve Request'}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2048,8 +2136,8 @@ export default function ProcessRequestModal({
                   </button>
                 )}
 
-                {/* Claimed & Done: ONLY when persisted backend status is READY_FOR_RELEASE and payment verified */}
-                {isPersistedReadyForRelease && isPaymentVerified && (
+                {/* Claimed & Done: ONLY when persisted backend status is READY_FOR_RELEASE, payment verified, and registrar approved */}
+                {isPersistedReadyForRelease && isPaymentVerified && isApproved && (
                   <button
                     type="button"
                     onClick={handleClaimAndMoveToHistory}
@@ -2115,6 +2203,7 @@ export default function ProcessRequestModal({
           amount: assessedAmount,
           date_of_release: dateOfRelease,
           verified_by_name: verifiedByName,
+          approved_by_name: approvedByName,
         }}
       />
 
