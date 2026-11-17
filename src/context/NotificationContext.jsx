@@ -38,10 +38,10 @@ export function NotificationProvider({ children }) {
         const seenIds = new Set();
         const combined = [];
 
-        // 1. Backend notifications are primary source of truth (strictly verified for user role)
+        // 1. Backend notifications are primary source of truth (isolated per authenticated user by Django)
         if (Array.isArray(backendData)) {
           backendData.forEach((item) => {
-            if (item && item.id && isNotificationForUser(item, user)) {
+            if (item && item.id) {
               const idStr = String(item.id);
               seenIds.add(idStr);
               combined.push({
