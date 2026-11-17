@@ -399,10 +399,26 @@ export default function TrackStatusPage() {
 
     requestsApi.predictTurnaround({ credentialType: credCode, dateRequested: reqDate, purpose })
       .then((res) => {
-        if (!ignore && res?.estimated_completion_date) {
+        if (ignore || !res) return;
+        if (res.estimated_completion_date) {
           const d = new Date(res.estimated_completion_date);
           if (!isNaN(d.getTime())) {
             const formatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            setMlEstimatedCompletion(formatted);
+            return;
+          }
+        }
+        if (res.predicted_processing_time) {
+          const base = reqDate ? new Date(reqDate) : new Date();
+          if (!isNaN(base.getTime())) {
+            let added = 0;
+            const targetDays = Math.max(1, Math.ceil(Number(res.predicted_processing_time)));
+            while (added < targetDays) {
+              base.setDate(base.getDate() + 1);
+              const day = base.getDay();
+              if (day !== 0 && day !== 6) added += 1;
+            }
+            const formatted = base.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
             setMlEstimatedCompletion(formatted);
           }
         }
