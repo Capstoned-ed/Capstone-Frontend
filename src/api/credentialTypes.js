@@ -178,21 +178,40 @@ function mergeCredentialCatalog(backendList = []) {
     return codeUpper === 'CERT' || nameLower === 'certification';
   };
 
-  // Authoritative mode: when the Django CredentialType DB returns records,
-  // use them directly without overwriting codes, prices, or processing_days
-  // with hardcoded defaults or stale localStorage overrides.
-  if (Array.isArray(backendList) && backendList.length > 0) {
-    return backendList
-      .filter((b) => b && !isStandaloneCertification(b))
-      .map((b) => ({
-        ...b,
-        doc_code: b.doc_code || b.code || '',
-      }))
-      .sort(compareCredentialCodes);
+  const safeBackend = Array.isArray(backendList)
+    ? backendList.filter((b) => b && !isStandaloneCertification(b))
+    : [];
+
+  // Offline / unauthenticated fallback only
+  if (safeBackend.length === 0) {
+    return [...REQUEST_FORM_CREDENTIAL_TYPES].sort(compareCredentialCodes);
   }
 
-  // Offline / unreachable fallback only
-  return [...REQUEST_FORM_CREDENTIAL_TYPES].sort(compareCredentialCodes);
+  // Merge live Django CredentialType rows authoritatively over standard catalog:
+  // - Live DB price, doc_code, processing_days, name, description, is_active ALWAYS win
+  // - Any standard credential not yet seeded in a staging DB still remains available in Incognito
+  const matchedBackendIds = new Set();
+  const mergedStandard = REQUEST_FORM_CREDENTIAL_TYPES.map((def) => {
+    const backendItem = matchBackendRecord(def, safeBackend);
+    if (backendItem) {
+      matchedBackendIds.add(String(backendItem.id));
+      return {
+        ...def,
+        ...backendItem,
+        doc_code: backendItem.doc_code || def.doc_code || backendItem.code || '',
+      };
+    }
+    return def;
+  });
+
+  const extraBackend = safeBackend
+    .filter((b) => !matchedBackendIds.has(String(b.id)))
+    .map((b) => ({
+      ...b,
+      doc_code: b.doc_code || b.code || '',
+    }));
+
+  return [...mergedStandard, ...extraBackend].sort(compareCredentialCodes);
 }
 
 export const VOLUME_CREDENTIAL_SERIES = [

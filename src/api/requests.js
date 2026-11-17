@@ -216,7 +216,18 @@ export function isRequestAssignedToUser(request, currentUser, assignmentsMap = n
     }
   }
 
-  // 2. Check if explicitly claimed by this specific user in local storage
+  // 2. Direct authoritative ID match (Incognito-safe, works even when localStorage is empty)
+  const rawAssignedId = request.assigned_to ?? request.raw?.assigned_to ?? null;
+  const currentIds = [currentUser.id, currentUser.userId]
+    .filter((v) => v !== undefined && v !== null && String(v).trim() !== '')
+    .map((v) => String(v).trim());
+  if (rawAssignedId !== null && rawAssignedId !== undefined && String(rawAssignedId).trim() !== '') {
+    if (currentIds.includes(String(rawAssignedId).trim())) {
+      return true;
+    }
+  }
+
+  // 3. Check if explicitly claimed by this specific user in local storage
   try {
     const claimedRaw = typeof window !== 'undefined' ? localStorage.getItem('regquest_claimed_requests') : null;
     if (claimedRaw) {
