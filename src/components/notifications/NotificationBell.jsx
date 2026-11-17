@@ -1,43 +1,43 @@
-import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
 import { useNotifications } from '../../context/NotificationContext';
-import { ROUTES } from '../../constants/routes';
+import NotificationDropdown from './NotificationDropdown';
 
 export default function NotificationBell({
   variant = 'dark', // 'dark' (for sidebar/mobile dark header) or 'light' (for white navbars)
   showLabel = false,
   isCollapsed = false,
+  dropdownPositionClass = 'top-full right-0 mt-2',
   className = '',
 }) {
-  const navigate = useNavigate();
-  const location = useLocation();
   const { unreadCount } = useNotifications();
+  const [isOpen, setIsOpen] = useState(false);
 
   const isDark = variant === 'dark';
-  const isActive = location.pathname === ROUTES.NOTIFICATIONS;
 
-  const handleClick = (e) => {
+  const handleToggle = (e) => {
     e.preventDefault();
-    navigate(ROUTES.NOTIFICATIONS);
+    setIsOpen((prev) => !prev);
   };
 
   return (
     <div className={`relative inline-block ${className}`}>
       <button
         type="button"
-        onClick={handleClick}
+        onClick={handleToggle}
         title={
           unreadCount > 0
             ? `${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}`
             : 'Notifications'
         }
-        aria-label="View notifications page"
+        aria-label="Toggle notifications dropdown"
+        aria-expanded={isOpen}
+        data-testid="notification-bell-btn"
         className={`relative flex items-center transition-all cursor-pointer ${
           isDark
-            ? isActive
+            ? isOpen
               ? 'bg-white/20 text-white rounded-xl'
               : 'text-white/80 hover:text-white hover:bg-white/10 rounded-xl'
-            : isActive
+            : isOpen
             ? 'bg-slate-200 text-[#0B0B36] rounded-xl'
             : 'text-slate-600 hover:text-[#0B0B36] hover:bg-slate-100 rounded-xl'
         } ${
@@ -67,6 +67,7 @@ export default function NotificationBell({
           {/* Unread Count Badge */}
           {unreadCount > 0 && (
             <span
+              data-testid="notification-badge"
               className={`absolute -top-1 -right-1.5 flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-[10px] font-extrabold shadow-sm ${
                 isDark
                   ? 'bg-amber-400 text-slate-950 ring-2 ring-[#0B0B36]'
@@ -96,6 +97,12 @@ export default function NotificationBell({
           </div>
         )}
       </button>
+
+      <NotificationDropdown
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        dropdownPositionClass={dropdownPositionClass}
+      />
     </div>
   );
 }
