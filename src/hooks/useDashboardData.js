@@ -1,12 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import requestsApi, {
-  getStoredRequests,
   isValidRequest,
-  getStaffAssignments,
   isRequestAssignedToUser,
-  getArchivedRequestsMap,
-  isRequestArchived,
-  getProcessedActions,
 } from '../api/requests';
 import usersApi from '../api/users';
 import {
@@ -15,16 +10,18 @@ import {
   sumVolumeBucket,
 } from '../api/credentialTypes';
 import { ROLES } from '../constants/roles';
+import { useAuth } from './useAuth';
 
-function isCompletedRequest(r, archivedMap) {
+function isCompletedRequest(r) {
   if (!r) return false;
   const s = (r.status || '').toUpperCase().trim();
+  const raw = (r.rawStatus || '').toUpperCase().trim();
   return (
     s === 'RELEASED' ||
+    raw === 'RELEASED' ||
     s.includes('CLAIM') ||
     s === 'COMPLETED' ||
-    s === 'DONE' ||
-    isRequestArchived(r, archivedMap)
+    s === 'DONE'
   );
 }
 
@@ -93,6 +90,7 @@ function getDocTypeKey(req, credTypes = []) {
 }
 
 export default function useDashboardData() {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -108,6 +106,7 @@ export default function useDashboardData() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
     let ignore = false;
 
     async function loadDashboardData() {
@@ -152,12 +151,9 @@ export default function useDashboardData() {
           'On Hold': 0,
         };
 
-        const archivedMap = getArchivedRequestsMap();
-        const assignments = getStaffAssignments();
-
         validRequests.forEach((req) => {
           const s = (req.status || '').toUpperCase().trim();
-          if (isCompletedRequest(req, archivedMap)) {
+          if (isCompletedRequest(req)) {
             statusCounts['Claimed']++;
           } else if (s === 'PENDING' || s === 'PENDONG' || s === 'RECEIVED' || s === 'REQUEST SUBMITTED') {
             statusCounts['Pending']++;
@@ -226,30 +222,14 @@ export default function useDashboardData() {
             ? `${staff.first_name} ${staff.last_name}`
             : staff.full_name || staff.first_name || staff.username;
 
+          // Match strictly against live PostgreSQL assigned_to / assigned_staff (zero localStorage dependency)
           const staffReqs = validRequests.filter((r) =>
-            isRequestAssignedToUser(r, staff, assignments, users)
+            isRequestAssignedToUser(r, staff, {}, users)
           );
 
-          const completedReqs = staffReqs.filter((r) => isCompletedRequest(r, archivedMap));
-          const completedTrackingSet = new Set(
-            completedReqs
-              .map((r) => String(r.tracking_number || r.trackingId || r.id || '').trim().toUpperCase())
-              .filter(Boolean)
-          );
-
-          // Also include Claimed & Done actions logged by this staff member
-          const claimedLogs = getProcessedActions(staff).filter((act) => {
-            const st = String(act.status || '').toLowerCase();
-            const ac = String(act.action || '').toLowerCase();
-            return st.includes('claim') || st.includes('done') || ac.includes('claim');
-          });
-          claimedLogs.forEach((act) => {
-            const code = String(act.trackingNumber || act.targetId || act.id || '').trim().toUpperCase();
-            if (code) completedTrackingSet.add(code);
-          });
-
-          const staffCompleted = Math.max(completedReqs.length, completedTrackingSet.size);
-          const remainingReqs = staffReqs.filter((r) => !isCompletedRequest(r, archivedMap));
+          const completedReqs = staffReqs.filter((r) => isCompletedRequest(r));
+          const staffCompleted = completedReqs.length;
+          const remainingReqs = staffReqs.filter((r) => !isCompletedRequest(r));
           const staffForProcessing = remainingReqs.filter((r) => isForProcessingRequest(r)).length;
           const staffProcessing = remainingReqs.filter((r) => isProcessingRequest(r)).length;
           const staffPending = remainingReqs.filter(
@@ -366,7 +346,7 @@ export default function useDashboardData() {
       window.removeEventListener('regquest_archived_updated', handleSync);
       window.removeEventListener('regquest_staff_assignments_updated', handleSync);
     };
-  }, [reloadTrigger]);
+  }, [reloadTrigger, user?.id, user?.role]);
 
   return {
     loading,
