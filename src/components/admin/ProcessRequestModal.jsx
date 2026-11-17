@@ -37,6 +37,8 @@ export default function ProcessRequestModal({
   const [newStatus, setNewStatus] = useState(() => requestItem?.status || 'Pending');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const [confirmingAssessment, setConfirmingAssessment] = useState(false);
+  const [verifyingPayment, setVerifyingPayment] = useState(false);
   const [showInlineClearance, setShowInlineClearance] = useState(false);
   const [clearanceDoc, setClearanceDoc] = useState(null);
   const [loadingClearance, setLoadingClearance] = useState(false);
@@ -275,14 +277,17 @@ export default function ProcessRequestModal({
     if (!requestItem) return null;
     const reqDateFormatted = requestItem.request_date || (requestItem.created_at ? new Date(requestItem.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
     const relDateFormatted = dateOfRelease || requestItem.date_of_release || requestItem.release_date || '—';
+    const resolvedStudentName = requestItem.student_name || requestItem.user_full_name || requestItem.student_id || 'Student';
+    const orNum = activeOrNumber || requestItem.or_number || requestItem.receipt_reference_number || (payments && payments[0]?.receipt_reference_number) || '';
     return {
-      studentName: requestItem.student_name,
+      studentName: resolvedStudentName,
       course: requestItem.course || requestItem.program || '—',
       dateOfRequest: reqDateFormatted,
       credentialRequested: `${requestItem.document_type || 'Document'} (${requestItem.copies || 1} ${requestItem.copies > 1 ? 'copies' : 'copy'})`,
       dateOfRelease: relDateFormatted,
+      orNumber: orNum,
     };
-  }, [requestItem, dateOfRelease]);
+  }, [requestItem, dateOfRelease, activeOrNumber, payments]);
 
   const statusOptions = useMemo(() => {
     const role = String(user?.role || '').trim().toUpperCase();
@@ -553,125 +558,131 @@ export default function ProcessRequestModal({
   };
 
   const handleConfirmAssessmentAndIssuePayment = async () => {
+    if (confirmingAssessment) return;
     if (!isClearanceVerified) {
       toast.warning('Please verify the student clearance first before confirming the request.');
       return;
     }
 
-    const targetId = requestItem.id || requestItem.rawId;
-    const trackingCode = requestItem.tracking_number || requestItem.trackingId || requestItem.id;
-    const docName = requestItem.document_type || 'Requested Credential';
-    const rawNum = parseFloat(String(assessedAmount).replace(/[^0-9.]/g, '')) || 100.0;
-    const cleanAmount = rawNum.toFixed(2);
+    setConfirmingAssessment(true);
+    try {
+      const targetId = requestItem.id || requestItem.rawId;
+      const trackingCode = requestItem.tracking_number || requestItem.trackingId || requestItem.id;
+      const docName = requestItem.document_type || 'Requested Credential';
+      const rawNum = parseFloat(String(assessedAmount).replace(/[^0-9.]/g, '')) || 100.0;
+      const cleanAmount = rawNum.toFixed(2);
 
-    const nowTime = Date.now();
-    const nowIso = new Date(nowTime).toISOString();
-    recordRequestActivityTimestamp(requestItem, nowTime);
+      const nowTime = Date.now();
+      const nowIso = new Date(nowTime).toISOString();
+      recordRequestActivityTimestamp(requestItem, nowTime);
 
-    const patch = {
-      status: 'Pending Payment',
-      rawStatus: 'PAYMENT_PENDING',
-      batch_status: 'Pending Payment',
-      clearance_status: 'VERIFIED',
-      assessed_amount: cleanAmount,
-      amount: cleanAmount,
-      date_of_release: dateOfRelease,
-      release_date: dateOfRelease,
-      verified_by_name: verifiedByName || defaultStaffName,
-      or_number: '',
-      payment_date: '',
-      is_confirmed: true,
-      confirmed_for_payment: true,
-      updated_at: nowIso,
-    };
+      const patch = {
+        status: 'Pending Payment',
+        rawStatus: 'PAYMENT_PENDING',
+        batch_status: 'Pending Payment',
+        clearance_status: 'VERIFIED',
+        assessed_amount: cleanAmount,
+        amount: cleanAmount,
+        date_of_release: dateOfRelease,
+        release_date: dateOfRelease,
+        verified_by_name: verifiedByName || defaultStaffName,
+        or_number: '',
+        payment_date: '',
+        is_confirmed: true,
+        confirmed_for_payment: true,
+        updated_at: nowIso,
+      };
 
-    requestItem.status = 'Pending Payment';
-    requestItem.rawStatus = 'PAYMENT_PENDING';
-    requestItem.batch_status = 'Pending Payment';
-    requestItem.clearance_status = 'VERIFIED';
-    requestItem.assessed_amount = cleanAmount;
-    requestItem.amount = cleanAmount;
-    requestItem.date_of_release = dateOfRelease;
-    requestItem.release_date = dateOfRelease;
-    requestItem.verified_by_name = verifiedByName || defaultStaffName;
-    requestItem.is_confirmed = true;
-    requestItem.confirmed_for_payment = true;
+      requestItem.status = 'Pending Payment';
+      requestItem.rawStatus = 'PAYMENT_PENDING';
+      requestItem.batch_status = 'Pending Payment';
+      requestItem.clearance_status = 'VERIFIED';
+      requestItem.assessed_amount = cleanAmount;
+      requestItem.amount = cleanAmount;
+      requestItem.date_of_release = dateOfRelease;
+      requestItem.release_date = dateOfRelease;
+      requestItem.verified_by_name = verifiedByName || defaultStaffName;
+      requestItem.is_confirmed = true;
+      requestItem.confirmed_for_payment = true;
 
-    updateStoredRequest(targetId, patch, { fallbackItem: requestItem, silentNotify: true });
+      updateStoredRequest(targetId, patch, { fallbackItem: requestItem, silentNotify: true });
 
-    setStatusDirectly('Pending Payment');
-    setIsOrderConfirmed(true);
+      setStatusDirectly('Pending Payment');
+      setIsOrderConfirmed(true);
 
-    const targetRawId = requestItem.rawId || requestItem.id;
-    const isBackendId = Boolean(targetRawId) && !String(targetRawId).startsWith('fallback_');
-    if (isBackendId) {
-      const opRemarks = preserveDocTagInRemarks(
-        requestItem,
-        `Clearance verified by ${verifiedByName}. Assessed amount: ₱${cleanAmount}. Date of release: ${dateOfRelease}.`
-      );
-      try {
-        await requestsApi.transition(
-          targetRawId,
-          {
-            status: 'PAYMENT_PENDING',
-            remarks: opRemarks,
-          },
-          { throwOnError: true }
+      const targetRawId = requestItem.rawId || requestItem.id;
+      const isBackendId = Boolean(targetRawId) && !String(targetRawId).startsWith('fallback_');
+      if (isBackendId) {
+        const opRemarks = preserveDocTagInRemarks(
+          requestItem,
+          `Clearance verified by ${verifiedByName}. Assessed amount: ₱${cleanAmount}. Date of release: ${dateOfRelease}.`
         );
-      } catch (apiErr) {
         try {
           await requestsApi.transition(
             targetRawId,
-            { status: 'REQUIREMENTS_VERIFICATION', remarks: opRemarks },
+            {
+              status: 'PAYMENT_PENDING',
+              remarks: opRemarks,
+            },
             { throwOnError: true }
           );
-        } catch {}
-        try {
-          await requestsApi.transition(
-            targetRawId,
-            { status: 'PAYMENT_PENDING', remarks: opRemarks },
-            { throwOnError: true }
-          );
-        } catch (err2) {
-          console.warn('Backend transition notice:', apiErr, err2);
+        } catch (apiErr) {
+          try {
+            await requestsApi.transition(
+              targetRawId,
+              { status: 'REQUIREMENTS_VERIFICATION', remarks: opRemarks },
+              { throwOnError: true }
+            );
+          } catch {}
+          try {
+            await requestsApi.transition(
+              targetRawId,
+              { status: 'PAYMENT_PENDING', remarks: opRemarks },
+              { throwOnError: true }
+            );
+          } catch (err2) {
+            console.warn('Backend transition notice:', apiErr, err2);
+          }
         }
       }
-    }
 
-    saveStoredNotification({
-      event_type: 'PAYMENT_PENDING',
-      title: 'Your Request Is Ready for Payment',
-      message: `Your credential request has been reviewed and confirmed. The status is now "For Payment".\n\n• Request Number: ${trackingCode}\n• Requested Document: ${docName}\n• Total Amount: ${cleanAmount}\n\nPlease download and print your official request form and proceed with payment.\n\nAfter payment, attach your Official Receipt (OR) in the Payments page.`,
-      related_object_type: 'CredentialRequest',
-      related_object_id: trackingCode,
-      target_role: 'student',
-      target_roles: ['student'],
-      target_user_id: requestItem.user || null,
-      target_username: requestItem.student_id || requestItem.student_name || null,
-      target_student_id: requestItem.student_id || null,
-    });
-
-    logProcessedAction({
-      actor: user?.username,
-      actorName: user?.full_name || user?.username,
-      actorId: user?.id,
-      actorRole: user?.role || 'admin',
-      targetName: requestItem.student_name,
-      targetId: requestItem.student_id || trackingCode,
-      trackingNumber: trackingCode,
-      documentType: docName,
-      action: `Assessed payment (${cleanAmount}) & confirmed request`,
-      status: 'Pending Payment',
-    });
-
-    if (onUpdated) {
-      onUpdated({
-        ...requestItem,
-        ...patch,
+      saveStoredNotification({
+        event_type: 'PAYMENT_PENDING',
+        title: 'Your Request Is Ready for Payment',
+        message: `Your credential request has been reviewed and confirmed. The status is now "For Payment".\n\n• Request Number: ${trackingCode}\n• Requested Document: ${docName}\n• Total Amount: ${cleanAmount}\n\nPlease download and print your official request form and proceed with payment.\n\nAfter payment, attach your Official Receipt (OR) in the Payments page.`,
+        related_object_type: 'CredentialRequest',
+        related_object_id: trackingCode,
+        target_role: 'student',
+        target_roles: ['student'],
+        target_user_id: requestItem.user || null,
+        target_username: requestItem.student_id || requestItem.student_name || null,
+        target_student_id: requestItem.student_id || null,
       });
-    }
 
-    toast.success(`Request confirmed! Status updated to "Pending Payment". Student notified to pay ₱${cleanAmount}.`);
+      logProcessedAction({
+        actor: user?.username,
+        actorName: user?.full_name || user?.username,
+        actorId: user?.id,
+        actorRole: user?.role || 'admin',
+        targetName: requestItem.student_name,
+        targetId: requestItem.student_id || trackingCode,
+        trackingNumber: trackingCode,
+        documentType: docName,
+        action: `Assessed payment (${cleanAmount}) & confirmed request`,
+        status: 'Pending Payment',
+      });
+
+      if (onUpdated) {
+        onUpdated({
+          ...requestItem,
+          ...patch,
+        });
+      }
+
+      toast.success(`Request confirmed! Status updated to "Pending Payment". Student notified to pay ₱${cleanAmount}.`);
+    } finally {
+      setConfirmingAssessment(false);
+    }
   };
 
   const handleRejectRequest = async () => {
@@ -760,6 +771,7 @@ export default function ProcessRequestModal({
   };
 
   const handleVerifyPayment = async (actionToSet = 'VERIFIED') => {
+    if (verifyingPayment) return;
     const targetId = requestItem.id || requestItem.rawId;
     const trackingCode = requestItem.tracking_number || requestItem.id;
 
@@ -803,116 +815,121 @@ export default function ProcessRequestModal({
       return;
     }
 
-    const finalOrNumber = activeOrNumber || 'Paid at USTP Cashier (FTF)';
+    setVerifyingPayment(true);
+    try {
+      const finalOrNumber = activeOrNumber || 'Paid at USTP Cashier (FTF)';
 
-    verifyStoredPaymentProof(
-      [requestItem.tracking_number, requestItem.id, requestItem.rawId],
-      {
-        action: isVerified ? 'VERIFY' : 'REJECT',
-        remarks: notes || (isVerified ? 'Payment verified by Admin' : 'Receipt rejected'),
-      }
-    );
-
-    setPaymentStatus(isVerified ? 'VERIFIED' : 'REJECTED');
-    const updatedStatus = isVerified ? 'For Processing' : 'Pending Payment';
-    setStatusDirectly(updatedStatus);
-
-    const nowTime = Date.now();
-    const nowIso = new Date(nowTime).toISOString();
-    recordRequestActivityTimestamp(requestItem, nowTime);
-
-    const paymentPatch = {
-      status: updatedStatus,
-      rawStatus: isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING',
-      batch_status: updatedStatus,
-      payment_status: isVerified ? 'VERIFIED' : 'REJECTED',
-      or_number: finalOrNumber,
-      receipt_reference_number: finalOrNumber,
-      receipt_image: activeReceiptImage,
-      payment_date: new Date().toISOString().split('T')[0],
-      updated_at: nowIso,
-    };
-
-    requestItem.status = updatedStatus;
-    requestItem.rawStatus = isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING';
-    requestItem.batch_status = updatedStatus;
-    requestItem.payment_status = isVerified ? 'VERIFIED' : 'REJECTED';
-    requestItem.or_number = finalOrNumber;
-    requestItem.updated_at = nowIso;
-
-    updateStoredRequest(targetId, paymentPatch, { fallbackItem: requestItem, silentNotify: true });
-
-    if (onUpdated) {
-      onUpdated({
-        ...requestItem,
-        ...paymentPatch,
-      });
-    }
-
-    const targetRawId = requestItem.rawId || requestItem.id;
-    const isBackendId = Boolean(targetRawId) && !String(targetRawId).startsWith('fallback_');
-    if (isBackendId) {
-      const payRemarks = preserveDocTagInRemarks(
-        requestItem,
-        isVerified
-          ? `Official Receipt verified (OR: ${finalOrNumber}). Verified by ${user?.username || 'Admin'}.`
-          : 'Payment proof rejected.'
+      verifyStoredPaymentProof(
+        [requestItem.tracking_number, requestItem.id, requestItem.rawId],
+        {
+          action: isVerified ? 'VERIFY' : 'REJECT',
+          remarks: notes || (isVerified ? 'Payment verified by Admin' : 'Receipt rejected'),
+        }
       );
-      const targetPayStatus = isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING';
-      try {
-        await requestsApi.transition(
-          targetRawId,
-          {
-            status: targetPayStatus,
-            remarks: payRemarks,
-          },
-          { throwOnError: true }
+
+      setPaymentStatus(isVerified ? 'VERIFIED' : 'REJECTED');
+      const updatedStatus = isVerified ? 'For Processing' : 'Pending Payment';
+      setStatusDirectly(updatedStatus);
+
+      const nowTime = Date.now();
+      const nowIso = new Date(nowTime).toISOString();
+      recordRequestActivityTimestamp(requestItem, nowTime);
+
+      const paymentPatch = {
+        status: updatedStatus,
+        rawStatus: isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING',
+        batch_status: updatedStatus,
+        payment_status: isVerified ? 'VERIFIED' : 'REJECTED',
+        or_number: finalOrNumber,
+        receipt_reference_number: finalOrNumber,
+        receipt_image: activeReceiptImage,
+        payment_date: new Date().toISOString().split('T')[0],
+        updated_at: nowIso,
+      };
+
+      requestItem.status = updatedStatus;
+      requestItem.rawStatus = isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING';
+      requestItem.batch_status = updatedStatus;
+      requestItem.payment_status = isVerified ? 'VERIFIED' : 'REJECTED';
+      requestItem.or_number = finalOrNumber;
+      requestItem.updated_at = nowIso;
+
+      updateStoredRequest(targetId, paymentPatch, { fallbackItem: requestItem, silentNotify: true });
+
+      if (onUpdated) {
+        onUpdated({
+          ...requestItem,
+          ...paymentPatch,
+        });
+      }
+
+      const targetRawId = requestItem.rawId || requestItem.id;
+      const isBackendId = Boolean(targetRawId) && !String(targetRawId).startsWith('fallback_');
+      if (isBackendId) {
+        const payRemarks = preserveDocTagInRemarks(
+          requestItem,
+          isVerified
+            ? `Official Receipt verified (OR: ${finalOrNumber}). Verified by ${user?.username || 'Admin'}.`
+            : 'Payment proof rejected.'
         );
-      } catch (apiErr) {
-        if (isVerified) {
-          for (const step of ['REQUIREMENTS_VERIFICATION', 'PAYMENT_PENDING', 'PAYMENT_VERIFIED']) {
-            try {
-              await requestsApi.transition(
-                targetRawId,
-                { status: step, remarks: payRemarks },
-                { throwOnError: true }
-              );
-            } catch {}
+        const targetPayStatus = isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING';
+        try {
+          await requestsApi.transition(
+            targetRawId,
+            {
+              status: targetPayStatus,
+              remarks: payRemarks,
+            },
+            { throwOnError: true }
+          );
+        } catch (apiErr) {
+          if (isVerified) {
+            for (const step of ['REQUIREMENTS_VERIFICATION', 'PAYMENT_PENDING', 'PAYMENT_VERIFIED']) {
+              try {
+                await requestsApi.transition(
+                  targetRawId,
+                  { status: step, remarks: payRemarks },
+                  { throwOnError: true }
+                );
+              } catch {}
+            }
+          } else {
+            console.warn('Backend transition payment notice:', apiErr);
           }
-        } else {
-          console.warn('Backend transition payment notice:', apiErr);
         }
       }
-    }
 
-    logProcessedAction({
-      actor: user?.username,
-      actorName: user?.full_name || user?.username,
-      actorId: user?.id,
-      actorRole: user?.role || 'admin',
-      targetName: requestItem.student_name,
-      targetId: requestItem.student_id || trackingCode,
-      trackingNumber: trackingCode,
-      documentType: requestItem.document_type,
-      action: isVerified ? `Verified Official Receipt (OR: ${finalOrNumber})` : 'Payment Rejected',
-      status: updatedStatus,
-    });
-
-    if (isVerified) {
-      saveStoredNotification({
-        event_type: 'PAYMENT_VERIFIED',
-        message: `Your payment (OR: ${finalOrNumber}) for request ${trackingCode} has been verified by the Registrar. Your request status is now For Processing.`,
-        related_object_type: 'CredentialRequest',
-        related_object_id: trackingCode,
-        target_role: 'student',
-        target_roles: ['student'],
-        target_user_id: requestItem.user || null,
-        target_username: requestItem.student_name || null,
-        target_student_id: requestItem.student_id || null,
+      logProcessedAction({
+        actor: user?.username,
+        actorName: user?.full_name || user?.username,
+        actorId: user?.id,
+        actorRole: user?.role || 'admin',
+        targetName: requestItem.student_name,
+        targetId: requestItem.student_id || trackingCode,
+        trackingNumber: trackingCode,
+        documentType: requestItem.document_type,
+        action: isVerified ? `Verified Official Receipt (OR: ${finalOrNumber})` : 'Payment Rejected',
+        status: updatedStatus,
       });
-      toast.success(`Payment verified (OR: ${finalOrNumber})! Status updated to For Processing.`);
-    } else {
-      toast.warning('Payment proof rejected. Request remains For Payment.');
+
+      if (isVerified) {
+        saveStoredNotification({
+          event_type: 'PAYMENT_VERIFIED',
+          message: `Your payment (OR: ${finalOrNumber}) for request ${trackingCode} has been verified by the Registrar. Your request status is now For Processing.`,
+          related_object_type: 'CredentialRequest',
+          related_object_id: trackingCode,
+          target_role: 'student',
+          target_roles: ['student'],
+          target_user_id: requestItem.user || null,
+          target_username: requestItem.student_name || null,
+          target_student_id: requestItem.student_id || null,
+        });
+        toast.success(`Payment verified (OR: ${finalOrNumber})! Status updated to For Processing.`);
+      } else {
+        toast.warning('Payment proof rejected. Request remains For Payment.');
+      }
+    } finally {
+      setVerifyingPayment(false);
     }
   };
 
@@ -1705,10 +1722,10 @@ export default function ProcessRequestModal({
                         </button>
                         <button
                           type="button"
-                          disabled={!isClearanceVerified || isPersistedTerminal}
+                          disabled={!isClearanceVerified || isPersistedTerminal || confirmingAssessment}
                           onClick={handleConfirmAssessmentAndIssuePayment}
                           className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-                            isClearanceVerified && !isPersistedTerminal
+                            isClearanceVerified && !isPersistedTerminal && !confirmingAssessment
                               ? 'bg-indigo-900 hover:bg-indigo-950 text-white shadow-md cursor-pointer'
                               : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
                           }`}
@@ -1885,10 +1902,10 @@ export default function ProcessRequestModal({
                     <>
                       <button
                         type="button"
-                        disabled={!canConfirmPayment}
+                        disabled={!canConfirmPayment || verifyingPayment}
                         onClick={() => handleVerifyPayment('VERIFIED')}
                         className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                          canConfirmPayment
+                          canConfirmPayment && !verifyingPayment
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs'
                             : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
                         }`}
@@ -1901,15 +1918,15 @@ export default function ProcessRequestModal({
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
-                        <span>Confirm Payment</span>
+                        <span>{verifyingPayment ? 'Verifying...' : 'Confirm Payment'}</span>
                       </button>
 
                       <button
                         type="button"
-                        disabled={!hasReceiptUploaded && !paymentProof}
+                        disabled={(!hasReceiptUploaded && !paymentProof) || verifyingPayment}
                         onClick={() => handleVerifyPayment('REJECTED')}
                         className={`px-3 py-2 text-xs font-bold rounded-lg transition-all ${
-                          hasReceiptUploaded || paymentProof
+                          (hasReceiptUploaded || paymentProof) && !verifyingPayment
                             ? 'cursor-pointer bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300'
                             : 'cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-200'
                         }`}
