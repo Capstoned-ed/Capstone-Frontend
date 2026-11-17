@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../hooks/useAuth';
 import useToast from '../../hooks/useToast';
+import authApi from '../../api/auth';
 
 export default function ChangePasswordModal({ isOpen, onClose }) {
   const { user } = useAuth();
@@ -21,7 +22,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
   const userIdentifier = user?.username || user?.student_id || user?.id || '';
   const userEmail = user?.email || '';
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -48,32 +49,46 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
     setIsSubmitting(true);
 
     try {
-      // Store custom password in localStorage so client authentication seamlessly maps it
-      const customPasswords = JSON.parse(localStorage.getItem('regquest_custom_passwords') || '{}');
-      
-      const record = {
-        originalPassword: currentPassword.trim(),
-        newPassword: newPassword.trim(),
-        updatedAt: new Date().toISOString(),
-      };
+      await authApi.changePassword(
+        currentPassword.trim(),
+        newPassword.trim(),
+        confirmPassword.trim()
+      );
 
-      if (userIdentifier) {
-        customPasswords[userIdentifier] = record;
-      }
-      if (userEmail) {
-        customPasswords[userEmail.toLowerCase()] = record;
-      }
-      if (user?.student_id) {
-        customPasswords[user.student_id] = record;
-      }
+      // Keep cache updated for client-side fallback
+      try {
+        const customPasswords = JSON.parse(localStorage.getItem('regquest_custom_passwords') || '{}');
+        const record = {
+          originalPassword: currentPassword.trim(),
+          newPassword: newPassword.trim(),
+          updatedAt: new Date().toISOString(),
+        };
 
-      localStorage.setItem('regquest_custom_passwords', JSON.stringify(customPasswords));
+        if (userIdentifier) {
+          customPasswords[userIdentifier] = record;
+        }
+        if (userEmail) {
+          customPasswords[userEmail.toLowerCase()] = record;
+        }
+        if (user?.student_id) {
+          customPasswords[user.student_id] = record;
+        }
+
+        localStorage.setItem('regquest_custom_passwords', JSON.stringify(customPasswords));
+      } catch {}
 
       toast.success('Password updated successfully! You can now use your new password to log in.');
       handleClose();
     } catch (err) {
       console.error('Failed to update password:', err);
-      setErrorMessage('Failed to save password change. Please try again.');
+      const errMsg =
+        err.response?.data?.detail ||
+        err.response?.data?.new_password?.[0] ||
+        err.response?.data?.confirm_password?.[0] ||
+        err.response?.data?.current_password?.[0] ||
+        err.message ||
+        'Failed to save password change. Please try again.';
+      setErrorMessage(errMsg);
     } finally {
       setIsSubmitting(false);
     }

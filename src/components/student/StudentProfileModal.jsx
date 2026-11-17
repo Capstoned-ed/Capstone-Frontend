@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
 import requestsApi from '../../api/requests';
 import usersApi from '../../api/users';
+import authApi from '../../api/auth';
 import useToast from '../../hooks/useToast';
 
 const getStatusBadge = (statusStr) => {
@@ -720,7 +721,7 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                 )}
 
                 <form
-                  onSubmit={(e) => {
+                  onSubmit={async (e) => {
                     e.preventDefault();
                     setPasswordError('');
 
@@ -743,19 +744,27 @@ export default function StudentProfileModal({ isOpen, onClose }) {
 
                     setIsChangingPassword(true);
                     try {
-                      const customPasswords = JSON.parse(localStorage.getItem('regquest_custom_passwords') || '{}');
-                      const userKey = user?.username || studentId || user?.id || '';
-                      const record = {
-                        originalPassword: currentPassword.trim(),
-                        newPassword: newPassword.trim(),
-                        updatedAt: new Date().toISOString(),
-                      };
+                      await authApi.changePassword(
+                        currentPassword.trim(),
+                        newPassword.trim(),
+                        confirmPassword.trim()
+                      );
 
-                      if (userKey) customPasswords[userKey] = record;
-                      if (user?.email) customPasswords[user.email.toLowerCase()] = record;
-                      if (studentId) customPasswords[studentId] = record;
+                      try {
+                        const customPasswords = JSON.parse(localStorage.getItem('regquest_custom_passwords') || '{}');
+                        const userKey = user?.username || studentId || user?.id || '';
+                        const record = {
+                          originalPassword: currentPassword.trim(),
+                          newPassword: newPassword.trim(),
+                          updatedAt: new Date().toISOString(),
+                        };
 
-                      localStorage.setItem('regquest_custom_passwords', JSON.stringify(customPasswords));
+                        if (userKey) customPasswords[userKey] = record;
+                        if (user?.email) customPasswords[user.email.toLowerCase()] = record;
+                        if (studentId) customPasswords[studentId] = record;
+
+                        localStorage.setItem('regquest_custom_passwords', JSON.stringify(customPasswords));
+                      } catch {}
 
                       setPasswordSuccess(true);
                       toast.success('Password updated successfully!');
@@ -765,7 +774,14 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                       setTimeout(() => setPasswordSuccess(false), 3000);
                     } catch (err) {
                       console.warn('Password change failed:', err);
-                      setPasswordError('Failed to save password change.');
+                      const errMsg =
+                        err.response?.data?.detail ||
+                        err.response?.data?.new_password?.[0] ||
+                        err.response?.data?.confirm_password?.[0] ||
+                        err.response?.data?.current_password?.[0] ||
+                        err.message ||
+                        'Failed to save password change.';
+                      setPasswordError(errMsg);
                     } finally {
                       setIsChangingPassword(false);
                     }
