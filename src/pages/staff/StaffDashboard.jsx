@@ -250,6 +250,7 @@ export default function StaffDashboard() {
             remarks: r.remarks || '',
             user: r.user,
             assigned_staff: r.assigned_staff || (resolvedClaimedStaff && resolvedClaimedStaff !== 'claimed' ? resolvedClaimedStaff : null),
+            assigned_to: r.assigned_to ?? null,
             assigned_at: r.assigned_at || null,
             accepted_at: r.accepted_at || null,
             photo_preview: r.photo_preview || null,
@@ -389,6 +390,9 @@ export default function StaffDashboard() {
   }, [user, requestsList, assignments, usersList, archivedMap]);
 
   const metrics = useMemo(() => {
+    const isStaffRole = String(user?.role || '').toLowerCase() === 'staff';
+    const completedSource = isStaffRole ? allUserRequests : requestsList;
+
     const total = targetRequestsForMetrics.length;
     const pending = targetRequestsForMetrics.filter((r) => {
       const s = (r.status || '').toLowerCase();
@@ -406,13 +410,14 @@ export default function StaffDashboard() {
       const s = (r.status || '').toLowerCase();
       return s.includes('release') || s.includes('pickup') || s.includes('ready');
     }).length;
-    const completed = targetRequestsForMetrics.filter((r) => {
+    const completed = completedSource.filter((r) => {
       const s = (r.status || '').toLowerCase();
-      return s.includes('claimed') || s === 'completed';
+      const raw = (r.rawStatus || '').toLowerCase();
+      return s.includes('claimed') || s === 'completed' || raw === 'released' || isClaimedStatus(r.rawStatus || r.status);
     }).length;
 
     return { total, pending, processing, onHold, forRelease, completed };
-  }, [targetRequestsForMetrics]);
+  }, [user, targetRequestsForMetrics, allUserRequests, requestsList]);
 
   const batchSchedule = useMemo(() => {
     const batchesByDate = {};
