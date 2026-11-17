@@ -1300,14 +1300,15 @@ export default function ProcessRequestModal({
   };
 
   const handleClaimAndMoveToHistory = async () => {
-    const targetId = requestItem.id || requestItem.rawId;
+    const targetRawId = requestItem.rawId || requestItem.raw?.id || requestItem.id;
+    const targetId = requestItem.id || targetRawId;
     const trackingCode = requestItem.tracking_number || requestItem.trackingId || requestItem.id;
 
     try {
       setLoading(true);
-      if (targetId && !String(targetId).startsWith('fallback_')) {
+      if (targetRawId && !String(targetRawId).startsWith('fallback_')) {
         await requestsApi.transition(
-          targetId,
+          targetRawId,
           {
             status: 'RELEASED',
             remarks: preserveDocTagInRemarks(
