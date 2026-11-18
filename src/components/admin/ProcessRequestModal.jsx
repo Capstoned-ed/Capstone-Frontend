@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import apiClient from '../../api/client';
 import requestsApi, { updateStoredRequest, logProcessedAction, setRequestArchived, recordRequestActivityTimestamp, preserveDocTagInRemarks } from '../../api/requests';
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
+import settingsApi from '../../api/settings';
 import { saveStoredNotification } from '../../api/notifications';
 import { getStoredPaymentProof, verifyStoredPaymentProof } from '../../api/payments';
 import {
@@ -217,7 +218,38 @@ export default function ProcessRequestModal({
   const userRole = String(user?.role || '').trim().toUpperCase();
   const isAdmin = userRole === 'ADMIN';
 
-  const persistedBackendStatus = normalizeToBackendStatus(requestItem?.status);
+  const [persistedStatus, setPersistedStatus] = useState(() => requestItem?.status || 'PENDING');
+  useEffect(() => {
+    if (requestItem?.status) {
+      setPersistedStatus(requestItem.status);
+    }
+  }, [requestItem?.id, requestItem?.rawId, requestItem?.status]);
+
+  const [autoApproveEnabled, setAutoApproveEnabled] = useState(true);
+  const [activeSignatoryName, setActiveSignatoryName] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let ignore = false;
+    settingsApi
+      .getRegistrarApproval()
+      .then((data) => {
+        if (ignore || !data) return;
+        setAutoApproveEnabled(Boolean(data.auto_approve_requests ?? true));
+        const sig =
+          data.active_registrar_name ||
+          data.signatory_name ||
+          data.default_signatory_name ||
+          '';
+        if (sig) setActiveSignatoryName(sig);
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, [isOpen]);
+
+  const persistedBackendStatus = normalizeToBackendStatus(persistedStatus || requestItem?.status);
   const isPersistedReadyForRelease = persistedBackendStatus === REQUEST_STATUS.READY_FOR_RELEASE;
   const isPersistedReleased = persistedBackendStatus === REQUEST_STATUS.RELEASED;
   const isPersistedRejected = persistedBackendStatus === REQUEST_STATUS.REJECTED;
@@ -245,20 +277,45 @@ export default function ProcessRequestModal({
     isAlreadyPastPayment
   );
 
+  const [localIsApproved, setLocalIsApproved] = useState(() => Boolean(requestItem?.is_approved));
+  const [localIsAutoApproved, setLocalIsAutoApproved] = useState(() => Boolean(requestItem?.is_auto_approved));
+  const [localApprovedByName, setLocalApprovedByName] = useState(() => requestItem?.approved_by_name || '');
+
+  useEffect(() => {
+    setLocalIsApproved(Boolean(requestItem?.is_approved));
+    setLocalIsAutoApproved(Boolean(requestItem?.is_auto_approved));
+    setLocalApprovedByName(requestItem?.approved_by_name || '');
+  }, [requestItem?.is_approved, requestItem?.is_auto_approved, requestItem?.approved_by_name]);
+
+  const isApproved = localIsApproved;
+  const isAutoApproved = localIsAutoApproved;
+  const approvedByName = localApprovedByName;
+  const isRegistrarOrAdmin =
+    String(user?.role || '').toLowerCase() === 'registrar' ||
+    String(user?.role || '').toLowerCase() === 'admin';
+
+  // Enforce OFF Mode: when Auto-Approve is OFF and request is not yet approved by Registrar,
+  // Staff cannot confirm/bypass Registrar approval until Registrar approves first.
+  const isWaitingForRegistrarApproval = Boolean(
+    !autoApproveEnabled && !isApproved && !isRegistrarOrAdmin
+  );
+
   const canOverrideStatus = Boolean(
     isClearanceVerified &&
-    (!isPersistedTerminal || isAdmin)
+    (!isPersistedTerminal || isAdmin) &&
+    !isWaitingForRegistrarApproval
   );
 
   const isStatusChanged = Boolean(
     localStatus &&
-    requestItem?.status &&
-    localStatus.toLowerCase() !== requestItem.status.toLowerCase()
+    normalizeToBackendStatus(localStatus) !== persistedBackendStatus
   );
+
+  const hasUnsavedNotes = Boolean(notes && notes.trim().length > 0);
 
   const canSubmitUpdate = Boolean(
     canOverrideStatus &&
-    isStatusChanged &&
+    (isStatusChanged || hasUnsavedNotes) &&
     !loading
   );
 
@@ -279,6 +336,8 @@ export default function ProcessRequestModal({
         toast.warning('Cannot change status: This request is already completed or closed.');
       } else if (!isClearanceVerified) {
         toast.warning('Cannot change status: Please verify student clearance first.');
+      } else if (isWaitingForRegistrarApproval) {
+        toast.warning('Waiting for Registrar Approval before Staff can advance this request.');
       }
       return;
     }
@@ -289,23 +348,6 @@ export default function ProcessRequestModal({
     if (newStatus) setLocalStatus(normalizeStatus(newStatus));
   }, [newStatus]);
 
-  const [localIsApproved, setLocalIsApproved] = useState(() => Boolean(requestItem?.is_approved));
-  const [localIsAutoApproved, setLocalIsAutoApproved] = useState(() => Boolean(requestItem?.is_auto_approved));
-  const [localApprovedByName, setLocalApprovedByName] = useState(() => requestItem?.approved_by_name || '');
-
-  useEffect(() => {
-    setLocalIsApproved(Boolean(requestItem?.is_approved));
-    setLocalIsAutoApproved(Boolean(requestItem?.is_auto_approved));
-    setLocalApprovedByName(requestItem?.approved_by_name || '');
-  }, [requestItem?.is_approved, requestItem?.is_auto_approved, requestItem?.approved_by_name]);
-
-  const isApproved = localIsApproved;
-  const isAutoApproved = localIsAutoApproved;
-  const approvedByName = localApprovedByName;
-  const isRegistrarOrAdmin =
-    String(user?.role || '').toLowerCase() === 'registrar' ||
-    String(user?.role || '').toLowerCase() === 'admin';
-
   const [approvingRequest, setApprovingRequest] = useState(false);
 
   const handleApproveRequest = async () => {
@@ -313,15 +355,17 @@ export default function ProcessRequestModal({
     const targetRawId = requestItem.rawId || requestItem.id;
     setApprovingRequest(true);
     try {
-      const approverName =
+      const fallbackApproverName =
         user?.full_name ||
         `${user?.first_name || ''} ${user?.last_name || ''}`.trim() ||
         user?.username ||
         'Registrar';
 
+      let approveRes = null;
       if (targetRawId && !String(targetRawId).startsWith('fallback_')) {
-        await requestsApi.approve(targetRawId);
+        approveRes = await requestsApi.approve(targetRawId);
       }
+      const approverName = approveRes?.approved_by_name || fallbackApproverName;
       requestItem.is_approved = true;
       requestItem.is_auto_approved = false;
       requestItem.approved_by_name = approverName;
@@ -338,8 +382,13 @@ export default function ProcessRequestModal({
         { fallbackItem: requestItem }
       );
       toast.success(`Request approved by ${approverName}!`);
-      if (typeof onStatusUpdated === 'function') {
-        onStatusUpdated(requestItem);
+      if (typeof onUpdated === 'function') {
+        onUpdated({
+          ...requestItem,
+          is_approved: true,
+          is_auto_approved: false,
+          approved_by_name: approverName,
+        });
       }
     } catch (err) {
       console.error('Failed to approve request:', err);
@@ -374,8 +423,9 @@ export default function ProcessRequestModal({
 
   const statusOptions = useMemo(() => {
     const role = String(user?.role || '').trim().toUpperCase();
-    const currentPersisted = normalizeToBackendStatus(requestItem?.status);
-    const currentDisplay = formatStatusDisplay(requestItem?.status, { useReleasing: true });
+    const effectiveStatus = persistedStatus || requestItem?.status;
+    const currentPersisted = normalizeToBackendStatus(effectiveStatus);
+    const currentDisplay = formatStatusDisplay(effectiveStatus, { useReleasing: true });
 
     let allowed = [currentDisplay];
 
@@ -415,29 +465,33 @@ export default function ProcessRequestModal({
       }
     } else {
       // Role: STAFF
-      switch (currentPersisted) {
-        case REQUEST_STATUS.PENDING:
-          allowed = ['Pending', 'Pending Payment', 'On Hold', 'Rejected'];
-          break;
-        case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
-          allowed = ['On Hold', 'Pending Payment', 'Rejected'];
-          break;
-        case REQUEST_STATUS.PAYMENT_PENDING:
-          allowed = ['Pending Payment', 'For Processing', 'Rejected'];
-          break;
-        case REQUEST_STATUS.PAYMENT_VERIFIED:
-          // Staff CANNOT reject once payment is verified!
-          allowed = ['For Processing', 'Processing'];
-          break;
-        case REQUEST_STATUS.PROCESSING:
-          // Staff cannot transition to Releasing or Rejected
-          allowed = ['Processing'];
-          break;
-        case REQUEST_STATUS.READY_FOR_RELEASE:
-          allowed = ['Releasing', 'Claimed'];
-          break;
-        default:
-          allowed = [currentDisplay];
+      if (isWaitingForRegistrarApproval) {
+        allowed = [currentDisplay];
+      } else {
+        switch (currentPersisted) {
+          case REQUEST_STATUS.PENDING:
+            allowed = ['Pending', 'Pending Payment', 'On Hold', 'Rejected'];
+            break;
+          case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
+            allowed = ['On Hold', 'Pending Payment', 'Rejected'];
+            break;
+          case REQUEST_STATUS.PAYMENT_PENDING:
+            allowed = ['Pending Payment', 'For Processing', 'Rejected'];
+            break;
+          case REQUEST_STATUS.PAYMENT_VERIFIED:
+            // Staff CANNOT reject once payment is verified!
+            allowed = ['For Processing', 'Processing'];
+            break;
+          case REQUEST_STATUS.PROCESSING:
+            // Staff cannot transition to Releasing or Rejected
+            allowed = ['Processing'];
+            break;
+          case REQUEST_STATUS.READY_FOR_RELEASE:
+            allowed = ['Releasing', 'Claimed'];
+            break;
+          default:
+            allowed = [currentDisplay];
+        }
       }
     }
 
@@ -445,7 +499,7 @@ export default function ProcessRequestModal({
       allowed.unshift(currentDisplay);
     }
     return Array.from(new Set(allowed));
-  }, [requestItem?.status, user?.role]);
+  }, [persistedStatus, requestItem?.status, user?.role, isWaitingForRegistrarApproval]);
 
   useEffect(() => {
     let ignore = false;
@@ -702,6 +756,10 @@ export default function ProcessRequestModal({
       toast.warning('Please verify the student clearance first before confirming the request.');
       return;
     }
+    if (isWaitingForRegistrarApproval) {
+      toast.warning('Waiting for Registrar Approval: Auto-Approve is OFF. A Registrar must approve this request before Staff can confirm it.');
+      return;
+    }
 
     setConfirmingAssessment(true);
     try {
@@ -715,49 +773,17 @@ export default function ProcessRequestModal({
       const nowIso = new Date(nowTime).toISOString();
       recordRequestActivityTimestamp(requestItem, nowTime);
 
-      const patch = {
-        status: 'Pending Payment',
-        rawStatus: 'PAYMENT_PENDING',
-        batch_status: 'Pending Payment',
-        clearance_status: 'VERIFIED',
-        assessed_amount: cleanAmount,
-        amount: cleanAmount,
-        date_of_release: dateOfRelease,
-        release_date: dateOfRelease,
-        verified_by_name: verifiedByName || defaultStaffName,
-        or_number: '',
-        payment_date: '',
-        is_confirmed: true,
-        confirmed_for_payment: true,
-        updated_at: nowIso,
-      };
-
-      requestItem.status = 'Pending Payment';
-      requestItem.rawStatus = 'PAYMENT_PENDING';
-      requestItem.batch_status = 'Pending Payment';
-      requestItem.clearance_status = 'VERIFIED';
-      requestItem.assessed_amount = cleanAmount;
-      requestItem.amount = cleanAmount;
-      requestItem.date_of_release = dateOfRelease;
-      requestItem.release_date = dateOfRelease;
-      requestItem.verified_by_name = verifiedByName || defaultStaffName;
-      requestItem.is_confirmed = true;
-      requestItem.confirmed_for_payment = true;
-
-      updateStoredRequest(targetId, patch, { fallbackItem: requestItem, silentNotify: true });
-
-      setStatusDirectly('Pending Payment');
-      setIsOrderConfirmed(true);
-
       const targetRawId = requestItem.rawId || requestItem.id;
       const isBackendId = Boolean(targetRawId) && !String(targetRawId).startsWith('fallback_');
+      let transitionRes = null;
+
       if (isBackendId) {
         const opRemarks = preserveDocTagInRemarks(
           requestItem,
           `Clearance verified by ${verifiedByName}. Assessed amount: ₱${cleanAmount}. Date of release: ${dateOfRelease}.`
         );
         try {
-          await requestsApi.transition(
+          transitionRes = await requestsApi.transition(
             targetRawId,
             {
               status: 'PAYMENT_PENDING',
@@ -774,7 +800,7 @@ export default function ProcessRequestModal({
             );
           } catch {}
           try {
-            await requestsApi.transition(
+            transitionRes = await requestsApi.transition(
               targetRawId,
               { status: 'PAYMENT_PENDING', remarks: opRemarks },
               { throwOnError: true }
@@ -784,6 +810,64 @@ export default function ProcessRequestModal({
           }
         }
       }
+
+      const persistedNextStatus = transitionRes?.status || 'PAYMENT_PENDING';
+      const displayNextStatus = formatStatusDisplay(persistedNextStatus, { useReleasing: true }) || 'Pending Payment';
+
+      // Immediately sync Registrar Auto-Approval signatory state from backend response (or active settings)
+      const resolvedIsApproved = Boolean(
+        transitionRes?.is_approved ?? (autoApproveEnabled ? true : localIsApproved)
+      );
+      const resolvedIsAutoApproved = Boolean(
+        transitionRes?.is_auto_approved ?? (autoApproveEnabled && resolvedIsApproved)
+      );
+      const resolvedApprovedByName =
+        transitionRes?.approved_by_name ||
+        (resolvedIsApproved ? (localApprovedByName || activeSignatoryName || 'University Registrar') : '');
+
+      const patch = {
+        status: displayNextStatus,
+        rawStatus: persistedNextStatus,
+        batch_status: displayNextStatus,
+        clearance_status: 'VERIFIED',
+        assessed_amount: cleanAmount,
+        amount: cleanAmount,
+        date_of_release: dateOfRelease,
+        release_date: dateOfRelease,
+        verified_by_name: verifiedByName || defaultStaffName,
+        or_number: '',
+        payment_date: '',
+        is_confirmed: true,
+        confirmed_for_payment: true,
+        is_approved: resolvedIsApproved,
+        is_auto_approved: resolvedIsAutoApproved,
+        approved_by_name: resolvedApprovedByName,
+        updated_at: nowIso,
+      };
+
+      requestItem.status = persistedNextStatus;
+      requestItem.rawStatus = persistedNextStatus;
+      requestItem.batch_status = displayNextStatus;
+      requestItem.clearance_status = 'VERIFIED';
+      requestItem.assessed_amount = cleanAmount;
+      requestItem.amount = cleanAmount;
+      requestItem.date_of_release = dateOfRelease;
+      requestItem.release_date = dateOfRelease;
+      requestItem.verified_by_name = verifiedByName || defaultStaffName;
+      requestItem.is_confirmed = true;
+      requestItem.confirmed_for_payment = true;
+      requestItem.is_approved = resolvedIsApproved;
+      requestItem.is_auto_approved = resolvedIsAutoApproved;
+      requestItem.approved_by_name = resolvedApprovedByName;
+
+      updateStoredRequest(targetId, patch, { fallbackItem: requestItem, silentNotify: true });
+
+      setPersistedStatus(persistedNextStatus);
+      setStatusDirectly(displayNextStatus);
+      setIsOrderConfirmed(true);
+      setLocalIsApproved(resolvedIsApproved);
+      setLocalIsAutoApproved(resolvedIsAutoApproved);
+      setLocalApprovedByName(resolvedApprovedByName);
 
       saveStoredNotification({
         event_type: 'PAYMENT_PENDING',
@@ -932,6 +1016,7 @@ export default function ProcessRequestModal({
         },
         { fallbackItem: requestItem, silentNotify: true }
       );
+      setPersistedStatus('PAYMENT_PENDING');
       setStatusDirectly('Pending Payment');
       if (onUpdated) {
         onUpdated({
@@ -968,6 +1053,7 @@ export default function ProcessRequestModal({
 
       setPaymentStatus(isVerified ? 'VERIFIED' : 'REJECTED');
       const updatedStatus = isVerified ? 'For Processing' : 'Pending Payment';
+      setPersistedStatus(isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING');
       setStatusDirectly(updatedStatus);
 
       const nowTime = Date.now();
@@ -1147,12 +1233,12 @@ export default function ProcessRequestModal({
   const handleUpdate = async (e) => {
     e.preventDefault();
     if (!canSubmitUpdate) {
-      if (!isStatusChanged) {
-        toast.info(`Status is already set to ${localStatus || 'this status'}.`);
+      if (isWaitingForRegistrarApproval) {
+        toast.warning('Waiting for Registrar Approval before Staff can update this request.');
       } else if (!isClearanceVerified) {
         toast.warning('Manual status override is locked: Please verify student clearance first.');
-      } else if (!isPaymentVerified) {
-        toast.warning('Manual status override is locked: Payment must be verified first.');
+      } else if (!isStatusChanged && !hasUnsavedNotes) {
+        toast.info(`Status is already set to ${localStatus || 'this status'}. Change status or add remarks to update.`);
       }
       return;
     }
@@ -1196,8 +1282,9 @@ export default function ProcessRequestModal({
             'Failed to update status on server.';
           toast.error(errMsg);
           // Revert uncommitted selection back to persisted backend status!
-          setLocalStatus(formatStatusDisplay(requestItem?.status, { useReleasing: true }));
-          setNewStatus(formatStatusDisplay(requestItem?.status, { useReleasing: true }));
+          const safePersisted = formatStatusDisplay(persistedStatus || requestItem?.status, { useReleasing: true });
+          setLocalStatus(safePersisted);
+          setNewStatus(safePersisted);
           setLoading(false);
           return;
         }
@@ -1205,6 +1292,19 @@ export default function ProcessRequestModal({
         if (updatedBackend?.status) {
           requestItem.status = updatedBackend.status;
           requestItem.remarks = updatedBackend.remarks || transitionRemarks;
+          setPersistedStatus(updatedBackend.status);
+          if (updatedBackend.is_approved !== undefined) {
+            setLocalIsApproved(Boolean(updatedBackend.is_approved));
+            requestItem.is_approved = Boolean(updatedBackend.is_approved);
+          }
+          if (updatedBackend.is_auto_approved !== undefined) {
+            setLocalIsAutoApproved(Boolean(updatedBackend.is_auto_approved));
+            requestItem.is_auto_approved = Boolean(updatedBackend.is_auto_approved);
+          }
+          if (updatedBackend.approved_by_name) {
+            setLocalApprovedByName(updatedBackend.approved_by_name);
+            requestItem.approved_by_name = updatedBackend.approved_by_name;
+          }
         }
       }
 
@@ -1245,7 +1345,11 @@ export default function ProcessRequestModal({
         status: localStatus,
       });
 
-      toast.success(`Request ${requestItem.tracking_number || requestItem.id} updated to ${localStatus}.`);
+      toast.success(
+        !isStatusChanged && hasUnsavedNotes
+          ? `Remarks saved for request ${requestItem.tracking_number || requestItem.id}.`
+          : `Request ${requestItem.tracking_number || requestItem.id} updated to ${localStatus}.`
+      );
 
       if (onUpdated) {
         onUpdated({
@@ -1796,7 +1900,10 @@ export default function ProcessRequestModal({
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Approved by</label>
                     {isApproved ? (
-                      <div className="px-3 py-2 text-xs bg-emerald-50 border border-emerald-200 text-emerald-900 font-semibold rounded-lg flex items-center justify-between shadow-2xs">
+                      <div
+                        data-testid="approved-by-display"
+                        className="px-3 py-2 text-xs bg-emerald-50 border border-emerald-200 text-emerald-900 font-semibold rounded-lg flex items-center justify-between shadow-2xs"
+                      >
                         <span className="truncate" title={approvedByName}>
                           {isAutoApproved
                             ? `Auto-Approved (${approvedByName || 'University Registrar'})`
@@ -1808,7 +1915,10 @@ export default function ProcessRequestModal({
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <div className="px-3 py-2 text-xs bg-amber-50 border border-amber-200 text-amber-800 font-semibold rounded-lg flex-1 truncate">
+                        <div
+                          data-testid="approved-by-display"
+                          className="px-3 py-2 text-xs bg-amber-50 border border-amber-200 text-amber-800 font-semibold rounded-lg flex-1 truncate"
+                        >
                           Pending Registrar Approval
                         </div>
                         {isRegistrarOrAdmin && (
@@ -1850,6 +1960,16 @@ export default function ProcessRequestModal({
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
                         <span>Verify clearance above to unlock confirmation</span>
+                      </span>
+                    ) : isWaitingForRegistrarApproval ? (
+                      <span
+                        data-testid="waiting-registrar-approval-notice"
+                        className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg flex items-center gap-1.5"
+                      >
+                        <svg className="w-3.5 h-3.5 text-amber-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Waiting for Registrar Approval</span>
                       </span>
                     ) : null}
                   </div>
@@ -1895,16 +2015,18 @@ export default function ProcessRequestModal({
                         </button>
                         <button
                           type="button"
-                          disabled={!isClearanceVerified || isPersistedTerminal || confirmingAssessment}
+                          disabled={!isClearanceVerified || isPersistedTerminal || confirmingAssessment || isWaitingForRegistrarApproval}
                           onClick={handleConfirmAssessmentAndIssuePayment}
                           className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-                            isClearanceVerified && !isPersistedTerminal && !confirmingAssessment
+                            isClearanceVerified && !isPersistedTerminal && !confirmingAssessment && !isWaitingForRegistrarApproval
                               ? 'bg-indigo-900 hover:bg-indigo-950 text-white shadow-md cursor-pointer'
                               : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
                           }`}
                           title={
                             !isClearanceVerified
                               ? 'Please verify student clearance first before confirming the request.'
+                              : isWaitingForRegistrarApproval
+                              ? 'Waiting for Registrar Approval: Auto-Approve is OFF. A Registrar must approve first.'
                               : 'Confirm request and order of payment'
                           }
                         >
@@ -2124,6 +2246,8 @@ export default function ProcessRequestModal({
                       <span>
                         {isPersistedTerminal && !isAdmin
                           ? 'Locked: Request completed'
+                          : isWaitingForRegistrarApproval
+                          ? 'Locked: Waiting for Registrar Approval'
                           : 'Locked: Clearance not yet verified'}
                       </span>
                     </span>
@@ -2142,6 +2266,8 @@ export default function ProcessRequestModal({
                     title={
                       isPersistedTerminal && !isAdmin
                         ? 'Manual status override is locked: Request is already completed.'
+                        : isWaitingForRegistrarApproval
+                        ? 'Manual status override is locked: Waiting for Registrar Approval.'
                         : !isClearanceVerified
                         ? 'Manual status override is locked: Please verify student clearance first.'
                         : 'Select status to override'
@@ -2169,6 +2295,8 @@ export default function ProcessRequestModal({
                     <span>
                       {isPersistedTerminal && !isAdmin
                         ? 'Manual status override is locked for completed requests.'
+                        : isWaitingForRegistrarApproval
+                        ? 'Manual status override is locked until the Registrar approves this request.'
                         : 'Manual status override cannot be changed until clearance is verified.'}
                     </span>
                   </p>
@@ -2259,9 +2387,9 @@ export default function ProcessRequestModal({
                   isPersistedTerminal && !isAdmin
                     ? 'This request is completed or closed. Further edits are disabled.'
                     : !canOverrideStatus
-                    ? 'Manual status override is locked: Verify clearance and payment first'
-                    : !isStatusChanged
-                    ? 'Status has not been changed. Select a different status to update.'
+                    ? 'Manual status override is locked: Verify clearance first'
+                    : !isStatusChanged && !hasUnsavedNotes
+                    ? 'Change the status or enter remarks/notes to update.'
                     : 'Update request status'
                 }
               >
