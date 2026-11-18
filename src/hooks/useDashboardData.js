@@ -2,15 +2,45 @@ import { useState, useEffect, useCallback } from 'react';
 import requestsApi, {
   isValidRequest,
   isRequestAssignedToUser,
+  extractDocumentItems,
 } from '../api/requests';
 import usersApi from '../api/users';
-import {
-  getVolumeDocKey,
-  createEmptyVolumeBucket,
-  sumVolumeBucket,
-} from '../api/credentialTypes';
 import { ROLES } from '../constants/roles';
 import { useAuth } from './useAuth';
+
+const DASHBOARD_SERIES_PALETTE = [
+  '#001FD1',
+  '#EAB308',
+  '#F97316',
+  '#10B981',
+  '#7088FF',
+  '#8B5CF6',
+  '#06B6D4',
+  '#EF4444',
+  '#EC4899',
+  '#14B8A6',
+  '#6366F1',
+  '#84CC16',
+];
+
+function toSeriesKey(label) {
+  return String(label || 'other')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '') || 'other';
+}
+
+function toShortSeriesLabel(label) {
+  const s = String(label || '').trim();
+  if (/transcript/i.test(s)) return 'TOR';
+  if (/honorable|dismissal/i.test(s)) return 'Dismissal';
+  if (/evaluation/i.test(s)) return 'Evaluation';
+  if (/authentication/i.test(s)) return 'Auth';
+  if (/officially\s*enrolled/i.test(s)) return 'Enrolled';
+  if (s.length > 18) return `${s.slice(0, 16)}…`;
+  return s;
+}
 
 function isCompletedRequest(r) {
   if (!r) return false;
@@ -98,6 +128,7 @@ export default function useDashboardData() {
   const [staffMetrics, setStaffMetrics] = useState([]);
   const [dailyVolume, setDailyVolume] = useState([]);
   const [monthlyVolume, setMonthlyVolume] = useState([]);
+  const [volumeSeries, setVolumeSeries] = useState([]);
   const [reloadTrigger, setReloadTrigger] = useState(0);
 
   const refetch = useCallback(() => {
@@ -256,66 +287,119 @@ export default function useDashboardData() {
         setStaffMetrics(computedStaffMetrics);
 
         // -------------------------------------------------------------
-        // 3. Compute Dynamic Request Volume (Daily & Monthly)
+        // 3. Compute Dynamic Request Volume (Daily & Monthly) across ALL requested document items
         // -------------------------------------------------------------
+        const seriesMap = new Map();
+        const getReqDocEntries = (r) => {
+          const items = extractDocumentItems(r, types);
+          return items.map((it) => {
+            const label = String(it.name || 'Other Document').trim();
+            const key = toSeriesKey(label);
+            if (!seriesMap.has(key)) {
+              seriesMap.set(key, {
+                key,
+                label,
+                shortLabel: toShortSeriesLabel(label),
+                color: DASHBOARD_SERIES_PALETTE[seriesMap.size % DASHBOARD_SERIES_PALETTE.length],
+              });
+            }
+            return { key, copies: Math.max(1, parseInt(it.copies ?? 1, 10) || 1) };
+          });
+        };
+
+        // Pre-discover all document series from live requests
+        requests.forEach((r) => getReqDocEntries(r));
+        const discoveredSeries = Array.from(seriesMap.values());
+        setVolumeSeries(discoveredSeries);
+
         const now = new Date();
         const currentYear = now.getFullYear();
 
-        // Monthly: Jan through Dec of current year
+        // Monthly: Jan through Dec of current year (or latest request year if current year has 0)
         const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const monthsData = monthLabels.map((label) => createEmptyVolumeBucket({ label }));
+        const buildMonthly = (targetYear) => {
+          const monthsData = monthLabels.map((label) => ({ label, counts: {}, totalLine: 0 }));
+          requests.forEach((r) => {
+            const reqDateStr = toLocalDateStr(r.created_at || r.request_date);
+            if (!reqDateStr) return;
+            const [y, m] = reqDateStr.split('-').map(Number);
+            if (y === targetYear && m >= 1 && m <= 12) {
+              const monthIdx = m - 1;
+              getReqDocEntries(r).forEach(({ key, copies }) => {
+                monthsData[monthIdx].counts[key] = (monthsData[monthIdx].counts[key] || 0) + copies;
+                monthsData[monthIdx][key] = monthsData[monthIdx].counts[key];
+                monthsData[monthIdx].totalLine += copies;
+              });
+            }
+          });
+          return monthsData;
+        };
 
-        requests.forEach((r) => {
-          const reqDateStr = toLocalDateStr(r.request_date || r.created_at);
-          if (!reqDateStr) return;
-          const [y, m] = reqDateStr.split('-').map(Number);
-          if (y === currentYear && m >= 1 && m <= 12) {
-            const monthIdx = m - 1;
-            const docKey = getVolumeDocKey(r, types);
-            const copies = parseInt(r.copies) || 1;
-            monthsData[monthIdx][docKey] = (monthsData[monthIdx][docKey] || 0) + copies;
-          }
-        });
-
-        const computedMonthlyVolume = monthsData.map((d) => ({
-          ...d,
-          totalLine: sumVolumeBucket(d),
-        }));
+        let computedMonthlyVolume = buildMonthly(currentYear);
+        if (!computedMonthlyVolume.some((m) => m.totalLine > 0) && requests.length > 0) {
+          let latestYear = currentYear;
+          let latestTs = 0;
+          requests.forEach((r) => {
+            const ds = toLocalDateStr(r.created_at || r.request_date);
+            if (ds) {
+              const ts = new Date(`${ds}T12:00:00`).getTime();
+              if (!isNaN(ts) && ts > latestTs) {
+                latestTs = ts;
+                latestYear = Number(ds.split('-')[0]) || currentYear;
+              }
+            }
+          });
+          computedMonthlyVolume = buildMonthly(latestYear);
+        }
         setMonthlyVolume(computedMonthlyVolume);
 
-        // Daily: Mon through Sun of the current week
+        // Daily: Mon through Sun of the current week (or latest request week if current week has 0)
         const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        const dayOfWeek = (now.getDay() + 6) % 7; // Mon = 0 ... Sun = 6
-        const monday = new Date(now);
-        monday.setDate(now.getDate() - dayOfWeek);
-        monday.setHours(0, 0, 0, 0);
+        const buildDaily = (anchorDate) => {
+          const dayOfWeek = (anchorDate.getDay() + 6) % 7; // Mon = 0 ... Sun = 6
+          const monday = new Date(anchorDate);
+          monday.setDate(anchorDate.getDate() - dayOfWeek);
+          monday.setHours(0, 0, 0, 0);
 
-        const daysData = dayLabels.map((label, idx) => {
-          const d = new Date(monday);
-          d.setDate(monday.getDate() + idx);
-          const dateStr = toLocalDateStr(d);
-          return createEmptyVolumeBucket({ label, dateStr });
-        });
+          const daysData = dayLabels.map((label, idx) => {
+            const d = new Date(monday);
+            d.setDate(monday.getDate() + idx);
+            return { label, dateStr: toLocalDateStr(d), counts: {}, totalLine: 0 };
+          });
 
-        const dateIndexMap = {};
-        daysData.forEach((item, idx) => {
-          dateIndexMap[item.dateStr] = idx;
-        });
+          const dateIndexMap = {};
+          daysData.forEach((item, idx) => {
+            dateIndexMap[item.dateStr] = idx;
+          });
 
-        requests.forEach((r) => {
-          const reqDateStr = toLocalDateStr(r.request_date || r.created_at);
-          if (reqDateStr && dateIndexMap[reqDateStr] !== undefined) {
-            const idx = dateIndexMap[reqDateStr];
-            const docKey = getVolumeDocKey(r, types);
-            const copies = parseInt(r.copies) || 1;
-            daysData[idx][docKey] = (daysData[idx][docKey] || 0) + copies;
+          requests.forEach((r) => {
+            const reqDateStr = toLocalDateStr(r.created_at || r.request_date);
+            if (reqDateStr && dateIndexMap[reqDateStr] !== undefined) {
+              const idx = dateIndexMap[reqDateStr];
+              getReqDocEntries(r).forEach(({ key, copies }) => {
+                daysData[idx].counts[key] = (daysData[idx].counts[key] || 0) + copies;
+                daysData[idx][key] = daysData[idx].counts[key];
+                daysData[idx].totalLine += copies;
+              });
+            }
+          });
+          return daysData;
+        };
+
+        let computedDailyVolume = buildDaily(now);
+        if (!computedDailyVolume.some((d) => d.totalLine > 0) && requests.length > 0) {
+          let latestTs = 0;
+          requests.forEach((r) => {
+            const ds = toLocalDateStr(r.created_at || r.request_date);
+            if (ds) {
+              const ts = new Date(`${ds}T12:00:00`).getTime();
+              if (!isNaN(ts) && ts > latestTs) latestTs = ts;
+            }
+          });
+          if (latestTs > 0) {
+            computedDailyVolume = buildDaily(new Date(latestTs));
           }
-        });
-
-        const computedDailyVolume = daysData.map((d) => ({
-          ...d,
-          totalLine: sumVolumeBucket(d),
-        }));
+        }
         setDailyVolume(computedDailyVolume);
 
         setLoading(false);
@@ -356,5 +440,6 @@ export default function useDashboardData() {
     staffMetrics,
     dailyVolume,
     monthlyVolume,
+    volumeSeries,
   };
 }

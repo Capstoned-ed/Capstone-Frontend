@@ -56,9 +56,15 @@ export const paymentsApi = {
   }) {
     let backendResult = null;
 
-    // Clean amount value
-    const numericAmount = parseFloat(String(amount).replace(/[^0-9.]/g, '')) || 100.0;
+    // Clean amount value strictly (never silently fall back to 100.0 if invalid)
+    const rawAmountStr = String(amount ?? '').replace(/[^0-9.]/g, '');
+    const parsedAmount = parseFloat(rawAmountStr);
+    const numericAmount = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 0;
     const isBackendId = Boolean(requestId) && !String(requestId).startsWith('fallback_');
+
+    if (isBackendId && numericAmount <= 0) {
+      throw new Error('Unable to determine the required payment amount for this request.');
+    }
 
     // Submit strictly bound to the exact CredentialRequest UUID on backend
     if (isBackendId && receiptImage instanceof File) {
