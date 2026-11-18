@@ -237,8 +237,7 @@ export default function TrackStatusPage() {
     return activeStudentRequests;
   }, [activeQueueTab, historyStudentRequests, activeStudentRequests]);
 
-  // Automatically switch to 'history' tab if selected/URL track ID is a claimed/history request,
-  // or if student only has completed/claimed requests in history
+  // Automatically switch to 'history' tab ONLY if URL explicitly targets a claimed/history request
   useEffect(() => {
     if (urlTrackId) {
       const isHist = historyStudentRequests.some((r) => {
@@ -248,10 +247,8 @@ export default function TrackStatusPage() {
       if (isHist) {
         setActiveQueueTab('history');
       }
-    } else if (!loading && activeStudentRequests.length === 0 && historyStudentRequests.length > 0 && activeQueueTab === 'active') {
-      setActiveQueueTab('history');
     }
-  }, [urlTrackId, historyStudentRequests, activeStudentRequests.length, loading, activeQueueTab]);
+  }, [urlTrackId, historyStudentRequests]);
 
   // Mark request as Done (archived to history)
   const handleMarkDone = (req) => {
@@ -293,36 +290,33 @@ export default function TrackStatusPage() {
     }
   };
 
-  // Determine active tracking ID:
-  // 1. url query if present
-  // 2. Or student selected request in current tab
-  // 3. Or default to the current tab's first request
+  // Determine active tracking ID strictly from the currently active tab's list:
+  // If the current tab has 0 items (e.g., Active Requests (0)), return '' so the detail card stays hidden.
   const activeTrackingId = useMemo(() => {
-    if (urlTrackId.trim()) return urlTrackId.trim();
-    if (selectedTrackId.trim()) {
-      const inCurrentTab = displayedRequests.some((r) => {
-        const c = (r.tracking_number || r.trackingId || String(r.id)).toUpperCase();
-        return c === selectedTrackId.trim().toUpperCase();
+    if (displayedRequests.length === 0) return '';
+    const matchesDisplayed = (candidate) => {
+      if (!candidate || !candidate.trim()) return false;
+      const clean = candidate.trim().toUpperCase();
+      return displayedRequests.some((r) => {
+        const tNum = (r.tracking_number || '').toUpperCase();
+        const tId = (r.trackingId || '').toUpperCase();
+        const idStr = String(r.id || '').toUpperCase();
+        const rawIdStr = String(r.rawId || '').toUpperCase();
+        return tNum === clean || tId === clean || idStr === clean || rawIdStr === clean;
       });
-      if (inCurrentTab) return selectedTrackId.trim();
-    }
-    if (displayedRequests.length > 0) {
-      const first = displayedRequests[0];
-      return first.tracking_number || first.trackingId || String(first.id);
-    }
-    if (studentRequests.length > 0) {
-      const first = studentRequests[0];
-      return first.tracking_number || first.trackingId || String(first.id);
-    }
-    return '';
-  }, [urlTrackId, selectedTrackId, displayedRequests, studentRequests]);
+    };
+    if (matchesDisplayed(urlTrackId)) return urlTrackId.trim();
+    if (matchesDisplayed(selectedTrackId)) return selectedTrackId.trim();
+    const first = displayedRequests[0];
+    return first.tracking_number || first.trackingId || String(first.id);
+  }, [urlTrackId, selectedTrackId, displayedRequests]);
 
-  // Match the active request object
+  // Match the active request object strictly from the currently active tab
   const matchedRequest = useMemo(() => {
-    if (!activeTrackingId) return null;
+    if (!activeTrackingId || displayedRequests.length === 0) return null;
     const cleanId = activeTrackingId.trim().toUpperCase();
 
-    const found = rawRequests.find((r) => {
+    const found = displayedRequests.find((r) => {
       const tNum = (r.tracking_number || '').toUpperCase();
       const tId = (r.trackingId || '').toUpperCase();
       const idStr = String(r.id || '').toUpperCase();
@@ -331,7 +325,7 @@ export default function TrackStatusPage() {
     });
 
     return found || null;
-  }, [activeTrackingId, rawRequests]);
+  }, [activeTrackingId, displayedRequests]);
 
   // Credential details for matched request
   const matchedCred = useMemo(() => {
@@ -572,9 +566,14 @@ export default function TrackStatusPage() {
               type="button"
               onClick={() => {
                 setActiveQueueTab('active');
+                if (urlTrackId) {
+                  setSearchParams({}, { replace: true });
+                }
                 if (activeStudentRequests.length > 0) {
                   const first = activeStudentRequests[0];
                   setSelectedTrackId(first.tracking_number || first.trackingId || String(first.id));
+                } else {
+                  setSelectedTrackId('');
                 }
               }}
               className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${activeQueueTab === 'active'
@@ -597,9 +596,14 @@ export default function TrackStatusPage() {
               type="button"
               onClick={() => {
                 setActiveQueueTab('history');
+                if (urlTrackId) {
+                  setSearchParams({}, { replace: true });
+                }
                 if (historyStudentRequests.length > 0) {
                   const first = historyStudentRequests[0];
                   setSelectedTrackId(first.tracking_number || first.trackingId || String(first.id));
+                } else {
+                  setSelectedTrackId('');
                 }
               }}
               className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${activeQueueTab === 'history'
@@ -1059,7 +1063,7 @@ export default function TrackStatusPage() {
               We couldn't locate any document request matching <strong>"{urlTrackId}"</strong>. Please select from your active requests above.
             </p>
           </div>
-        ) : (
+        ) : studentRequests.length === 0 ? (
           /* Case 3: Student has no requests yet */
           <div className="track-empty-card">
             <div className="track-empty-icon">
@@ -1079,7 +1083,7 @@ export default function TrackStatusPage() {
               + Request Your First Document
             </button>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Official Claim Stub Modal matching the uploaded photo format */}
