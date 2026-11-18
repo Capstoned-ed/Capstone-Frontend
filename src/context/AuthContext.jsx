@@ -7,6 +7,10 @@ import { AuthContext } from './AuthContextDefinition';
 
 export { AuthContext };
 
+function normalizeRole(roleVal) {
+  return String(roleVal || '').trim().toLowerCase();
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -16,11 +20,11 @@ export function AuthProvider({ children }) {
       const decoded = jwtDecode(token);
       let firstName = decoded.first_name || '';
       let lastName = decoded.last_name || '';
-      let fullName = (firstName ? `${firstName} ${lastName || ''}`.trim() : '');
+      let fullName = (firstName ? `${firstName} ${lastName || ''}`.trim() : (decoded.full_name || ''));
       let program = decoded.program || '';
       let yearLevel = decoded.year_level || '';
       let studentId = decoded.student_id || decoded.username || '';
-      let resolvedRole = decoded.role;
+      const resolvedRole = normalizeRole(decoded.role);
       let email = decoded.email || '';
 
       try {
@@ -62,24 +66,9 @@ export function AuthProvider({ children }) {
           if (!program) program = u.program || '';
           if (!yearLevel) yearLevel = u.year_level || '';
           if (!studentId || studentId === decoded.username) studentId = u.student_id || decoded.username;
-          if (u.role) resolvedRole = u.role;
           if (u.email && !email) email = u.email;
         }
-        const overrides = JSON.parse(localStorage.getItem('regquest_users_overrides') || '{}');
-        const ovById = overrides[String(decoded.user_id)];
-        const ovByUser = decoded.username ? overrides[String(decoded.username).toLowerCase()] : null;
-        if (ovByUser?.role) resolvedRole = ovByUser.role;
-        if (ovById?.role) resolvedRole = ovById.role;
-        if (ovByUser?.email) email = ovByUser.email;
-        if (ovById?.email) email = ovById.email;
       } catch {}
-
-      if (decoded.username === '2023301564') {
-        if (!firstName) firstName = 'Daisy';
-        if (!lastName) lastName = 'Traya';
-        if (!fullName) fullName = 'Daisy Traya';
-        if (!email) email = 'daisy.traya@ustp.edu.ph';
-      }
 
       return {
         userId: decoded.user_id,
@@ -101,7 +90,51 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  const mergeWithMe = useCallback((baseUser, me) => {
+    if (!me) return baseUser;
+    const fullName =
+      [me.first_name, me.last_name].filter(Boolean).join(' ').trim() ||
+      me.full_name ||
+      baseUser?.full_name ||
+      '';
+    return {
+      ...baseUser,
+      ...me,
+      role: normalizeRole(me.role || baseUser?.role),
+      userId: me.id || baseUser?.userId,
+      id: me.id || baseUser?.id,
+      student_id: me.username || baseUser?.student_id,
+      first_name: me.first_name || baseUser?.first_name || '',
+      last_name: me.last_name || baseUser?.last_name || '',
+      full_name: fullName,
+      program: me.course_name || baseUser?.program || '',
+      course_name: me.course_name || baseUser?.course_name || '',
+      course_code: me.course_code || baseUser?.course_code || '',
+      birth_date: me.birth_date || baseUser?.birth_date || '',
+      birthdate: me.birth_date || baseUser?.birthdate || '',
+      contact_number: me.contact_number || baseUser?.contact_number || '',
+      year_level: me.year_level || baseUser?.year_level || '1st year',
+    };
+  }, []);
+
   useEffect(() => {
+    let active = true;
+
+    const hydrateWithRefresh = async (refreshToken) => {
+      const data = await authApi.refresh(refreshToken);
+      localStorage.setItem('access_token', data.access);
+      if (data.refresh) {
+        localStorage.setItem('refresh_token', data.refresh);
+      }
+      const freshUser = parseToken(data.access);
+      try {
+        const me = await usersApi.getMe();
+        return mergeWithMe(freshUser, me);
+      } catch {
+        return freshUser;
+      }
+    };
+
     const initializeAuth = async () => {
       const accessToken = localStorage.getItem('access_token');
       const refreshToken = localStorage.getItem('refresh_token');
@@ -109,104 +142,77 @@ export function AuthProvider({ children }) {
       if (!accessToken || !refreshToken) {
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        setUser(null);
-        setLoading(false);
+        if (active) {
+          setUser(null);
+          setLoading(false);
+        }
         return;
       }
 
       const decoded = parseToken(accessToken);
 
-      if (decoded && decoded.exp * 1000 > Date.now() + 10000) {
-        try {
-          const uKey = (decoded.username || '').toLowerCase();
-          if (uKey) {
-            const creationDates = JSON.parse(localStorage.getItem('regquest_account_creation_dates') || '{}');
-            if (!creationDates[uKey]) {
-              const usersCache = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
-              const match = usersCache.find((x) => x.username && x.username.toLowerCase() === uKey);
-              const time = match?.date_joined || new Date().toISOString();
-              creationDates[uKey] = time;
-              if (decoded.userId) creationDates[String(decoded.userId)] = time;
-              localStorage.setItem('regquest_account_creation_dates', JSON.stringify(creationDates));
+      try {
+        if (decoded && decoded.exp * 1000 > Date.now() + 10000) {
+          try {
+            const uKey = (decoded.username || '').toLowerCase();
+            if (uKey) {
+              const creationDates = JSON.parse(localStorage.getItem('regquest_account_creation_dates') || '{}');
+              if (!creationDates[uKey]) {
+                const usersCache = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
+                const match = usersCache.find((x) => x.username && x.username.toLowerCase() === uKey);
+                const time = match?.date_joined || new Date().toISOString();
+                creationDates[uKey] = time;
+                if (decoded.userId) creationDates[String(decoded.userId)] = time;
+                localStorage.setItem('regquest_account_creation_dates', JSON.stringify(creationDates));
+              }
+            }
+          } catch {}
+
+          // Wait for /api/users/me/ to resolve BEFORE setting loading=false so RoleRoute
+          // never evaluates an unhydrated/partial user role on page refresh.
+          let hydratedUser = decoded;
+          try {
+            const me = await usersApi.getMe();
+            hydratedUser = mergeWithMe(decoded, me);
+          } catch (meErr) {
+            if (meErr?.response?.status === 401 && refreshToken) {
+              hydratedUser = await hydrateWithRefresh(refreshToken);
             }
           }
-        } catch {}
 
-        setUser(decoded);
-        setLoading(false);
-        usersApi
-          .getMe()
-          .then((me) => {
-            if (!me) return;
-            const fullName =
-              [me.first_name, me.last_name].filter(Boolean).join(' ').trim() ||
-              decoded.full_name;
-            const merged = {
-              ...decoded,
-              ...me,
-              userId: me.id || decoded.userId,
-              student_id: me.username || decoded.student_id,
-              first_name: me.first_name || decoded.first_name || '',
-              last_name: me.last_name || decoded.last_name || '',
-              full_name: fullName,
-              program: me.course_name || decoded.program,
-              course_name: me.course_name || decoded.course_name,
-              course_code: me.course_code || decoded.course_code,
-              birth_date: me.birth_date || decoded.birth_date || '',
-              birthdate: me.birth_date || decoded.birthdate || '',
-              contact_number: me.contact_number || decoded.contact_number || '',
-              year_level: me.year_level || decoded.year_level || '1st year',
-            };
-            setUser(merged);
-          })
-          .catch(() => {});
-      } else if (refreshToken) {
-        try {
-          const data = await authApi.refresh(refreshToken);
-          localStorage.setItem('access_token', data.access);
-          if (data.refresh) {
-            localStorage.setItem('refresh_token', data.refresh);
+          if (active) {
+            setUser(hydratedUser);
           }
-          const freshUser = parseToken(data.access);
-          setUser(freshUser);
-          usersApi
-            .getMe()
-            .then((me) => {
-              if (!me) return;
-              const fullName =
-                [me.first_name, me.last_name].filter(Boolean).join(' ').trim() ||
-                freshUser?.full_name;
-              setUser((prev) => ({
-                ...prev,
-                ...me,
-                userId: me.id || prev?.userId,
-                student_id: me.username || prev?.student_id,
-                full_name: fullName,
-                program: me.course_name || prev?.program,
-                birth_date: me.birth_date || prev?.birth_date || '',
-                birthdate: me.birth_date || prev?.birthdate || '',
-                contact_number: me.contact_number || prev?.contact_number || '',
-                year_level: me.year_level || prev?.year_level || '1st year',
-              }));
-            })
-            .catch(() => {});
-        } catch {
+        } else if (refreshToken) {
+          const hydratedUser = await hydrateWithRefresh(refreshToken);
+          if (active) {
+            setUser(hydratedUser);
+          }
+        } else {
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
-          setUser(null);
-        } finally {
-          setLoading(false);
+          if (active) {
+            setUser(null);
+          }
         }
-      } else {
+      } catch {
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        setUser(null);
-        setLoading(false);
+        if (active) {
+          setUser(null);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
     };
 
     initializeAuth();
-  }, [parseToken]);
+    return () => {
+      active = false;
+    };
+  }, [parseToken, mergeWithMe]);
 
   const login = useCallback(async (username, password) => {
     const data = await authApi.login(username, password);
@@ -220,23 +226,7 @@ export function AuthProvider({ children }) {
     try {
       const me = await usersApi.getMe();
       if (me) {
-        const fullName =
-          [me.first_name, me.last_name].filter(Boolean).join(' ').trim() ||
-          decoded?.full_name;
-        decoded = {
-          ...decoded,
-          ...me,
-          userId: me.id || decoded?.userId,
-          student_id: me.username || decoded?.student_id,
-          full_name: fullName,
-          program: me.course_name || decoded?.program,
-          course_name: me.course_name || decoded?.course_name,
-          course_code: me.course_code || decoded?.course_code,
-          birth_date: me.birth_date || decoded?.birth_date || '',
-          birthdate: me.birth_date || decoded?.birthdate || '',
-          contact_number: me.contact_number || decoded?.contact_number || '',
-          year_level: me.year_level || decoded?.year_level || '1st year',
-        };
+        decoded = mergeWithMe(decoded, me);
       }
     } catch {}
 
@@ -257,7 +247,7 @@ export function AuthProvider({ children }) {
 
     setUser(decoded);
     return { user: decoded, access, refresh };
-  }, [parseToken]);
+  }, [parseToken, mergeWithMe]);
 
   const logout = useCallback(async () => {
     const refreshToken = localStorage.getItem('refresh_token');

@@ -614,14 +614,18 @@ export function resolveRequestDocType(r, cred = null) {
   // 2. Check if remarks contain an explicit document tag, e.g. "[Evaluation & TOR]" or "[Certification - GPA]"
   // (prioritize before credential_type_details.name so multi-document or sub-document requests aren't masked by primary cred type)
   const remarks = String(r.remarks || r.purpose || '').trim();
-  const bracketMatch = remarks.match(/\[(.*?)\]/);
-  if (bracketMatch && bracketMatch[1] && bracketMatch[1].trim()) {
-    const candidate = bracketMatch[1].trim();
+  const bracketMatches = remarks.match(/\[[^\]]+\]/g) || [];
+  for (const tag of bracketMatches) {
+    const candidate = tag.slice(1, -1).trim();
+    const candLower = candidate.toLowerCase();
     if (
+      candidate &&
       !isInvalidDocName(candidate) &&
-      !candidate.toLowerCase().includes('staff') &&
-      !candidate.toLowerCase().includes('walk-in') &&
-      !candidate.toLowerCase().includes('ftf')
+      !candLower.startsWith('copies:') &&
+      !candLower.startsWith('assigned') &&
+      !candLower.includes('staff') &&
+      !candLower.includes('walk-in') &&
+      !candLower.includes('ftf')
     ) {
       return candidate;
     }
@@ -836,6 +840,102 @@ export function updateStoredRequest(idOrTracking, patch, options = {}) {
   }
 }
 
+/**
+ * Extract the actual requested copy count (positive integer) from a CredentialRequest object.
+ */
+export function extractRequestedCopies(req) {
+  if (!req || typeof req !== 'object') return 1;
+
+  // 1. Check per-item arrays (doc_details / document_items / items)
+  const itemArrays = [req.doc_details, req.document_items, req.items];
+  for (const arr of itemArrays) {
+    if (Array.isArray(arr) && arr.length > 0) {
+      const sum = arr.reduce((acc, it) => {
+        const n = parseInt(it?.copies ?? it?.quantity ?? 1, 10);
+        return acc + (Number.isFinite(n) && n > 0 ? n : 1);
+      }, 0);
+      if (sum > 0) return sum;
+    }
+  }
+
+  // 2. Check explicit numeric fields (total_copies, copies, quantity)
+  for (const field of [req.total_copies, req.copies, req.quantity]) {
+    if (field !== undefined && field !== null && field !== '') {
+      const parsed = typeof field === 'number' ? field : parseInt(String(field).trim(), 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+  }
+
+  // 3. Fallback: parse [Copies: N] tag from remarks
+  const remarks = String(req.remarks || req.notes || '');
+  const match = remarks.match(/\[Copies:\s*(\d+)/i);
+  if (match && match[1]) {
+    const parsed = parseInt(match[1], 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+
+  return 1;
+}
+
+/**
+ * Pick the most recently uploaded Payment record from a request's payments array.
+ */
+export function getLatestPaymentRecord(payments) {
+  if (!Array.isArray(payments) || payments.length === 0) return null;
+  const sorted = [...payments].sort((a, b) => {
+    const ta = new Date(a?.uploaded_at || a?.created_at || 0).getTime() || 0;
+    const tb = new Date(b?.uploaded_at || b?.created_at || 0).getTime() || 0;
+    if (ta !== tb) return ta - tb;
+    return String(a?.id || '').localeCompare(String(b?.id || ''));
+  });
+  return sorted[sorted.length - 1] || null;
+}
+
+function normalizeBackendRequest(b) {
+  if (!b || typeof b !== 'object') return b;
+  const latestBackendPayment = getLatestPaymentRecord(b.payments);
+  const resolvedCopies = extractRequestedCopies(b);
+  const normalizedPaymentStatus =
+    b.payment_status && b.payment_status !== 'NOT_SUBMITTED'
+      ? b.payment_status
+      : latestBackendPayment?.status === 'PENDING'
+      ? 'PAYMENT_SUBMITTED'
+      : latestBackendPayment?.status || b.payment_status || null;
+
+  return {
+    ...b,
+    copies: resolvedCopies,
+    total_copies: resolvedCopies,
+    document_type: b.document_type || resolveRequestDocType(b),
+    payment_status: normalizedPaymentStatus,
+    or_number: b.or_number || latestBackendPayment?.receipt_reference_number || '',
+    receipt_reference_number:
+      b.receipt_reference_number ||
+      b.or_number ||
+      latestBackendPayment?.receipt_reference_number ||
+      '',
+    receipt_image: b.receipt_image || latestBackendPayment?.receipt_image || null,
+    assessed_amount: b.assessed_amount || latestBackendPayment?.amount || b.assessed_amount,
+    payment_proof:
+      b.payment_proof ||
+      (latestBackendPayment
+        ? {
+            id: latestBackendPayment.id,
+            requestId: b.id,
+            trackingNumber: b.tracking_number,
+            amount: latestBackendPayment.amount,
+            receiptReferenceNumber: latestBackendPayment.receipt_reference_number,
+            receiptImage: latestBackendPayment.receipt_image,
+            status: latestBackendPayment.status,
+            remarks: latestBackendPayment.remarks,
+            uploadedAt: latestBackendPayment.uploaded_at,
+          }
+        : null),
+  };
+}
+
 export const requestsApi = {
   /**
    * Fetch list of all credential requests directly from Django REST API.
@@ -863,26 +963,7 @@ export const requestsApi = {
         }
       }
 
-      backendResults = rawList.map((b) => {
-        const latestBackendPayment = Array.isArray(b.payments) && b.payments.length > 0 ? b.payments[0] : null;
-        return {
-          ...b,
-          document_type: b.document_type || resolveRequestDocType(b),
-          payment_status: b.payment_status || latestBackendPayment?.status || null,
-          or_number: b.or_number || latestBackendPayment?.receipt_reference_number || '',
-          receipt_image: b.receipt_image || latestBackendPayment?.receipt_image || null,
-          payment_proof: b.payment_proof || (latestBackendPayment ? {
-            id: latestBackendPayment.id,
-            requestId: b.id,
-            trackingNumber: b.tracking_number,
-            amount: latestBackendPayment.amount,
-            receiptReferenceNumber: latestBackendPayment.receipt_reference_number,
-            receiptImage: latestBackendPayment.receipt_image,
-            status: latestBackendPayment.status,
-            remarks: latestBackendPayment.remarks,
-          } : null),
-        };
-      });
+      backendResults = rawList.map(normalizeBackendRequest);
     } catch (err) {
       console.warn('requestsApi.list backend returned error:', err);
       if (err.response?.status === 401 || err.response?.status === 403) {
@@ -892,32 +973,15 @@ export const requestsApi = {
 
     return backendResults
       .filter(isValidRequest)
-      .map((item) => {
-        let enriched = { ...item };
-        if (Array.isArray(enriched.payments) && enriched.payments.length > 0) {
-          const latestPay = enriched.payments[0];
-          if (!enriched.payment_status && latestPay?.status) {
-            enriched.payment_status =
-              latestPay.status === 'PENDING' ? 'PAYMENT_SUBMITTED' : latestPay.status;
-          }
-          if (!enriched.or_number && latestPay?.receipt_reference_number) {
-            enriched.or_number = latestPay.receipt_reference_number;
-          }
-          if (!enriched.assessed_amount && latestPay?.amount) {
-            enriched.assessed_amount = latestPay.amount;
-          }
-        }
-        return enriched;
-      })
       .sort(sortRequestsNewestFirst);
   },
 
   /**
-   * Fetch single request details by ID
+   * Fetch single request details by ID (always normalized with latest payment & copies)
    */
   get: async (id) => {
     const response = await apiClient.get(`/api/requests/${id}/`);
-    return response.data;
+    return normalizeBackendRequest(response.data);
   },
 
   /**
@@ -1194,18 +1258,38 @@ export function setRequestArchived(idOrTracking, isArchived = true, user = null,
 
 export function preserveDocTagInRemarks(requestOrRemarks, newRemarks = '') {
   const rawNew = String(newRemarks || '').trim();
-  if (rawNew.startsWith('[')) return rawNew;
 
-  let docTag = '';
   const existingRemarks =
     typeof requestOrRemarks === 'string'
       ? requestOrRemarks
       : String(requestOrRemarks?.remarks || requestOrRemarks?.purpose || '');
 
+  // Preserve [Copies: N ...] tag if present on request and not already in rawNew
+  let copiesTag = '';
+  if (!/\[Copies:\s*\d+/i.test(rawNew)) {
+    const copiesMatch = existingRemarks.match(/(\[Copies:[^\]]+\])/i);
+    if (copiesMatch && copiesMatch[1]) {
+      copiesTag = copiesMatch[1];
+    } else if (requestOrRemarks && typeof requestOrRemarks === 'object') {
+      const c = extractRequestedCopies(requestOrRemarks);
+      if (c > 1) copiesTag = `[Copies: ${c}]`;
+    }
+  }
+
+  if (rawNew.startsWith('[')) {
+    return copiesTag ? `${rawNew} ${copiesTag}` : rawNew;
+  }
+
+  let docTag = '';
   const match = existingRemarks.trim().match(/^(\[[^\]]+\])/);
   if (match && match[1]) {
     const tagLower = match[1].toLowerCase();
-    if (!tagLower.includes('staff') && !tagLower.includes('walk-in') && !tagLower.includes('ftf')) {
+    if (
+      !tagLower.startsWith('[copies:') &&
+      !tagLower.includes('staff') &&
+      !tagLower.includes('walk-in') &&
+      !tagLower.includes('ftf')
+    ) {
       docTag = match[1];
     }
   }
@@ -1220,10 +1304,8 @@ export function preserveDocTagInRemarks(requestOrRemarks, newRemarks = '') {
     }
   }
 
-  if (docTag) {
-    return rawNew ? `${docTag} ${rawNew}` : docTag;
-  }
-  return rawNew;
+  const parts = [docTag, rawNew, copiesTag].filter(Boolean);
+  return parts.join(' ').trim();
 }
 
 const DOC_CODE_RULES = [

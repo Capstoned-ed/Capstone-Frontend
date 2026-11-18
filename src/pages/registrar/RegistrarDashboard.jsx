@@ -133,8 +133,20 @@ export default function RegistrarDashboard() {
     };
   }, []);
 
+  const loggedInRegistrarName = useMemo(() => {
+    if (!user) return '';
+    const isReg = String(user.role || '').trim().toLowerCase() === 'registrar';
+    if (!isReg) return '';
+    return (
+      [user.first_name, user.last_name].filter(Boolean).join(' ').trim() ||
+      user.full_name ||
+      user.username ||
+      ''
+    );
+  }, [user]);
+
   const [autoApprove, setAutoApprove] = useState(true);
-  const [signatoryName, setSignatoryName] = useState('University Registrar');
+  const [signatoryName, setSignatoryName] = useState('');
   const [togglingSettings, setTogglingSettings] = useState(false);
 
   useEffect(() => {
@@ -142,14 +154,19 @@ export default function RegistrarDashboard() {
     settingsApi.getRegistrarApproval().then((data) => {
       if (!active || !data) return;
       setAutoApprove(Boolean(data.auto_approve_requests));
-      if (data.active_registrar_name || data.default_signatory_name) {
-        setSignatoryName(data.active_registrar_name || data.default_signatory_name);
+      const resolvedSig =
+        loggedInRegistrarName ||
+        data.active_registrar_name ||
+        data.default_signatory_name ||
+        '';
+      if (resolvedSig) {
+        setSignatoryName(resolvedSig);
       }
     });
     return () => {
       active = false;
     };
-  }, []);
+  }, [loggedInRegistrarName]);
 
   const handleToggleAutoApprove = async () => {
     if (togglingSettings) return;
@@ -157,11 +174,12 @@ export default function RegistrarDashboard() {
     setTogglingSettings(true);
     setAutoApprove(nextVal);
     try {
-      const res = await settingsApi.updateRegistrarApproval(nextVal);
+      const res = await settingsApi.updateRegistrarApproval(nextVal, loggedInRegistrarName || null);
       if (res && res.auto_approve_requests !== undefined) {
         setAutoApprove(Boolean(res.auto_approve_requests));
-        if (res.active_registrar_name) {
-          setSignatoryName(res.active_registrar_name);
+        const resSig = loggedInRegistrarName || res.active_registrar_name || res.default_signatory_name;
+        if (resSig) {
+          setSignatoryName(resSig);
         }
       }
       toast.success(

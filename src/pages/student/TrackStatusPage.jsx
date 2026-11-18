@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import requestsApi, {
   resolveRequestDocType,
+  extractRequestedCopies,
+  getLatestPaymentRecord,
   sortRequestsNewestFirst,
   getArchivedRequestsMap,
   isRequestArchived,
@@ -65,6 +67,38 @@ export function isClaimedStatus(r) {
   if (!r) return false;
   const raw = typeof r === 'object' ? r.status : r;
   return normalizeToBackendStatus(raw) === REQUEST_STATUS.RELEASED;
+}
+
+function formatRequestedCopies(req) {
+  if (!req) return '1 copy';
+  const items = Array.isArray(req.doc_details) && req.doc_details.length > 0
+    ? req.doc_details
+    : Array.isArray(req.document_items) && req.document_items.length > 0
+      ? req.document_items
+      : null;
+
+  const totalCount = extractRequestedCopies(req);
+  const baseLabel = `${totalCount} ${totalCount === 1 ? 'copy' : 'copies'}`;
+
+  if (items && items.length > 1) {
+    const breakdown = items
+      .map((it) => {
+        const title = it.title || it.document_type || it.name || 'Document';
+        const c = parseInt(it.copies ?? it.quantity ?? 1, 10) || 1;
+        return `${title}: ${c}`;
+      })
+      .join(', ');
+    return `${baseLabel} (${breakdown})`;
+  }
+
+  // Also check if remarks carries a multi-doc copies breakdown: [Copies: 3 | TOR: 2, HD: 1]
+  const remarks = String(req.remarks || '');
+  const multiMatch = remarks.match(/\[Copies:\s*\d+\s*\|\s*([^\]]+)\]/i);
+  if (multiMatch && multiMatch[1]) {
+    return `${baseLabel} (${multiMatch[1].trim()})`;
+  }
+
+  return baseLabel;
 }
 
 export default function TrackStatusPage() {
@@ -516,10 +550,11 @@ export default function TrackStatusPage() {
       dateOfRelease = estimatedCompletion || 'Pending schedule';
     }
 
+    const latestPay = getLatestPaymentRecord(matchedRequest.payments);
     const orNumber =
       matchedRequest.or_number ||
       matchedRequest.receipt_reference_number ||
-      (matchedRequest.payments && matchedRequest.payments[0]?.receipt_reference_number) ||
+      latestPay?.receipt_reference_number ||
       '';
 
     return {
@@ -861,8 +896,8 @@ export default function TrackStatusPage() {
                 </div>
                 <div className="track-info-item">
                   <span className="track-info-lbl">Copies / Quantity</span>
-                  <span className="track-info-val">
-                    {matchedRequest.copies || '1 copy'}
+                  <span className="track-info-val" data-testid="track-copies-value">
+                    {formatRequestedCopies(matchedRequest)}
                   </span>
                 </div>
                 <div className="track-info-item">

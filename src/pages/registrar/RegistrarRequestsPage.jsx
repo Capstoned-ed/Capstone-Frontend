@@ -83,37 +83,60 @@ export default function RegistrarRequestsPage() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [batchModalOpen, setBatchModalOpen] = useState(false);
 
+  const loggedInRegistrarName = useMemo(() => {
+    if (!currentUser) return '';
+    const isReg = String(currentUser.role || '').trim().toLowerCase() === 'registrar';
+    if (!isReg) return '';
+    return (
+      [currentUser.first_name, currentUser.last_name].filter(Boolean).join(' ').trim() ||
+      currentUser.full_name ||
+      currentUser.username ||
+      ''
+    );
+  }, [currentUser]);
+
   const [autoApprove, setAutoApprove] = useState(true);
   const [signatoryName, setSignatoryName] = useState('');
   const [togglingSettings, setTogglingSettings] = useState(false);
 
   useEffect(() => {
+    let active = true;
     settingsApi.getRegistrarApproval().then((data) => {
+      if (!active) return;
       setAutoApprove(Boolean(data?.auto_approve_requests ?? true));
-      const sigName = data?.active_registrar_name || data?.signatory_name || data?.default_signatory_name;
+      const sigName =
+        loggedInRegistrarName ||
+        data?.active_registrar_name ||
+        data?.signatory_name ||
+        data?.default_signatory_name ||
+        '';
       if (sigName) {
         setSignatoryName(sigName);
-      } else if (currentUser) {
-        const fallbackName = [currentUser.first_name, currentUser.last_name].filter(Boolean).join(' ') || currentUser.username;
-        setSignatoryName(fallbackName);
       }
     }).catch(() => {
+      if (!active) return;
       setAutoApprove(true);
-      if (currentUser) {
-        const fallbackName = [currentUser.first_name, currentUser.last_name].filter(Boolean).join(' ') || currentUser.username;
-        setSignatoryName(fallbackName);
+      if (loggedInRegistrarName) {
+        setSignatoryName(loggedInRegistrarName);
       }
     });
-  }, [currentUser]);
+    return () => {
+      active = false;
+    };
+  }, [loggedInRegistrarName]);
 
   const handleToggleAutoApprove = async () => {
     if (togglingSettings) return;
     setTogglingSettings(true);
     const nextVal = !autoApprove;
     try {
-      const res = await settingsApi.updateRegistrarApproval(nextVal);
+      const res = await settingsApi.updateRegistrarApproval(nextVal, loggedInRegistrarName || null);
       setAutoApprove(Boolean(res?.auto_approve_requests ?? nextVal));
-      const resSig = res?.active_registrar_name || res?.signatory_name || res?.default_signatory_name;
+      const resSig =
+        loggedInRegistrarName ||
+        res?.active_registrar_name ||
+        res?.signatory_name ||
+        res?.default_signatory_name;
       if (resSig) setSignatoryName(resSig);
       toast.success(
         nextVal
