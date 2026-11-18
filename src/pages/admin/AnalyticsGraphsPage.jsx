@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import requestsApi, { isValidRequest, resolveRequestDocType } from '../../api/requests';
+import requestsApi, { isValidRequest, resolveRequestDocType, extractDocumentItems } from '../../api/requests';
 import '../../styles/admin/AnalyticsGraphsPage.css';
 
 // Institutional palette used deterministically for dynamically discovered document types
@@ -118,9 +118,27 @@ export default function AnalyticsGraphsPage() {
     };
   }, [loadData]);
 
-  // Resolve each request directly to its authoritative CredentialType / Document Name from live DB
-  const resolveDocIdentity = useCallback(
+  // Resolve EVERY requested document item inside a request (supports multi-document requests + copies)
+  const resolveRequestDocItems = useCallback(
     (req) => {
+      const rawItems = extractDocumentItems(req, credTypes);
+      if (Array.isArray(rawItems) && rawItems.length > 0) {
+        return rawItems.map((it) => {
+          const matchedCred = credTypes.find(
+            (c) =>
+              (it.credential_type_id && String(c.id) === String(it.credential_type_id)) ||
+              (it.code && c.code && String(c.code).toUpperCase() === String(it.code).toUpperCase()) ||
+              (it.name && c.name && String(c.name).toLowerCase() === String(it.name).toLowerCase())
+          );
+          const label = String(matchedCred?.name || it.name || 'Other Document').trim();
+          const copies = Math.max(1, parseInt(it.copies ?? 1, 10) || 1);
+          return {
+            key: makeSeriesKey(label),
+            label,
+            copies,
+          };
+        });
+      }
       const credId = req?.credential_type || req?.credential;
       const matchedCred = credTypes.find(
         (c) =>
@@ -128,36 +146,36 @@ export default function AnalyticsGraphsPage() {
           String(c.id) === String(credId) ||
           (c.code && String(c.code).toUpperCase() === String(credId || '').toUpperCase())
       );
-      const label =
+      const label = String(
         matchedCred?.name ||
-        req?.credential_name ||
-        resolveRequestDocType(req, matchedCred) ||
-        'Other Document';
-      return {
-        key: makeSeriesKey(label),
-        label: String(label).trim(),
-      };
+          req?.credential_name ||
+          resolveRequestDocType(req, matchedCred) ||
+          'Other Document'
+      ).trim();
+      return [{ key: makeSeriesKey(label), label, copies: 1 }];
     },
     [credTypes]
   );
 
-  // Build dynamic series list strictly from live submitted requests (ZERO hardcoded document arrays)
+  // Build dynamic series list strictly from ALL requested document items in live requests
   const allDynamicSeries = useMemo(() => {
     const map = new Map();
     requestsList.forEach((r) => {
-      const { key, label } = resolveDocIdentity(r);
-      if (!map.has(key)) {
-        const idx = map.size;
-        map.set(key, {
-          key,
-          label,
-          shortLabel: makeShortLabel(label),
-          color: SERIES_COLOR_PALETTE[idx % SERIES_COLOR_PALETTE.length],
-        });
-      }
+      const items = resolveRequestDocItems(r);
+      items.forEach(({ key, label }) => {
+        if (!map.has(key)) {
+          const idx = map.size;
+          map.set(key, {
+            key,
+            label,
+            shortLabel: makeShortLabel(label),
+            color: SERIES_COLOR_PALETTE[idx % SERIES_COLOR_PALETTE.length],
+          });
+        }
+      });
     });
     return Array.from(map.values());
-  }, [requestsList, resolveDocIdentity]);
+  }, [requestsList, resolveRequestDocItems]);
 
   // Helper to build Mon-Sun week buckets around an anchor date
   const buildWeekBuckets = useCallback((anchorDate) => {
@@ -182,14 +200,16 @@ export default function AnalyticsGraphsPage() {
       const reqDateStr = toLocalDateStr(r.created_at || r.request_date);
       if (reqDateStr && dateIndexMap[reqDateStr] !== undefined) {
         const idx = dateIndexMap[reqDateStr];
-        const { key } = resolveDocIdentity(r);
-        daysData[idx].counts[key] = (daysData[idx].counts[key] || 0) + 1;
-        daysData[idx].totalLine += 1;
+        const items = resolveRequestDocItems(r);
+        items.forEach(({ key, copies }) => {
+          daysData[idx].counts[key] = (daysData[idx].counts[key] || 0) + copies;
+          daysData[idx].totalLine += copies;
+        });
       }
     });
 
     return daysData;
-  }, [requestsList, resolveDocIdentity]);
+  }, [requestsList, resolveRequestDocItems]);
 
   // Purely dynamic daily data (Mon through Sun of current week, or latest request's week if current week is empty)
   const dynamicDailyData = useMemo(() => {
@@ -222,9 +242,11 @@ export default function AnalyticsGraphsPage() {
         const [y, m] = reqDateStr.split('-').map(Number);
         if (y === targetYear && m >= 1 && m <= 12) {
           const monthIdx = m - 1;
-          const { key } = resolveDocIdentity(r);
-          monthsData[monthIdx].counts[key] = (monthsData[monthIdx].counts[key] || 0) + 1;
-          monthsData[monthIdx].totalLine += 1;
+          const items = resolveRequestDocItems(r);
+          items.forEach(({ key, copies }) => {
+            monthsData[monthIdx].counts[key] = (monthsData[monthIdx].counts[key] || 0) + copies;
+            monthsData[monthIdx].totalLine += copies;
+          });
         }
       });
 
@@ -250,7 +272,7 @@ export default function AnalyticsGraphsPage() {
       }
     });
     return buildYearBuckets(latestYear);
-  }, [requestsList, resolveDocIdentity]);
+  }, [requestsList, resolveRequestDocItems]);
 
   const isMonthly = viewMode === 'monthly';
   const currentData = isMonthly ? dynamicMonthlyData : dynamicDailyData;

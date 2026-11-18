@@ -2,7 +2,17 @@ import React, { useState, useEffect, useMemo } from 'react';
 import useToast from '../../hooks/useToast';
 import { useAuth } from '../../hooks/useAuth';
 import apiClient from '../../api/client';
-import requestsApi, { updateStoredRequest, logProcessedAction, setRequestArchived, recordRequestActivityTimestamp, preserveDocTagInRemarks, getLatestPaymentRecord } from '../../api/requests';
+import requestsApi, {
+  updateStoredRequest,
+  logProcessedAction,
+  setRequestArchived,
+  recordRequestActivityTimestamp,
+  preserveDocTagInRemarks,
+  getLatestPaymentRecord,
+  extractDocumentItems,
+  extractTotalAmount,
+  extractRequestedCopies,
+} from '../../api/requests';
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import settingsApi from '../../api/settings';
 import { saveStoredNotification } from '../../api/notifications';
@@ -20,6 +30,7 @@ import ClaimStubModal from '../common/ClaimStubModal';
 function formatCleanPurpose(text) {
   if (!text) return 'For Personal File / Employment';
   const cleaned = String(text)
+    .replace(/\[Items:\[[\s\S]*?\]\]/gi, '')
     .replace(/\[.*?\]/g, '')
     .replace(/\|+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -81,7 +92,10 @@ export default function ProcessRequestModal({
   // Payment Assessment Fields (matching staff modal)
   const defaultStaffName = user?.full_name || (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : user?.username) || 'Admin';
   const [assessedAmount, setAssessedAmount] = useState(() => {
+    const computed = extractTotalAmount(requestItem);
+    if (computed > 0) return computed.toFixed(2);
     const baseAmt =
+      requestItem?.total_amount ||
       requestItem?.assessed_amount ||
       requestItem?.amount ||
       requestItem?.price ||
@@ -592,9 +606,14 @@ export default function ProcessRequestModal({
     setLocalStatus(requestItem?.status || 'Pending');
     setNewStatus(requestItem?.status || 'Pending');
 
-    const baseAmt = requestItem.assessed_amount || requestItem.amount || requestItem.price || 100;
-    const cleanAmt = String(baseAmt).replace(/[^0-9.]/g, '');
-    setAssessedAmount(cleanAmt || '100.00');
+    const computedAmt = extractTotalAmount(requestItem);
+    if (computedAmt > 0) {
+      setAssessedAmount(computedAmt.toFixed(2));
+    } else {
+      const baseAmt = requestItem.total_amount || requestItem.assessed_amount || requestItem.amount || requestItem.price || 100;
+      const cleanAmt = String(baseAmt).replace(/[^0-9.]/g, '');
+      setAssessedAmount(cleanAmt || '100.00');
+    }
 
     if (requestItem.date_of_release || requestItem.release_date) {
       setDateOfRelease(requestItem.date_of_release || requestItem.release_date);
@@ -1699,13 +1718,22 @@ export default function ProcessRequestModal({
                   <div className="staff-field-group">
                     <span className="staff-field-label">Document</span>
                     <div className="staff-field-pill font-semibold text-indigo-950">
-                      {requestItem.document_type || 'N/A'}
+                      {(() => {
+                        const items = extractDocumentItems(liveRequestDetail || requestItem);
+                        if (items.length > 1) {
+                          return items.map((it) => `${it.name} (${it.copies})`).join(', ');
+                        }
+                        return requestItem.document_type || items[0]?.name || 'N/A';
+                      })()}
                     </div>
                   </div>
                   <div className="staff-field-group">
                     <span className="staff-field-label">Copies</span>
                     <div className="staff-field-pill">
-                      {String(requestItem.copies ?? '').replace(' copies', '').replace(' copy', '') || '1'} copy
+                      {(() => {
+                        const c = extractRequestedCopies(liveRequestDetail || requestItem);
+                        return `${c} ${c === 1 ? 'copy' : 'copies'}`;
+                      })()}
                     </div>
                   </div>
                 </div>

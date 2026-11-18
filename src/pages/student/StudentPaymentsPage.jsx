@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import requestsApi, { resolveRequestDocType, isConfirmedForPayment } from '../../api/requests';
+import requestsApi, {
+  resolveRequestDocType,
+  isConfirmedForPayment,
+  extractTotalAmount,
+  extractRequestedCopies,
+} from '../../api/requests';
 import paymentsApi, { getStoredPaymentProof } from '../../api/payments';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
@@ -508,7 +513,17 @@ export default function StudentPaymentsPage() {
               const trackingCode = req.tracking_number || req.trackingId || req.id;
               const cred = credTypeMap.get(req.credential_type);
               const docTitle = resolveRequestDocType(req, cred);
-              const assessedFee = req.assessed_amount || req.amount || (cred?.price ? `₱${parseFloat(cred.price).toFixed(0)}` : '₱100.00');
+              const totalAmtNum = extractTotalAmount(req, credentialTypes);
+              const assessedFee = totalAmtNum > 0
+                ? `₱${totalAmtNum.toFixed(2)}`
+                : (cred?.price ? `₱${parseFloat(cred.price).toFixed(2)}` : '₱100.00');
+              const copiesCount = extractRequestedCopies(req);
+              const copiesDisplay = `${copiesCount} ${copiesCount === 1 ? 'copy' : 'copies'}`;
+              const enrichedReqForModal = {
+                ...req,
+                total_amount: totalAmtNum > 0 ? totalAmtNum.toFixed(2) : (cred?.price ? parseFloat(cred.price).toFixed(2) : '100.00'),
+                assessed_amount: assessedFee,
+              };
               const { isReadyForPayment, hasProofSubmitted, isPaymentVerified, proof } = categorizeRequest(req);
 
               return (
@@ -595,7 +610,7 @@ export default function StudentPaymentsPage() {
 
                     <div className="payment-meta-item">
                       <span className="payment-meta-lbl">Quantity / Copies</span>
-                      <span className="payment-meta-val">{req.copies || '1 copy'}</span>
+                      <span className="payment-meta-val">{copiesDisplay}</span>
                     </div>
 
                     <div className="payment-meta-item">
@@ -697,7 +712,7 @@ export default function StudentPaymentsPage() {
                       <>
                         <button
                           type="button"
-                          onClick={() => handleOpenUploadModal(req, 'PERSONAL')}
+                          onClick={() => handleOpenUploadModal(enrichedReqForModal, 'PERSONAL')}
                           className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
                           title="Confirm face-to-face cashier payment (FTF)"
                         >
@@ -709,7 +724,7 @@ export default function StudentPaymentsPage() {
 
                         <button
                           type="button"
-                          onClick={() => handleOpenUploadModal(req, 'ONLINE')}
+                          onClick={() => handleOpenUploadModal(enrichedReqForModal, 'ONLINE')}
                           className="payment-btn-emerald"
                           title="Upload picture of Cashier Official Receipt"
                         >
