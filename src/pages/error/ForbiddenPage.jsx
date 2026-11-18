@@ -18,7 +18,9 @@ export default function ForbiddenPage() {
       navigate(ROUTES.STUDENT.DASHBOARD);
     } else if (user?.role === ROLES.ADMIN) {
       navigate(ROUTES.ADMIN.DASHBOARD);
-    } else if (user?.role === ROLES.STAFF || user?.role === ROLES.REGISTRAR) {
+    } else if (user?.role === ROLES.REGISTRAR) {
+      navigate(ROUTES.REGISTRAR.DASHBOARD);
+    } else if (user?.role === ROLES.STAFF) {
       navigate(ROUTES.STAFF.DASHBOARD);
     } else {
       navigate('/');

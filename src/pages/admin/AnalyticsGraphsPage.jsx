@@ -1,12 +1,41 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import requestsApi, { getStoredRequests, isValidRequest } from '../../api/requests';
-import {
-  VOLUME_CREDENTIAL_SERIES,
-  getVolumeDocKey,
-  createEmptyVolumeBucket,
-  sumVolumeBucket,
-} from '../../api/credentialTypes';
+import requestsApi, { isValidRequest, resolveRequestDocType } from '../../api/requests';
 import '../../styles/admin/AnalyticsGraphsPage.css';
+
+// Institutional palette used deterministically for dynamically discovered document types
+const SERIES_COLOR_PALETTE = [
+  '#001FD1',
+  '#EAB308',
+  '#F97316',
+  '#10B981',
+  '#7088FF',
+  '#8B5CF6',
+  '#06B6D4',
+  '#EF4444',
+  '#EC4899',
+  '#14B8A6',
+  '#6366F1',
+  '#84CC16',
+];
+
+function makeSeriesKey(label) {
+  return String(label || 'unknown')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '') || 'other';
+}
+
+function makeShortLabel(label) {
+  const s = String(label || '').trim();
+  if (/transcript/i.test(s)) return 'TOR';
+  if (/honorable|dismissal/i.test(s)) return 'Dismissal';
+  if (/evaluation/i.test(s)) return 'Evaluation';
+  if (/authentication/i.test(s)) return 'Auth';
+  if (/officially\s*enrolled/i.test(s)) return 'Enrolled';
+  if (s.length > 18) return `${s.slice(0, 16)}…`;
+  return s;
+}
 
 // Helper to safely convert an ISO string, Date object, or date string into local YYYY-MM-DD
 function toLocalDateStr(val) {
@@ -50,11 +79,6 @@ function computeYAxis(maxVal, isMonthly) {
   return { maxY: targetMax, yTicks: ticks };
 }
 
-const DOC_ROWS = VOLUME_CREDENTIAL_SERIES.map((s) => ({
-  key: s.key,
-  name: s.label,
-}));
-
 export default function AnalyticsGraphsPage() {
   // Always starts on Daily View when first opened
   const [viewMode, setViewMode] = useState('daily');
@@ -94,28 +118,59 @@ export default function AnalyticsGraphsPage() {
     };
   }, [loadData]);
 
-  // Dynamically map each request to its corresponding document type key
-  const getDocTypeKey = useCallback(
-    (req) => getVolumeDocKey(req, credTypes),
+  // Resolve each request directly to its authoritative CredentialType / Document Name from live DB
+  const resolveDocIdentity = useCallback(
+    (req) => {
+      const credId = req?.credential_type || req?.credential;
+      const matchedCred = credTypes.find(
+        (c) =>
+          c.id === credId ||
+          String(c.id) === String(credId) ||
+          (c.code && String(c.code).toUpperCase() === String(credId || '').toUpperCase())
+      );
+      const label =
+        matchedCred?.name ||
+        req?.credential_name ||
+        resolveRequestDocType(req, matchedCred) ||
+        'Other Document';
+      return {
+        key: makeSeriesKey(label),
+        label: String(label).trim(),
+      };
+    },
     [credTypes]
   );
 
-  // Purely dynamic daily data for the current week (Mon through Sun)
-  const dynamicDailyData = useMemo(() => {
-    const now = new Date();
-    const dayOfWeek = (now.getDay() + 6) % 7; // Mon = 0 ... Sun = 6
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - dayOfWeek);
+  // Build dynamic series list strictly from live submitted requests (ZERO hardcoded document arrays)
+  const allDynamicSeries = useMemo(() => {
+    const map = new Map();
+    requestsList.forEach((r) => {
+      const { key, label } = resolveDocIdentity(r);
+      if (!map.has(key)) {
+        const idx = map.size;
+        map.set(key, {
+          key,
+          label,
+          shortLabel: makeShortLabel(label),
+          color: SERIES_COLOR_PALETTE[idx % SERIES_COLOR_PALETTE.length],
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [requestsList, resolveDocIdentity]);
+
+  // Helper to build Mon-Sun week buckets around an anchor date
+  const buildWeekBuckets = useCallback((anchorDate) => {
+    const dayOfWeek = (anchorDate.getDay() + 6) % 7; // Mon = 0 ... Sun = 6
+    const monday = new Date(anchorDate);
+    monday.setDate(anchorDate.getDate() - dayOfWeek);
     monday.setHours(0, 0, 0, 0);
 
     const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-    // Initialize clean 7 days for the week
     const daysData = dayLabels.map((label, idx) => {
       const d = new Date(monday);
       d.setDate(monday.getDate() + idx);
-      const dateStr = toLocalDateStr(d);
-      return createEmptyVolumeBucket({ label, dateStr });
+      return { label, dateStr: toLocalDateStr(d), counts: {}, totalLine: 0 };
     });
 
     const dateIndexMap = {};
@@ -123,59 +178,88 @@ export default function AnalyticsGraphsPage() {
       dateIndexMap[item.dateStr] = idx;
     });
 
-    // Populate counts strictly from live requests
     requestsList.forEach((r) => {
-      const reqDateStr = toLocalDateStr(r.request_date || r.created_at);
+      const reqDateStr = toLocalDateStr(r.created_at || r.request_date);
       if (reqDateStr && dateIndexMap[reqDateStr] !== undefined) {
         const idx = dateIndexMap[reqDateStr];
-        const docKey = getDocTypeKey(r);
-        const copies = parseInt(r.copies) || 1;
-        daysData[idx][docKey] = (daysData[idx][docKey] || 0) + copies;
+        const { key } = resolveDocIdentity(r);
+        daysData[idx].counts[key] = (daysData[idx].counts[key] || 0) + 1;
+        daysData[idx].totalLine += 1;
       }
     });
 
-    return daysData.map((d) => ({
-      ...d,
-      totalLine: sumVolumeBucket(d),
-    }));
-  }, [requestsList, getDocTypeKey]);
+    return daysData;
+  }, [requestsList, resolveDocIdentity]);
 
-  // Purely dynamic monthly data for the current year (Jan through Dec)
-  const dynamicMonthlyData = useMemo(() => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-    // Initialize 12 months with 0
-    const monthsData = monthLabels.map((label) => createEmptyVolumeBucket({ label }));
-
-    // Populate counts strictly from live requests
+  // Purely dynamic daily data (Mon through Sun of current week, or latest request's week if current week is empty)
+  const dynamicDailyData = useMemo(() => {
+    const currentWeek = buildWeekBuckets(new Date());
+    const hasCurrentWeekData = currentWeek.some((d) => d.totalLine > 0);
+    if (hasCurrentWeekData || requestsList.length === 0) {
+      return currentWeek;
+    }
+    // If current week has 0 records but DB has live requests, anchor to most recent request's week
+    let latestTs = 0;
     requestsList.forEach((r) => {
-      const reqDateStr = toLocalDateStr(r.request_date || r.created_at);
-      if (!reqDateStr) return;
-      const [y, m] = reqDateStr.split('-').map(Number);
-      if (y === currentYear && m >= 1 && m <= 12) {
-        const monthIdx = m - 1;
-        const docKey = getDocTypeKey(r);
-        const copies = parseInt(r.copies) || 1;
-        monthsData[monthIdx][docKey] = (monthsData[monthIdx][docKey] || 0) + copies;
+      const ds = toLocalDateStr(r.created_at || r.request_date);
+      if (ds) {
+        const ts = new Date(`${ds}T12:00:00`).getTime();
+        if (!isNaN(ts) && ts > latestTs) latestTs = ts;
       }
     });
+    return latestTs > 0 ? buildWeekBuckets(new Date(latestTs)) : currentWeek;
+  }, [buildWeekBuckets, requestsList]);
 
-    return monthsData.map((d) => ({
-      ...d,
-      totalLine: sumVolumeBucket(d),
-    }));
-  }, [requestsList, getDocTypeKey]);
+  // Purely dynamic monthly data (Jan through Dec of current year, or latest request's year if current year is empty)
+  const dynamicMonthlyData = useMemo(() => {
+    const buildYearBuckets = (targetYear) => {
+      const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const monthsData = monthLabels.map((label) => ({ label, counts: {}, totalLine: 0 }));
+
+      requestsList.forEach((r) => {
+        const reqDateStr = toLocalDateStr(r.created_at || r.request_date);
+        if (!reqDateStr) return;
+        const [y, m] = reqDateStr.split('-').map(Number);
+        if (y === targetYear && m >= 1 && m <= 12) {
+          const monthIdx = m - 1;
+          const { key } = resolveDocIdentity(r);
+          monthsData[monthIdx].counts[key] = (monthsData[monthIdx].counts[key] || 0) + 1;
+          monthsData[monthIdx].totalLine += 1;
+        }
+      });
+
+      return monthsData;
+    };
+
+    const currentYear = new Date().getFullYear();
+    const currentYearData = buildYearBuckets(currentYear);
+    if (currentYearData.some((m) => m.totalLine > 0) || requestsList.length === 0) {
+      return currentYearData;
+    }
+
+    let latestYear = currentYear;
+    let latestTs = 0;
+    requestsList.forEach((r) => {
+      const ds = toLocalDateStr(r.created_at || r.request_date);
+      if (ds) {
+        const ts = new Date(`${ds}T12:00:00`).getTime();
+        if (!isNaN(ts) && ts > latestTs) {
+          latestTs = ts;
+          latestYear = Number(ds.split('-')[0]) || currentYear;
+        }
+      }
+    });
+    return buildYearBuckets(latestYear);
+  }, [requestsList, resolveDocIdentity]);
 
   const isMonthly = viewMode === 'monthly';
   const currentData = isMonthly ? dynamicMonthlyData : dynamicDailyData;
   const activeSeries = useMemo(
     () =>
-      VOLUME_CREDENTIAL_SERIES.filter((series) =>
-        currentData.some((d) => (d[series.key] || 0) > 0)
+      allDynamicSeries.filter((series) =>
+        currentData.some((d) => (d.counts[series.key] || 0) > 0)
       ),
-    [currentData]
+    [allDynamicSeries, currentData]
   );
 
   // Chart Geometry & Dynamic Scales
@@ -316,8 +400,8 @@ export default function AnalyticsGraphsPage() {
                   onMouseLeave={() => setHoveredItem(null)}
                   className="cursor-pointer"
                 >
-                  {VOLUME_CREDENTIAL_SERIES.map((series) => {
-                    const val = d[series.key] || 0;
+                  {activeSeries.map((series) => {
+                    const val = d.counts[series.key] || 0;
                     if (val <= 0) return null;
                     const segH = (val / maxY) * chartHeight;
                     const segY = getYCoord(currentBottom + val);
@@ -354,9 +438,9 @@ export default function AnalyticsGraphsPage() {
           {hoveredItem ? (
             <>
               <span className="font-bold text-slate-900">{hoveredItem.label} Breakdown:</span>
-              {VOLUME_CREDENTIAL_SERIES.filter((s) => (hoveredItem[s.key] || 0) > 0).map((series) => (
+              {activeSeries.filter((s) => (hoveredItem.counts[s.key] || 0) > 0).map((series) => (
                 <span key={series.key}>
-                  {series.shortLabel}: <strong>{hoveredItem[series.key] || 0}</strong>
+                  {series.shortLabel}: <strong>{hoveredItem.counts[series.key] || 0}</strong>
                 </span>
               ))}
               <span className="text-[#0B0B36] font-extrabold">Total: {hoveredItem.totalLine}</span>
@@ -491,12 +575,12 @@ export default function AnalyticsGraphsPage() {
                 </tr>
               ) : (
                 activeSeries.map((row) => {
-                  const rowTotal = currentData.reduce((sum, col) => sum + (col[row.key] || 0), 0);
+                  const rowTotal = currentData.reduce((sum, col) => sum + (col.counts[row.key] || 0), 0);
                   return (
                     <tr key={row.key}>
                       <td className="td-doc-type">{row.label}</td>
                       {currentData.map((col) => (
-                        <td key={`${row.key}-${col.label}`}>{col[row.key] || 0}</td>
+                        <td key={`${row.key}-${col.label}`}>{col.counts[row.key] || 0}</td>
                       ))}
                       <td className="td-total">{rowTotal.toLocaleString()}</td>
                     </tr>
