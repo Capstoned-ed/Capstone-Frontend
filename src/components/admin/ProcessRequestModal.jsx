@@ -2,11 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import useToast from '../../hooks/useToast';
 import { useAuth } from '../../hooks/useAuth';
 import apiClient from '../../api/client';
-import requestsApi, { updateStoredRequest, logProcessedAction, setRequestArchived, recordRequestActivityTimestamp, preserveDocTagInRemarks } from '../../api/requests';
+import requestsApi, { updateStoredRequest, logProcessedAction, setRequestArchived, recordRequestActivityTimestamp, preserveDocTagInRemarks, getLatestPaymentRecord } from '../../api/requests';
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import settingsApi from '../../api/settings';
 import { saveStoredNotification } from '../../api/notifications';
-import { getStoredPaymentProof, verifyStoredPaymentProof } from '../../api/payments';
+import paymentsApi, { getStoredPaymentProof, verifyStoredPaymentProof } from '../../api/payments';
 import {
   REQUEST_STATUS,
   normalizeToBackendStatus,
@@ -114,16 +114,61 @@ export default function ProcessRequestModal({
     );
   });
 
-  // Payment Proof States
-  const latestPayment = Array.isArray(requestItem?.payments) && requestItem.payments.length > 0
-    ? requestItem.payments[requestItem.payments.length - 1]
-    : null;
+  // Live refreshed request detail (prevents stale receipt/payment state when modal opens)
+  const [liveRequestDetail, setLiveRequestDetail] = useState(null);
+  const [livePayments, setLivePayments] = useState(null);
+
+  useEffect(() => {
+    let ignore = false;
+    setLiveRequestDetail(null);
+    setLivePayments(null);
+
+    if (!isOpen || !requestItem) return;
+
+    const targetRawId = requestItem.rawId || requestItem.id;
+    const isBackendId = Boolean(targetRawId) && !String(targetRawId).startsWith('fallback_');
+    if (!isBackendId) return;
+
+    (async () => {
+      try {
+        const fresh = await requestsApi.get(targetRawId);
+        if (ignore || !fresh) return;
+        setLiveRequestDetail(fresh);
+        if (Array.isArray(fresh.payments) && fresh.payments.length > 0) {
+          setLivePayments(fresh.payments);
+        } else {
+          // Fallback query strictly filtered to this exact request UUID
+          const payList = await paymentsApi.list({ request: targetRawId }).catch(() => []);
+          const matchedPays = (Array.isArray(payList) ? payList : []).filter(
+            (p) => String(p.request) === String(targetRawId) || String(p.request?.id) === String(targetRawId)
+          );
+          if (!ignore && matchedPays.length > 0) {
+            setLivePayments(matchedPays);
+          }
+        }
+      } catch (err) {
+        console.warn('Live request detail refresh notice:', err);
+      }
+    })();
+
+    return () => {
+      ignore = true;
+    };
+  }, [isOpen, requestItem?.id, requestItem?.rawId]);
+
+  // Payment Proof States (always pick newest uploaded payment record)
+  const effectivePayments = livePayments || liveRequestDetail?.payments || requestItem?.payments || [];
+  const latestPayment = useMemo(
+    () => getLatestPaymentRecord(effectivePayments),
+    [effectivePayments]
+  );
 
   const [paymentProof, setPaymentProof] = useState(null);
   const [walkinOrNumber, setWalkinOrNumber] = useState('');
   const [showInlineReceipt, setShowInlineReceipt] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState(() => {
     const s = String(requestItem?.status || '').toUpperCase();
+    const initialLatest = getLatestPaymentRecord(requestItem?.payments);
     const isPastPayment =
       s === 'FOR PROCESSING' ||
       s === 'FOR_PROCESSING' ||
@@ -134,19 +179,19 @@ export default function ProcessRequestModal({
       s === 'RELEASED';
     if (
       requestItem?.payment_status === 'VERIFIED' ||
-      latestPayment?.status === 'VERIFIED' ||
-      (isPastPayment && (requestItem?.or_number || latestPayment?.receipt_reference_number))
+      initialLatest?.status === 'VERIFIED' ||
+      (isPastPayment && (requestItem?.or_number || initialLatest?.receipt_reference_number))
     ) {
       return 'VERIFIED';
     }
-    if (requestItem?.payment_status === 'REJECTED' || latestPayment?.status === 'REJECTED') {
+    if (requestItem?.payment_status === 'REJECTED' || initialLatest?.status === 'REJECTED') {
       return 'REJECTED';
     }
     if (
       requestItem?.receipt_image ||
       requestItem?.or_number ||
-      latestPayment?.receipt_image ||
-      latestPayment?.receipt_reference_number ||
+      initialLatest?.receipt_image ||
+      initialLatest?.receipt_reference_number ||
       requestItem?.payment_status === 'PAYMENT_SUBMITTED'
     ) {
       return 'PENDING';
@@ -155,15 +200,40 @@ export default function ProcessRequestModal({
   });
   const [localStatus, setLocalStatus] = useState(() => requestItem?.status || 'Pending');
 
+  // Sync live refreshed payment status & OR number into local state when detail fetch completes
+  useEffect(() => {
+    if (!liveRequestDetail && !latestPayment) return;
+    if (latestPayment?.receipt_reference_number && !walkinOrNumber) {
+      setWalkinOrNumber(latestPayment.receipt_reference_number);
+    } else if (liveRequestDetail?.or_number && !walkinOrNumber) {
+      setWalkinOrNumber(liveRequestDetail.or_number);
+    }
+    if (latestPayment?.status === 'VERIFIED' || liveRequestDetail?.payment_status === 'VERIFIED') {
+      setPaymentStatus('VERIFIED');
+    } else if (latestPayment?.status === 'REJECTED') {
+      setPaymentStatus('REJECTED');
+    } else if (latestPayment?.receipt_image || latestPayment?.receipt_reference_number || liveRequestDetail?.receipt_image) {
+      setPaymentStatus((prev) => (prev === 'VERIFIED' ? prev : 'PENDING'));
+    }
+  }, [liveRequestDetail, latestPayment]);
+
   const activeReceiptImage =
+    latestPayment?.receipt_image ||
+    liveRequestDetail?.receipt_image ||
+    requestItem?.receipt_image ||
     paymentProof?.receiptImage ||
     paymentProof?.receiptDataUrl ||
-    requestItem?.receipt_image ||
-    latestPayment?.receipt_image ||
     null;
 
   const [receiptBlobUrl, setReceiptBlobUrl] = useState(null);
-  const displayReceiptImage = receiptBlobUrl || activeReceiptImage;
+  const [loadingReceiptBlob, setLoadingReceiptBlob] = useState(false);
+  const [receiptIsPdf, setReceiptIsPdf] = useState(false);
+  const isDirectInlineUrl = Boolean(
+    activeReceiptImage &&
+      (activeReceiptImage.startsWith('data:') || activeReceiptImage.startsWith('blob:'))
+  );
+  // NEVER pass an unauthenticated API URL directly into <img src> — only render blob:/data: URLs
+  const displayReceiptImage = isDirectInlineUrl ? activeReceiptImage : receiptBlobUrl;
 
   useEffect(() => {
     let ignore = false;
@@ -171,24 +241,34 @@ export default function ProcessRequestModal({
 
     if (!isOpen || !activeReceiptImage) {
       setReceiptBlobUrl(null);
+      setLoadingReceiptBlob(false);
+      setReceiptIsPdf(false);
       return;
     }
 
     if (activeReceiptImage.startsWith('data:') || activeReceiptImage.startsWith('blob:')) {
       setReceiptBlobUrl(null);
+      setLoadingReceiptBlob(false);
+      setReceiptIsPdf(activeReceiptImage.startsWith('data:application/pdf'));
       return;
     }
 
+    setLoadingReceiptBlob(true);
+    setReceiptBlobUrl(null);
     (async () => {
       try {
         const res = await apiClient.get(activeReceiptImage, { responseType: 'blob' });
         if (!ignore && res?.data) {
+          const contentType = String(res.data.type || res.headers?.['content-type'] || '').toLowerCase();
+          setReceiptIsPdf(contentType.includes('pdf'));
           objectUrl = URL.createObjectURL(res.data);
           setReceiptBlobUrl(objectUrl);
         }
       } catch (err) {
         console.warn('Failed to load authenticated receipt preview:', err);
         if (!ignore) setReceiptBlobUrl(null);
+      } finally {
+        if (!ignore) setLoadingReceiptBlob(false);
       }
     })();
 
@@ -1097,6 +1177,17 @@ export default function ProcessRequestModal({
             ? `Official Receipt verified (OR: ${finalOrNumber}). Verified by ${user?.username || 'Admin'}.`
             : 'Payment proof rejected.'
         );
+        // Also verify/reject the backend Payment record itself if present
+        if (latestPayment?.id && !String(latestPayment.id).startsWith('PAY-')) {
+          try {
+            await paymentsApi.verify(latestPayment.id, {
+              action: isVerified ? 'VERIFY' : 'REJECT',
+              remarks: payRemarks,
+            });
+          } catch (payVerifyErr) {
+            console.warn('Backend payment record verify notice:', payVerifyErr);
+          }
+        }
         const targetPayStatus = isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING';
         try {
           await requestsApi.transition(
@@ -2073,16 +2164,30 @@ export default function ProcessRequestModal({
                 </div>
 
                 {/* Online Upload Proof, Local Attach, or Notice */}
-                {hasReceiptUploaded || paymentProof || requestItem.or_number ? (
-                  <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3">
+                {hasReceiptUploaded || paymentProof || activeOrNumber || requestItem.or_number ? (
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3" data-testid="payment-receipt-box">
                     <div className="flex items-center gap-3">
                       {hasReceiptUploaded ? (
-                        <img
-                          src={displayReceiptImage}
-                          alt="Official Receipt"
-                          className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0 cursor-pointer"
-                          onClick={() => setShowInlineReceipt((p) => !p)}
-                        />
+                        loadingReceiptBlob ? (
+                          <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                            <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                          </div>
+                        ) : receiptIsPdf || !displayReceiptImage ? (
+                          <div
+                            onClick={() => setShowInlineReceipt((p) => !p)}
+                            className="w-12 h-12 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center justify-center font-bold text-[10px] shrink-0 cursor-pointer"
+                          >
+                            {receiptIsPdf ? 'PDF' : 'FILE'}
+                          </div>
+                        ) : (
+                          <img
+                            src={displayReceiptImage}
+                            alt="Official Receipt"
+                            data-testid="receipt-thumbnail-img"
+                            className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0 cursor-pointer"
+                            onClick={() => setShowInlineReceipt((p) => !p)}
+                          />
+                        )
                       ) : (
                         <div className="w-12 h-12 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center font-bold text-lg shrink-0">
                           <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
@@ -2093,7 +2198,7 @@ export default function ProcessRequestModal({
                       <div className="flex-1 min-w-0">
                         <span className="text-xs font-bold text-slate-900 block truncate">Official Receipt</span>
                         <div className="text-[11px] text-slate-600 mt-0.5 flex flex-wrap gap-2">
-                          <span>Amount: <strong className="text-indigo-900">{paymentProof?.amount || assessedAmount}</strong></span>
+                          <span>Amount: <strong className="text-indigo-900">{latestPayment?.amount || paymentProof?.amount || assessedAmount}</strong></span>
                           <span>•</span>
                           <span>Reference: <strong className="font-mono text-slate-800">{activeOrNumber || 'N/A'}</strong></span>
                         </div>
@@ -2109,7 +2214,7 @@ export default function ProcessRequestModal({
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleOpenReceipt(displayReceiptImage)}
+                            onClick={() => handleOpenReceipt(displayReceiptImage || activeReceiptImage)}
                             className="px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 hover:bg-slate-50 rounded-lg text-slate-700 cursor-pointer flex items-center gap-1"
                             title="Open official receipt in a new tab"
                           >
@@ -2124,13 +2229,30 @@ export default function ProcessRequestModal({
 
                     {showInlineReceipt && hasReceiptUploaded && (
                       <div className="pt-2 border-t border-slate-200">
-                        <div className="max-h-72 overflow-auto rounded-lg bg-slate-950 p-2 flex items-center justify-center">
-                          <img
+                        {loadingReceiptBlob ? (
+                          <div className="h-40 rounded-lg bg-slate-100 flex items-center justify-center text-xs text-slate-500">
+                            Loading receipt preview...
+                          </div>
+                        ) : receiptIsPdf && displayReceiptImage ? (
+                          <iframe
                             src={displayReceiptImage}
-                            alt="Official Receipt"
-                            className="max-h-64 object-contain rounded"
+                            title="Official Receipt PDF"
+                            className="w-full h-72 rounded-lg border border-slate-300 bg-white"
                           />
-                        </div>
+                        ) : displayReceiptImage ? (
+                          <div className="max-h-72 overflow-auto rounded-lg bg-slate-950 p-2 flex items-center justify-center">
+                            <img
+                              src={displayReceiptImage}
+                              alt="Official Receipt"
+                              data-testid="receipt-full-img"
+                              className="max-h-64 object-contain rounded"
+                            />
+                          </div>
+                        ) : (
+                          <div className="p-4 text-center text-xs text-slate-500">
+                            Receipt preview unavailable. Click "Open in Tab" to view.
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
