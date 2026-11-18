@@ -35,6 +35,7 @@ function computeYAxis(maxVal, isMonthly) {
 export default function RequestVolumeCard({
   dailyData = [],
   monthlyData = [],
+  seriesList = [],
   loading = false,
   initialPeriod = 'daily',
   viewMoreRoute,
@@ -59,8 +60,12 @@ export default function RequestVolumeCard({
 
   const isMonthly = activePeriod === 'monthly';
   const currentData = isMonthly ? monthlyData : dailyData;
-  const activeSeries = VOLUME_CREDENTIAL_SERIES.filter((series) =>
-    currentData.some((d) => (d[series.key] || 0) > 0)
+  const candidateSeries =
+    Array.isArray(seriesList) && seriesList.length > 0 ? seriesList : VOLUME_CREDENTIAL_SERIES;
+  const getBucketCount = (bucket, key) =>
+    Number(bucket?.counts?.[key] ?? bucket?.[key] ?? 0) || 0;
+  const activeSeries = candidateSeries.filter((series) =>
+    currentData.some((d) => getBucketCount(d, series.key) > 0)
   );
 
   // Colors matching the photo legend exactly
@@ -87,16 +92,10 @@ export default function RequestVolumeCard({
   // Calculate dynamic max value for scaling
   const maxDataVal = Math.max(
     0,
-    ...currentData.map((d) =>
-      Math.max(
-        d.totalLine || 0,
-        (d.transcript || 0) +
-          (d.dismissal || 0) +
-          (d.evaluation || 0) +
-          (d.car || 0) +
-          (d.enrolled || 0)
-      )
-    )
+    ...currentData.map((d) => {
+      const seriesSum = activeSeries.reduce((acc, s) => acc + getBucketCount(d, s.key), 0);
+      return Math.max(d.totalLine || 0, seriesSum);
+    })
   );
 
   const { maxY, yTicks } = computeYAxis(maxDataVal, isMonthly);
@@ -213,10 +212,10 @@ export default function RequestVolumeCard({
               const x = getXCoord(i) - barWidth / 2;
               let currentYOffset = paddingTop + chartHeight;
 
-              const stackOrder = VOLUME_CREDENTIAL_SERIES.map((series) => ({
+              const stackOrder = activeSeries.map((series) => ({
                 key: series.key,
                 color: series.color,
-                val: d[series.key] || 0,
+                val: getBucketCount(d, series.key),
               }));
 
               return (
@@ -298,9 +297,9 @@ export default function RequestVolumeCard({
         {hoveredItem ? (
           <>
             <span className="font-bold text-slate-900">{hoveredItem.label} Breakdown:</span>
-            {VOLUME_CREDENTIAL_SERIES.filter((s) => (hoveredItem[s.key] || 0) > 0).map((series) => (
+            {activeSeries.filter((s) => getBucketCount(hoveredItem, s.key) > 0).map((series) => (
               <span key={series.key}>
-                {series.shortLabel}: <strong>{hoveredItem[series.key] || 0}</strong>
+                {series.shortLabel}: <strong>{getBucketCount(hoveredItem, series.key)}</strong>
               </span>
             ))}
             <span className="text-[#0B0B36] font-bold">Total Requests: {hoveredItem.totalLine || 0}</span>

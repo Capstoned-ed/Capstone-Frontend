@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import paymentsApi, { getStoredPaymentProof } from '../../api/payments';
 import { saveStoredNotification } from '../../api/notifications';
-import { getStaffAssignments } from '../../api/requests';
+import requestsApi, { getStaffAssignments, extractTotalAmount, resolveRequestDocType } from '../../api/requests';
 import useToast from '../../hooks/useToast';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -59,8 +59,9 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
   if (!isOpen || !request) return null;
 
   const trackingCode = request.tracking_number || request.trackingId || request.id;
-  const docTitle = request.document_type || request.credential_type_name || 'Document Request';
-  const assessedFee = request.assessed_amount || request.amount || '₱100.00';
+  const docTitle = resolveRequestDocType(request) || request.document_type || request.credential_type_name || 'Document Request';
+  const requiredAmountNumeric = extractTotalAmount(request);
+  const assessedFee = `₱${requiredAmountNumeric.toFixed(2)}`;
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -101,7 +102,7 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
       const targetRequestUuid = request.rawId || request.id;
       await paymentsApi.submit({
         requestId: targetRequestUuid,
-        amount: assessedFee,
+        amount: requiredAmountNumeric.toFixed(2),
         receiptImage: receiptFile,
         receiptReferenceNumber: finalOrNumber,
         trackingNumber: trackingCode,

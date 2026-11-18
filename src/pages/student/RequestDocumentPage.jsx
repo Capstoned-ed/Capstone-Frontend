@@ -1029,9 +1029,29 @@ export default function RequestDocumentPage() {
       const exactDocTitle = currentDocDetails.title || primaryDoc || 'Document Request';
       const cleanPurpose = purposeInput || selectedPurposes.join(', ') || 'Official Academic Credential Request';
       const totalCopiesToSubmit = Math.max(1, Number(currentDocDetails.totalCopies) || 1);
+      const structuredItems = (currentDocDetails.items || []).map((it) => {
+        const matchedType = credentialTypes.find(
+          (t) =>
+            String(t.id) === String(it.typeId) ||
+            (t.name && it.title && t.name.toLowerCase() === it.title.toLowerCase())
+        );
+        return {
+          credential_type_id: matchedType?.id ?? it.typeId ?? targetCredTypeId,
+          code: matchedType?.code || it.docCode || '',
+          name: it.title,
+          copies: Math.max(1, Number(it.copies) || 1),
+          unit_price: Number(it.unitPrice || 0).toFixed(2),
+        };
+      });
+      const totalAmountToSubmit = Number(
+        structuredItems.reduce(
+          (sum, it) => sum + parseFloat(it.unit_price) * it.copies,
+          0
+        ) || currentDocDetails.totalPrice || 0
+      ).toFixed(2);
       const copiesTag =
-        currentDocDetails.items.length > 1
-          ? `[Copies: ${totalCopiesToSubmit} | ${currentDocDetails.items.map((it) => `${it.title}: ${it.copies}`).join(', ')}]`
+        structuredItems.length > 1
+          ? `[Copies: ${totalCopiesToSubmit} | ${structuredItems.map((it) => `${it.name}: ${it.copies}`).join(', ')}]`
           : `[Copies: ${totalCopiesToSubmit}]`;
       const formattedRemarks = `[${exactDocTitle}] ${cleanPurpose} ${copiesTag}`;
       const docCode = resolveDocCodes(selectedDocs, credentialTypes);
@@ -1044,6 +1064,8 @@ export default function RequestDocumentPage() {
           const createPayload = {
             credential_type: targetCredTypeId,
             copies: totalCopiesToSubmit,
+            document_items: structuredItems,
+            total_amount: totalAmountToSubmit,
             remarks: formattedRemarks,
           };
           if (selectedDocs.length > 1 && docCode) {

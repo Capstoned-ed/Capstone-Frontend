@@ -606,14 +606,31 @@ export function resolveRequestDocType(r, cred = null) {
     );
   };
 
-  // 1. If r.document_type is explicitly set to a valid document name, prioritize it directly!
+  // 1. If structured multi-document items are present, list all document names
+  const rawDocItems = Array.isArray(r.document_items) && r.document_items.length > 0
+    ? r.document_items
+    : Array.isArray(r.doc_details) && r.doc_details.length > 0
+      ? r.doc_details
+      : null;
+  if (rawDocItems && rawDocItems.length > 1) {
+    const names = rawDocItems
+      .map((it) => String(it?.name || it?.title || it?.document_type || '').trim())
+      .filter(Boolean);
+    if (names.length > 0) {
+      return names.join(', ');
+    }
+  }
+
+  // 2. If r.document_type is explicitly set to a valid document name, prioritize it directly!
   if (!isInvalidDocName(r.document_type)) {
     return r.document_type;
   }
 
-  // 2. Check if remarks contain an explicit document tag, e.g. "[Evaluation & TOR]" or "[Certification - GPA]"
-  // (prioritize before credential_type_details.name so multi-document or sub-document requests aren't masked by primary cred type)
-  const remarks = String(r.remarks || r.purpose || '').trim();
+  // 3. Check if remarks contain an explicit document tag, e.g. "[Evaluation & TOR]" or "[Certification - GPA]"
+  // (strip structured [Items:[...]] first so nested JSON brackets never interfere)
+  const remarks = String(r.remarks || r.purpose || '')
+    .replace(/\[Items:\[[\s\S]*?\]\]/gi, '')
+    .trim();
   const bracketMatches = remarks.match(/\[[^\]]+\]/g) || [];
   for (const tag of bracketMatches) {
     const candidate = tag.slice(1, -1).trim();
@@ -622,6 +639,8 @@ export function resolveRequestDocType(r, cred = null) {
       candidate &&
       !isInvalidDocName(candidate) &&
       !candLower.startsWith('copies:') &&
+      !candLower.startsWith('total:') &&
+      !candLower.startsWith('items:') &&
       !candLower.startsWith('assigned') &&
       !candLower.includes('staff') &&
       !candLower.includes('walk-in') &&
@@ -841,13 +860,159 @@ export function updateStoredRequest(idOrTracking, patch, options = {}) {
 }
 
 /**
+ * Extract the full structured list of requested document items (supporting multi-document requests).
+ * Always returns an array of { credential_type_id, code, name, copies, unit_price, subtotal }.
+ */
+export function extractDocumentItems(req, credTypes = []) {
+  if (!req || typeof req !== 'object') return [];
+  const types = Array.isArray(credTypes) ? credTypes : [];
+
+  const findCredMatch = (idOrCodeOrName) => {
+    if (!idOrCodeOrName) return null;
+    const str = String(idOrCodeOrName).trim().toLowerCase();
+    return (
+      types.find(
+        (t) =>
+          String(t.id) === String(idOrCodeOrName) ||
+          (t.code && String(t.code).toLowerCase() === str) ||
+          (t.name && String(t.name).toLowerCase() === str)
+      ) ||
+      types.find(
+        (t) => t.name && (t.name.toLowerCase().includes(str) || str.includes(t.name.toLowerCase()))
+      ) ||
+      null
+    );
+  };
+
+  const normalizeItem = (raw) => {
+    const rawName = String(raw?.name || raw?.title || raw?.document_type || '').trim();
+    const matched =
+      findCredMatch(raw?.credential_type_id ?? raw?.id) ||
+      findCredMatch(raw?.code) ||
+      findCredMatch(rawName);
+    const copies = Math.max(1, parseInt(raw?.copies ?? raw?.quantity ?? 1, 10) || 1);
+    const rawPrice = parseFloat(String(raw?.unit_price ?? raw?.unitPrice ?? '').replace(/[^0-9.]/g, ''));
+    const dbPrice = matched ? parseFloat(String(matched.price ?? '').replace(/[^0-9.]/g, '')) : NaN;
+    const unitPrice = Number.isFinite(rawPrice) && rawPrice > 0
+      ? rawPrice
+      : Number.isFinite(dbPrice) && dbPrice > 0
+        ? dbPrice
+        : 0;
+    const name = rawName || matched?.name || 'Document Request';
+    return {
+      credential_type_id: raw?.credential_type_id ?? raw?.id ?? matched?.id ?? null,
+      code: raw?.code || matched?.code || '',
+      name,
+      title: name,
+      copies,
+      unit_price: unitPrice,
+      subtotal: Number((unitPrice * copies).toFixed(2)),
+    };
+  };
+
+  // 1. Structured document_items / doc_details array directly on the request
+  const explicitArrays = [req.document_items, req.doc_details, req.items];
+  for (const arr of explicitArrays) {
+    if (Array.isArray(arr) && arr.length > 0) {
+      return arr.map(normalizeItem);
+    }
+  }
+
+  // 2. Structured [Items:[...]] JSON embedded in remarks
+  const remarks = String(req.remarks || req.notes || '');
+  const itemsMatch = remarks.match(/\[Items:(\[[\s\S]*?\])\]/i);
+  if (itemsMatch && itemsMatch[1]) {
+    try {
+      const parsed = JSON.parse(itemsMatch[1]);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map(normalizeItem);
+      }
+    } catch {}
+  }
+
+  // 3. Multi-doc breakdown inside [Copies: N | DocA: 2, DocB: 1]
+  const multiMatch = remarks.match(/\[Copies:\s*\d+\s*\|\s*([^\]]+)\]/i);
+  if (multiMatch && multiMatch[1]) {
+    const parsedItems = multiMatch[1]
+      .split(',')
+      .map((part) => part.trim())
+      .map((part) => {
+        const m = part.match(/^(.+?):\s*(\d+)$/);
+        if (!m) return null;
+        return normalizeItem({ name: m[1].trim(), copies: parseInt(m[2], 10) || 1 });
+      })
+      .filter(Boolean);
+    if (parsedItems.length > 0) return parsedItems;
+  }
+
+  // 4. Single-document fallback from primary credential_type
+  const matchedPrimary =
+    findCredMatch(req.credential_type) ||
+    findCredMatch(req.credential_code) ||
+    findCredMatch(req.credential_name || req.document_type);
+  const copies = extractRequestedCopies(req);
+  const primaryPrice = matchedPrimary
+    ? parseFloat(String(matchedPrimary.price ?? '').replace(/[^0-9.]/g, ''))
+    : parseFloat(String(req.credential_type_details?.price ?? req.price ?? '').replace(/[^0-9.]/g, ''));
+  const unitPrice = Number.isFinite(primaryPrice) && primaryPrice > 0 ? primaryPrice : 0;
+  const name = matchedPrimary?.name || req.credential_name || resolveRequestDocType(req, matchedPrimary);
+
+  return [
+    {
+      credential_type_id: matchedPrimary?.id ?? req.credential_type ?? null,
+      code: matchedPrimary?.code || req.credential_code || '',
+      name,
+      title: name,
+      copies,
+      unit_price: unitPrice,
+      subtotal: Number((unitPrice * copies).toFixed(2)),
+    },
+  ];
+}
+
+/**
+ * Compute exact numeric total_amount across all requested documents × copies.
+ */
+export function extractTotalAmount(req, credTypes = []) {
+  if (!req || typeof req !== 'object') return 0;
+
+  const parseNum = (val) => {
+    if (val === undefined || val === null || val === '') return NaN;
+    const n = parseFloat(String(val).replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) && n > 0 ? n : NaN;
+  };
+
+  // 1. Authoritative backend total_amount / assessed_amount
+  const explicitTotal = parseNum(req.total_amount);
+  if (Number.isFinite(explicitTotal)) return Number(explicitTotal.toFixed(2));
+
+  // 2. Sum from structured document_items (unit_price * copies)
+  const items = extractDocumentItems(req, credTypes);
+  const itemsSum = items.reduce((acc, it) => acc + (Number(it.unit_price) || 0) * (Number(it.copies) || 1), 0);
+  if (itemsSum > 0) return Number(itemsSum.toFixed(2));
+
+  // 3. Fallback to assessed_amount / amount / price / [Total: X] tag
+  const assessed = parseNum(req.assessed_amount) || parseNum(req.amount) || parseNum(req.price);
+  if (Number.isFinite(assessed)) return Number(assessed.toFixed(2));
+
+  const remarks = String(req.remarks || '');
+  const totalTag = remarks.match(/\[Total:\s*([\d.]+)\]/i);
+  if (totalTag && totalTag[1]) {
+    const tagged = parseNum(totalTag[1]);
+    if (Number.isFinite(tagged)) return Number(tagged.toFixed(2));
+  }
+
+  return 0;
+}
+
+/**
  * Extract the actual requested copy count (positive integer) from a CredentialRequest object.
  */
 export function extractRequestedCopies(req) {
   if (!req || typeof req !== 'object') return 1;
 
-  // 1. Check per-item arrays (doc_details / document_items / items)
-  const itemArrays = [req.doc_details, req.document_items, req.items];
+  // 1. Check per-item arrays (document_items / doc_details / items)
+  const itemArrays = [req.document_items, req.doc_details, req.items];
   for (const arr of itemArrays) {
     if (Array.isArray(arr) && arr.length > 0) {
       const sum = arr.reduce((acc, it) => {
@@ -896,7 +1061,10 @@ export function getLatestPaymentRecord(payments) {
 function normalizeBackendRequest(b) {
   if (!b || typeof b !== 'object') return b;
   const latestBackendPayment = getLatestPaymentRecord(b.payments);
-  const resolvedCopies = extractRequestedCopies(b);
+  const resolvedItems = extractDocumentItems(b);
+  const resolvedCopies = extractRequestedCopies({ ...b, document_items: resolvedItems });
+  const resolvedTotalNum = extractTotalAmount({ ...b, document_items: resolvedItems });
+  const formattedTotal = resolvedTotalNum > 0 ? resolvedTotalNum.toFixed(2) : (b.total_amount || b.assessed_amount || '');
   const normalizedPaymentStatus =
     b.payment_status && b.payment_status !== 'NOT_SUBMITTED'
       ? b.payment_status
@@ -906,9 +1074,16 @@ function normalizeBackendRequest(b) {
 
   return {
     ...b,
+    document_items: resolvedItems,
+    doc_details: resolvedItems,
     copies: resolvedCopies,
     total_copies: resolvedCopies,
-    document_type: b.document_type || resolveRequestDocType(b),
+    total_amount: formattedTotal,
+    assessed_amount: formattedTotal || latestBackendPayment?.amount || b.assessed_amount,
+    document_type:
+      resolvedItems.length > 1
+        ? resolvedItems.map((it) => it.name).join(', ')
+        : b.document_type || resolveRequestDocType(b),
     payment_status: normalizedPaymentStatus,
     or_number: b.or_number || latestBackendPayment?.receipt_reference_number || '',
     receipt_reference_number:
@@ -917,7 +1092,6 @@ function normalizeBackendRequest(b) {
       latestBackendPayment?.receipt_reference_number ||
       '',
     receipt_image: b.receipt_image || latestBackendPayment?.receipt_image || null,
-    assessed_amount: b.assessed_amount || latestBackendPayment?.amount || b.assessed_amount,
     payment_proof:
       b.payment_proof ||
       (latestBackendPayment
@@ -1264,20 +1438,32 @@ export function preserveDocTagInRemarks(requestOrRemarks, newRemarks = '') {
       ? requestOrRemarks
       : String(requestOrRemarks?.remarks || requestOrRemarks?.purpose || '');
 
-  // Preserve [Copies: N ...] tag if present on request and not already in rawNew
-  let copiesTag = '';
+  // Preserve [Copies: ...], [Total: ...], and [Items:[...]] metadata tags
+  const metadataTags = [];
   if (!/\[Copies:\s*\d+/i.test(rawNew)) {
     const copiesMatch = existingRemarks.match(/(\[Copies:[^\]]+\])/i);
     if (copiesMatch && copiesMatch[1]) {
-      copiesTag = copiesMatch[1];
+      metadataTags.push(copiesMatch[1]);
     } else if (requestOrRemarks && typeof requestOrRemarks === 'object') {
       const c = extractRequestedCopies(requestOrRemarks);
-      if (c > 1) copiesTag = `[Copies: ${c}]`;
+      if (c > 1) metadataTags.push(`[Copies: ${c}]`);
+    }
+  }
+  if (!/\[Total:\s*[\d.]+/i.test(rawNew)) {
+    const totalMatch = existingRemarks.match(/(\[Total:[^\]]+\])/i);
+    if (totalMatch && totalMatch[1]) {
+      metadataTags.push(totalMatch[1]);
+    }
+  }
+  if (!/\[Items:\[/i.test(rawNew)) {
+    const itemsMatch = existingRemarks.match(/(\[Items:\[[\s\S]*?\]\])/i);
+    if (itemsMatch && itemsMatch[1]) {
+      metadataTags.push(itemsMatch[1]);
     }
   }
 
   if (rawNew.startsWith('[')) {
-    return copiesTag ? `${rawNew} ${copiesTag}` : rawNew;
+    return [rawNew, ...metadataTags].filter(Boolean).join(' ').trim();
   }
 
   let docTag = '';
@@ -1286,6 +1472,8 @@ export function preserveDocTagInRemarks(requestOrRemarks, newRemarks = '') {
     const tagLower = match[1].toLowerCase();
     if (
       !tagLower.startsWith('[copies:') &&
+      !tagLower.startsWith('[total:') &&
+      !tagLower.startsWith('[items:') &&
       !tagLower.includes('staff') &&
       !tagLower.includes('walk-in') &&
       !tagLower.includes('ftf')
@@ -1304,7 +1492,7 @@ export function preserveDocTagInRemarks(requestOrRemarks, newRemarks = '') {
     }
   }
 
-  const parts = [docTag, rawNew, copiesTag].filter(Boolean);
+  const parts = [docTag, rawNew, ...metadataTags].filter(Boolean);
   return parts.join(' ').trim();
 }
 
