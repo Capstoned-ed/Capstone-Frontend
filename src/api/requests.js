@@ -1180,10 +1180,27 @@ export const requestsApi = {
   transition: async (id, payload, { throwOnError = true } = {}) => {
     let resData = null;
     try {
+      const resolveTransitionStatus = (rawStatus) => {
+        if (!rawStatus) return rawStatus;
+        const upper = String(rawStatus).trim().toUpperCase();
+        if (upper === 'PENDING_REGISTRAR_APPROVAL' || upper === 'PENDING REGISTRAR APPROVAL') {
+          return 'PENDING_REGISTRAR_APPROVAL';
+        }
+        if (upper === 'APPROVED / READY FOR RELEASE' || upper === 'APPROVED') {
+          return REQUEST_STATUS.READY_FOR_RELEASE;
+        }
+        if (upper === 'RELEASED / COMPLETED') {
+          return REQUEST_STATUS.RELEASED;
+        }
+        if (upper === 'RETURNED TO STAFF / FOR PROCESSING') {
+          return REQUEST_STATUS.PAYMENT_VERIFIED;
+        }
+        return normalizeToBackendStatus(rawStatus);
+      };
       const cleanPayload = payload
         ? {
             ...payload,
-            status: payload.status ? normalizeToBackendStatus(payload.status) : payload.status,
+            status: payload.status ? resolveTransitionStatus(payload.status) : payload.status,
           }
         : payload;
       const response = await apiClient.patch(`/api/requests/${id}/transition/`, cleanPayload);

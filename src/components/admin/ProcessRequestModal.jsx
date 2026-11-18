@@ -38,6 +38,25 @@ function formatCleanPurpose(text) {
   return cleaned || 'For Personal File / Employment';
 }
 
+function resolveModalTargetBackendStatus(label) {
+  if (!label) return '';
+  const clean = String(label).trim();
+  const upper = clean.toUpperCase();
+  if (upper === 'PENDING REGISTRAR APPROVAL' || upper === 'PENDING_REGISTRAR_APPROVAL') {
+    return 'PENDING_REGISTRAR_APPROVAL';
+  }
+  if (upper === 'APPROVED / READY FOR RELEASE' || upper === 'APPROVED' || upper === 'READY FOR RELEASE') {
+    return REQUEST_STATUS.READY_FOR_RELEASE;
+  }
+  if (upper === 'RELEASED / COMPLETED' || upper === 'RELEASED') {
+    return REQUEST_STATUS.RELEASED;
+  }
+  if (upper === 'RETURNED TO STAFF / FOR PROCESSING') {
+    return REQUEST_STATUS.PAYMENT_VERIFIED;
+  }
+  return BACKEND_STATUS_MAP[clean] || normalizeToBackendStatus(clean);
+}
+
 export default function ProcessRequestModal({
   isOpen,
   onClose,
@@ -395,17 +414,25 @@ export default function ProcessRequestModal({
   );
 
   const canOverrideStatus = Boolean(
+    !isAdmin &&
     isClearanceVerified &&
-    (!isPersistedTerminal || isAdmin) &&
+    !isPersistedTerminal &&
     !isWaitingForRegistrarApproval
   );
 
   const isStatusChanged = Boolean(
     localStatus &&
-    normalizeToBackendStatus(localStatus) !== persistedBackendStatus
+    resolveModalTargetBackendStatus(localStatus) !== persistedBackendStatus
   );
 
   const hasUnsavedNotes = Boolean(notes && notes.trim().length > 0);
+
+  const isStaffPaymentConfirmationStep = Boolean(
+    userRole === 'STAFF' &&
+    persistedBackendStatus === REQUEST_STATUS.PAYMENT_PENDING &&
+    !isStatusChanged &&
+    !hasUnsavedNotes
+  );
 
   const canSubmitUpdate = Boolean(
     canOverrideStatus &&
@@ -521,79 +548,95 @@ export default function ProcessRequestModal({
     const currentPersisted = normalizeToBackendStatus(effectiveStatus);
     const currentDisplay = formatStatusDisplay(effectiveStatus, { useReleasing: true });
 
-    let allowed = [currentDisplay];
+    let nextTransitions = [];
 
     if (role === 'ADMIN') {
-      allowed = [
-        'Pending',
-        'Pending Payment',
-        'For Processing',
-        'Processing',
-        'Releasing',
-        'Claimed',
-        'On Hold',
-        'Rejected',
-      ];
+      // Admin has strictly read-only access to request status processing
+      nextTransitions = [];
     } else if (role === 'REGISTRAR') {
+      // Registrar-specific approval & oversight transitions (never Staff's Pending Payment)
       switch (currentPersisted) {
         case REQUEST_STATUS.PENDING:
-          allowed = ['Pending', 'Pending Payment', 'On Hold', 'Rejected'];
-          break;
         case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
-          allowed = ['On Hold', 'Pending Payment', 'Rejected'];
-          break;
         case REQUEST_STATUS.PAYMENT_PENDING:
-          allowed = ['Pending Payment', 'For Processing', 'Rejected'];
+          nextTransitions = [
+            'Approved / Ready for Release',
+            'Returned to Staff / For Processing',
+            'Rejected',
+          ];
           break;
         case REQUEST_STATUS.PAYMENT_VERIFIED:
-          allowed = ['For Processing', 'Processing', 'Rejected'];
-          break;
         case REQUEST_STATUS.PROCESSING:
-          allowed = ['Processing', 'Releasing', 'Rejected'];
+          nextTransitions = [
+            'Approved / Ready for Release',
+            'Released / Completed',
+            'Returned to Staff / For Processing',
+            'Rejected',
+          ];
           break;
         case REQUEST_STATUS.READY_FOR_RELEASE:
-          allowed = ['Releasing', 'Claimed', 'Rejected'];
+          nextTransitions = [
+            'Released / Completed',
+            'Returned to Staff / For Processing',
+            'Rejected',
+          ];
           break;
         default:
-          allowed = [currentDisplay];
+          nextTransitions = [];
       }
     } else {
-      // Role: STAFF
+      // Role: STAFF — valid Staff transitions only (never re-offering Pending Payment when already PAYMENT_PENDING)
       if (isWaitingForRegistrarApproval) {
-        allowed = [currentDisplay];
+        nextTransitions = [];
       } else {
         switch (currentPersisted) {
           case REQUEST_STATUS.PENDING:
-            allowed = ['Pending', 'Pending Payment', 'On Hold', 'Rejected'];
+            nextTransitions = ['On Hold', 'Rejected'];
             break;
           case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
-            allowed = ['On Hold', 'Pending Payment', 'Rejected'];
+            nextTransitions = ['On Hold', 'Rejected'];
             break;
           case REQUEST_STATUS.PAYMENT_PENDING:
-            allowed = ['Pending Payment', 'For Processing', 'Rejected'];
+            nextTransitions = ['For Processing', 'Rejected'];
             break;
           case REQUEST_STATUS.PAYMENT_VERIFIED:
-            // Staff CANNOT reject once payment is verified!
-            allowed = ['For Processing', 'Processing'];
+            nextTransitions = autoApproveEnabled
+              ? ['Processing', 'Ready for Release']
+              : ['Processing', 'Pending Registrar Approval'];
             break;
           case REQUEST_STATUS.PROCESSING:
-            // Staff cannot transition to Releasing or Rejected
-            allowed = ['Processing'];
+            nextTransitions = autoApproveEnabled
+              ? ['Ready for Release']
+              : ['Pending Registrar Approval'];
             break;
           case REQUEST_STATUS.READY_FOR_RELEASE:
-            allowed = ['Releasing', 'Claimed'];
+            nextTransitions = ['Claimed'];
             break;
           default:
-            allowed = [currentDisplay];
+            nextTransitions = [];
         }
       }
     }
 
-    if (!allowed.includes(currentDisplay)) {
-      allowed.unshift(currentDisplay);
-    }
-    return Array.from(new Set(allowed));
-  }, [persistedStatus, requestItem?.status, user?.role, isWaitingForRegistrarApproval]);
+    const uniqueNext = Array.from(new Set(nextTransitions)).filter(
+      (label) => resolveModalTargetBackendStatus(label) !== currentPersisted
+    );
+
+    const options = [
+      {
+        value: currentDisplay,
+        label: `Current: ${currentDisplay}`,
+        disabled: true,
+      },
+      ...uniqueNext.map((label) => ({
+        value: label,
+        label,
+        disabled: false,
+      })),
+    ];
+
+    return options;
+  }, [persistedStatus, requestItem?.status, user?.role, isWaitingForRegistrarApproval, autoApproveEnabled]);
 
   useEffect(() => {
     let ignore = false;
@@ -1142,11 +1185,13 @@ export default function ProcessRequestModal({
     try {
       const finalOrNumber = activeOrNumber || 'Paid at USTP Cashier (FTF)';
 
+      const defaultConfirmNote = notes.trim() || 'Payment order confirmed by staff';
+
       verifyStoredPaymentProof(
         [requestItem.tracking_number, requestItem.id, requestItem.rawId],
         {
           action: isVerified ? 'VERIFY' : 'REJECT',
-          remarks: notes || (isVerified ? 'Payment verified by Admin' : 'Receipt rejected'),
+          remarks: isVerified ? defaultConfirmNote : (notes.trim() || 'Receipt rejected'),
         }
       );
 
@@ -1159,42 +1204,14 @@ export default function ProcessRequestModal({
       const nowIso = new Date(nowTime).toISOString();
       recordRequestActivityTimestamp(requestItem, nowTime);
 
-      const paymentPatch = {
-        status: updatedStatus,
-        rawStatus: isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING',
-        batch_status: updatedStatus,
-        payment_status: isVerified ? 'VERIFIED' : 'REJECTED',
-        or_number: finalOrNumber,
-        receipt_reference_number: finalOrNumber,
-        receipt_image: activeReceiptImage,
-        payment_date: new Date().toISOString().split('T')[0],
-        updated_at: nowIso,
-      };
-
-      requestItem.status = updatedStatus;
-      requestItem.rawStatus = isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING';
-      requestItem.batch_status = updatedStatus;
-      requestItem.payment_status = isVerified ? 'VERIFIED' : 'REJECTED';
-      requestItem.or_number = finalOrNumber;
-      requestItem.updated_at = nowIso;
-
-      updateStoredRequest(targetId, paymentPatch, { fallbackItem: requestItem, silentNotify: true });
-
-      if (onUpdated) {
-        onUpdated({
-          ...requestItem,
-          ...paymentPatch,
-        });
-      }
-
       const targetRawId = requestItem.rawId || requestItem.id;
       const isBackendId = Boolean(targetRawId) && !String(targetRawId).startsWith('fallback_');
       if (isBackendId) {
         const payRemarks = preserveDocTagInRemarks(
           requestItem,
           isVerified
-            ? `Official Receipt verified (OR: ${finalOrNumber}). Verified by ${user?.username || 'Admin'}.`
-            : 'Payment proof rejected.'
+            ? `${defaultConfirmNote} (OR: ${finalOrNumber}).`
+            : (notes.trim() || 'Payment proof rejected.')
         );
         // Also verify/reject the backend Payment record itself if present
         if (latestPayment?.id && !String(latestPayment.id).startsWith('PAY-')) {
@@ -1234,16 +1251,44 @@ export default function ProcessRequestModal({
         }
       }
 
+      const paymentPatch = {
+        status: updatedStatus,
+        rawStatus: isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING',
+        batch_status: updatedStatus,
+        payment_status: isVerified ? 'VERIFIED' : 'REJECTED',
+        or_number: finalOrNumber,
+        receipt_reference_number: finalOrNumber,
+        receipt_image: activeReceiptImage,
+        payment_date: new Date().toISOString().split('T')[0],
+        updated_at: nowIso,
+      };
+
+      requestItem.status = updatedStatus;
+      requestItem.rawStatus = isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING';
+      requestItem.batch_status = updatedStatus;
+      requestItem.payment_status = isVerified ? 'VERIFIED' : 'REJECTED';
+      requestItem.or_number = finalOrNumber;
+      requestItem.updated_at = nowIso;
+
+      updateStoredRequest(targetId, paymentPatch, { fallbackItem: requestItem, silentNotify: true });
+
+      if (onUpdated) {
+        onUpdated({
+          ...requestItem,
+          ...paymentPatch,
+        });
+      }
+
       logProcessedAction({
         actor: user?.username,
         actorName: user?.full_name || user?.username,
         actorId: user?.id,
-        actorRole: user?.role || 'admin',
+        actorRole: user?.role || 'staff',
         targetName: requestItem.student_name,
         targetId: requestItem.student_id || trackingCode,
         trackingNumber: trackingCode,
         documentType: requestItem.document_type,
-        action: isVerified ? `Verified Official Receipt (OR: ${finalOrNumber})` : 'Payment Rejected',
+        action: isVerified ? `Payment order confirmed (OR: ${finalOrNumber})` : 'Payment Rejected',
         status: updatedStatus,
       });
 
@@ -1259,7 +1304,8 @@ export default function ProcessRequestModal({
           target_username: requestItem.student_name || null,
           target_student_id: requestItem.student_id || null,
         });
-        toast.success(`Payment verified (OR: ${finalOrNumber})! Status updated to For Processing.`);
+        toast.success('Payment order confirmed');
+        onClose();
       } else {
         toast.warning('Payment proof rejected. Request remains For Payment.');
       }
@@ -1359,27 +1405,41 @@ export default function ProcessRequestModal({
       const targetId = requestItem.rawId || requestItem.id;
       const targetRawId = requestItem.rawId || requestItem.id;
       const isBackendId = Boolean(targetRawId) && !String(targetRawId).startsWith('fallback_');
+      let finalResolvedStatus = localStatus;
+      let finalResolvedRawStatus = resolveModalTargetBackendStatus(localStatus);
       if (isBackendId) {
-        const backendStatus = BACKEND_STATUS_MAP[localStatus] || localStatus;
+        let backendStatus = resolveModalTargetBackendStatus(localStatus);
+        // When Staff advances a PROCESSING request to Ready for Release while
+        // Registrar Auto-Approve is ON, submit via PENDING_REGISTRAR_APPROVAL so
+        // the backend enforces the persisted Registrar Auto-Approve bypass gate.
+        if (
+          userRole === 'STAFF' &&
+          persistedBackendStatus === REQUEST_STATUS.PROCESSING &&
+          backendStatus === REQUEST_STATUS.READY_FOR_RELEASE &&
+          autoApproveEnabled
+        ) {
+          backendStatus = 'PENDING_REGISTRAR_APPROVAL';
+        }
         const transitionRemarks = preserveDocTagInRemarks(requestItem, notes || requestItem.remarks || '');
         let updatedBackend = null;
         try {
-          if (isPersistedTerminal && isAdmin) {
-            updatedBackend = await requestsApi.restore(
-              targetRawId,
-              { remarks: transitionRemarks },
-              { throwOnError: true }
-            );
-          } else {
-            updatedBackend = await requestsApi.transition(
-              targetRawId,
-              {
-                status: backendStatus,
-                remarks: transitionRemarks,
-              },
-              { throwOnError: true }
-            );
+          // If Registrar selects "Approved / Ready for Release" on an unapproved request,
+          // record formal Registrar approval before transitioning to READY_FOR_RELEASE.
+          if (
+            userRole === 'REGISTRAR' &&
+            backendStatus === REQUEST_STATUS.READY_FOR_RELEASE &&
+            !isApproved
+          ) {
+            await requestsApi.approve(targetRawId);
           }
+          updatedBackend = await requestsApi.transition(
+            targetRawId,
+            {
+              status: backendStatus,
+              remarks: transitionRemarks,
+            },
+            { throwOnError: true }
+          );
         } catch (apiErr) {
           console.error('Backend status transition failed:', apiErr);
           const errMsg =
@@ -1400,6 +1460,8 @@ export default function ProcessRequestModal({
         }
 
         if (updatedBackend?.status) {
+          finalResolvedRawStatus = updatedBackend.status;
+          finalResolvedStatus = formatStatusDisplay(updatedBackend.status, { useReleasing: true });
           requestItem.status = updatedBackend.status;
           requestItem.remarks = updatedBackend.remarks || transitionRemarks;
           setPersistedStatus(updatedBackend.status);
@@ -1423,7 +1485,8 @@ export default function ProcessRequestModal({
       recordRequestActivityTimestamp(requestItem, nowTime);
 
       const finalPatch = {
-        status: localStatus,
+        status: finalResolvedStatus,
+        rawStatus: finalResolvedRawStatus,
         remarks: notes.trim() ? notes.trim() : (requestItem.remarks || ''),
         clearance_status: clearanceStatus,
         assessed_amount: assessedAmount,
@@ -2347,23 +2410,32 @@ export default function ProcessRequestModal({
                     <>
                       <button
                         type="button"
-                        disabled={!canConfirmPayment || verifyingPayment}
+                        data-testid="confirm-payment-order-btn"
+                        disabled={!canConfirmPayment || verifyingPayment || isAdmin}
                         onClick={() => handleVerifyPayment('VERIFIED')}
                         className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                          canConfirmPayment && !verifyingPayment
+                          canConfirmPayment && !verifyingPayment && !isAdmin
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs'
                             : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
                         }`}
                         title={
-                          !hasReceiptUploaded && !hasOrNumber
+                          isAdmin
+                            ? 'View Only (Admin): Admins cannot confirm payment orders'
+                            : !hasReceiptUploaded && !hasOrNumber
                             ? 'Cannot confirm payment: Please enter the O.R. Number or upload receipt'
-                            : 'Confirm and verify payment'
+                            : 'Confirm payment order and move to processing'
                         }
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
-                        <span>{verifyingPayment ? 'Verifying...' : 'Confirm Payment'}</span>
+                        <span>
+                          {verifyingPayment
+                            ? 'Confirming...'
+                            : persistedBackendStatus === REQUEST_STATUS.PAYMENT_PENDING
+                            ? 'Confirm Payment Order'
+                            : 'Confirm Payment'}
+                        </span>
                       </button>
 
                       <button
@@ -2423,8 +2495,10 @@ export default function ProcessRequestModal({
                         : 'Select status to override'
                     }
                   >
-                    {statusOptions.map((st) => (
-                      <option key={st} value={st}>{st}</option>
+                    {statusOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value} disabled={opt.disabled}>
+                        {opt.label}
+                      </option>
                     ))}
                   </select>
                   <input
@@ -2525,26 +2599,28 @@ export default function ProcessRequestModal({
                 )}
               </div>
 
-              <button
-                type="submit"
-                disabled={!canSubmitUpdate || (isPersistedTerminal && !isAdmin)}
-                className={`staff-btn-update ${
-                  !canSubmitUpdate || (isPersistedTerminal && !isAdmin)
-                    ? 'opacity-40 cursor-not-allowed bg-slate-400 hover:bg-slate-400 text-white'
-                    : ''
-                }`}
-                title={
-                  isPersistedTerminal && !isAdmin
-                    ? 'This request is completed or closed. Further edits are disabled.'
-                    : !canOverrideStatus
-                    ? 'Manual status override is locked: Verify clearance first'
-                    : !isStatusChanged && !hasUnsavedNotes
-                    ? 'Change the status or enter remarks/notes to update.'
-                    : 'Update request status'
-                }
-              >
-                {loading ? 'Updating...' : 'Update Status'}
-              </button>
+              {!isAdmin && !isStaffPaymentConfirmationStep && (
+                <button
+                  type="submit"
+                  disabled={!canSubmitUpdate || isPersistedTerminal}
+                  className={`staff-btn-update ${
+                    !canSubmitUpdate || isPersistedTerminal
+                      ? 'opacity-40 cursor-not-allowed bg-slate-400 hover:bg-slate-400 text-white'
+                      : ''
+                  }`}
+                  title={
+                    isPersistedTerminal
+                      ? 'This request is completed or closed. Further edits are disabled.'
+                      : !canOverrideStatus
+                      ? 'Manual status override is locked: Verify clearance first'
+                      : !isStatusChanged && !hasUnsavedNotes
+                      ? 'Change the status or enter remarks/notes to update.'
+                      : 'Update request status'
+                  }
+                >
+                  {loading ? 'Updating...' : 'Update Status'}
+                </button>
+              )}
             </div>
           </form>
         </div>
