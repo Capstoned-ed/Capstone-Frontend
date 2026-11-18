@@ -1028,7 +1028,12 @@ export default function RequestDocumentPage() {
       const targetCredTypeId = selectedCredTypeId || resolveCredentialTypeId(primaryDoc, credentialTypes);
       const exactDocTitle = currentDocDetails.title || primaryDoc || 'Document Request';
       const cleanPurpose = purposeInput || selectedPurposes.join(', ') || 'Official Academic Credential Request';
-      const formattedRemarks = `[${exactDocTitle}] ${cleanPurpose}`;
+      const totalCopiesToSubmit = Math.max(1, Number(currentDocDetails.totalCopies) || 1);
+      const copiesTag =
+        currentDocDetails.items.length > 1
+          ? `[Copies: ${totalCopiesToSubmit} | ${currentDocDetails.items.map((it) => `${it.title}: ${it.copies}`).join(', ')}]`
+          : `[Copies: ${totalCopiesToSubmit}]`;
+      const formattedRemarks = `[${exactDocTitle}] ${cleanPurpose} ${copiesTag}`;
       const docCode = resolveDocCodes(selectedDocs, credentialTypes);
 
       // Submit directly to backend API so it persists in the database for Admin and Staff.
@@ -1038,6 +1043,7 @@ export default function RequestDocumentPage() {
         try {
           const createPayload = {
             credential_type: targetCredTypeId,
+            copies: totalCopiesToSubmit,
             remarks: formattedRemarks,
           };
           if (selectedDocs.length > 1 && docCode) {

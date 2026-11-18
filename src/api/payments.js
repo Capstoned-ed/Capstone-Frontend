@@ -58,41 +58,42 @@ export const paymentsApi = {
 
     // Clean amount value
     const numericAmount = parseFloat(String(amount).replace(/[^0-9.]/g, '')) || 100.0;
+    const isBackendId = Boolean(requestId) && !String(requestId).startsWith('fallback_');
 
-    // Try submitting to backend API if requestId is UUID and receiptImage exists
-    if (requestId && receiptImage instanceof File) {
-      try {
-        const formData = new FormData();
-        formData.append('request', requestId);
-        formData.append('amount', numericAmount.toFixed(2));
-        formData.append('receipt_image', receiptImage);
-        if (receiptReferenceNumber) {
-          formData.append('receipt_reference_number', receiptReferenceNumber);
-        }
-
-        const response = await apiClient.post('/api/payments/', formData, {
-          headers: {
-            'Content-Type': undefined,
-          },
-        });
-        backendResult = response.data;
-      } catch (err) {
-        console.warn('Backend payment submission notice:', err);
+    // Submit strictly bound to the exact CredentialRequest UUID on backend
+    if (isBackendId && receiptImage instanceof File) {
+      const formData = new FormData();
+      formData.append('request', String(requestId).trim());
+      formData.append('amount', numericAmount.toFixed(2));
+      formData.append('receipt_image', receiptImage);
+      if (receiptReferenceNumber) {
+        formData.append('receipt_reference_number', String(receiptReferenceNumber).trim());
       }
+
+      const response = await apiClient.post('/api/payments/', formData, {
+        headers: {
+          'Content-Type': undefined,
+        },
+      });
+      backendResult = response.data;
     }
 
     // Prepare complete payment proof record
     const paymentRecord = {
       id: backendResult?.id || `PAY-${Date.now()}`,
-      requestId: requestId,
-      trackingNumber: trackingNumber || requestId,
+      requestId: String(requestId),
+      trackingNumber: trackingNumber || String(requestId),
       amount: `₱${numericAmount.toFixed(2)}`,
       numericAmount,
-      receiptReferenceNumber: receiptReferenceNumber || 'Submitted at Window',
-      receiptImage: receiptDataUrl || backendResult?.receipt_image || null,
+      receiptReferenceNumber:
+        backendResult?.receipt_reference_number ||
+        receiptReferenceNumber ||
+        'Submitted at Window',
+      receiptImage: backendResult?.receipt_image || receiptDataUrl || null,
+      receiptDataUrl: receiptDataUrl || null,
       submissionType,
-      status: 'PENDING',
-      submittedAt: new Date().toISOString(),
+      status: backendResult?.status || 'PENDING',
+      submittedAt: backendResult?.uploaded_at || new Date().toISOString(),
       studentName,
       studentId,
       userId,
@@ -107,9 +108,16 @@ export const paymentsApi = {
       saveStoredPaymentProof(String(requestId), paymentRecord);
     }
 
-    // Dispatch request update event so active views re-fetch live data from API
+    // Dispatch request update event & cross-tab broadcast so Student & Staff views refetch live data
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('regquest_requests_updated'));
+      window.dispatchEvent(new CustomEvent('regquest_requests_updated', { detail: paymentRecord }));
+      if ('BroadcastChannel' in window) {
+        try {
+          const bc = new BroadcastChannel('regquest_realtime_requests');
+          bc.postMessage({ type: 'REFRESH_REQUESTS', payload: paymentRecord });
+          bc.close();
+        } catch {}
+      }
     }
 
     // Notify assigned Staff & Registrar that student has submitted proof of payment

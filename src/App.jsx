@@ -132,7 +132,7 @@ export default function App() {
                   <Route path={ROUTES.STUDENT.PROFILE} element={<StudentProfilePage />} />
                 </Route>
 
-                <Route element={<RoleRoute allowedRoles={[ROLES.STAFF, ROLES.REGISTRAR]} />}>
+                <Route element={<RoleRoute allowedRoles={[ROLES.STAFF]} />}>
                   <Route path="/staff" element={<Navigate to={ROUTES.STAFF.DASHBOARD} replace />} />
                   <Route path={ROUTES.STAFF.DASHBOARD} element={<StaffDashboard />} />
                   <Route path={ROUTES.STAFF.CALENDAR} element={<ProcessingCalendarPage />} />
@@ -151,7 +151,7 @@ export default function App() {
                   <Route path={ROUTES.ADMIN.USERS} element={<UserManagementPage />} />
                 </Route>
 
-                <Route element={<RoleRoute allowedRoles={[ROLES.REGISTRAR, ROLES.ADMIN]} />}>
+                <Route element={<RoleRoute allowedRoles={[ROLES.REGISTRAR]} />}>
                   <Route path="/registrar" element={<Navigate to={ROUTES.REGISTRAR.DASHBOARD} replace />} />
                   <Route path={ROUTES.REGISTRAR.DASHBOARD} element={<RegistrarDashboard />} />
                   <Route path={ROUTES.REGISTRAR.ANALYTICS} element={<RegistrarAnalyticsGraphsPage />} />

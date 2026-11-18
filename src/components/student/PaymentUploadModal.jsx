@@ -98,8 +98,9 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
     try {
       const trackingCode = request?.tracking_number || request?.trackingId || request?.id || '';
       const finalOrNumber = orNumberInput.trim() || (paymentOption === 'PERSONAL' ? 'Paid at USTP Cashier (FTF)' : 'Submitted at Window');
+      const targetRequestUuid = request.rawId || request.id;
       await paymentsApi.submit({
-        requestId: request.rawId || request.id,
+        requestId: targetRequestUuid,
         amount: assessedFee,
         receiptImage: receiptFile,
         receiptReferenceNumber: finalOrNumber,
@@ -142,11 +143,21 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
           : 'Face-to-Face payment confirmed! Awaiting Registrar Staff verification.'
       );
 
-      if (onSuccess) onSuccess();
+      if (onSuccess) await onSuccess();
       onClose();
     } catch (err) {
       console.error('Failed to submit proof of payment:', err);
-      toast.error('Failed to submit payment proof. Please try again.');
+      const data = err?.response?.data;
+      const errMsg =
+        data?.detail ||
+        data?.receipt_reference_number?.[0] ||
+        data?.receipt_image?.[0] ||
+        data?.amount?.[0] ||
+        data?.request?.[0] ||
+        data?.non_field_errors?.[0] ||
+        (typeof data === 'string' ? data : null) ||
+        'Failed to submit payment proof. Please try again.';
+      toast.error(errMsg);
     } finally {
       setSubmitting(false);
     }
