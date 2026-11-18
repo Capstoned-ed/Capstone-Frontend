@@ -20,6 +20,7 @@ export default function AdminDashboard() {
     staffMetrics,
     dailyVolume,
     monthlyVolume,
+    volumeSeries,
     refetch,
   } = useDashboardData();
 
@@ -254,6 +255,7 @@ export default function AdminDashboard() {
           <RequestVolumeCard
             dailyData={dailyVolume}
             monthlyData={monthlyVolume}
+            seriesList={volumeSeries}
             loading={loading}
             viewMoreRoute={ROUTES.ADMIN.ANALYTICS}
           />

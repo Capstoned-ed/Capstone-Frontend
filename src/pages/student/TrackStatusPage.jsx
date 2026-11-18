@@ -3,6 +3,8 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import requestsApi, {
   resolveRequestDocType,
   extractRequestedCopies,
+  extractDocumentItems,
+  extractTotalAmount,
   getLatestPaymentRecord,
   sortRequestsNewestFirst,
   getArchivedRequestsMap,
@@ -890,8 +892,14 @@ export default function TrackStatusPage() {
               <div className="track-info-grid">
                 <div className="track-info-item">
                   <span className="track-info-lbl">Document Requested</span>
-                  <span className="track-info-val" title={resolveRequestDocType(matchedRequest, matchedCred)}>
-                    {resolveRequestDocType(matchedRequest, matchedCred)}
+                  <span className="track-info-val" data-testid="track-document-value" title={resolveRequestDocType(matchedRequest, matchedCred)}>
+                    {(() => {
+                      const items = extractDocumentItems(matchedRequest, credentialTypes);
+                      if (items.length > 1) {
+                        return items.map((it) => it.name).join(', ');
+                      }
+                      return resolveRequestDocType(matchedRequest, matchedCred);
+                    })()}
                   </span>
                 </div>
                 <div className="track-info-item">
@@ -902,8 +910,12 @@ export default function TrackStatusPage() {
                 </div>
                 <div className="track-info-item">
                   <span className="track-info-lbl">Amount Due / Paid</span>
-                  <span className="track-info-val text-[#0B0B36]">
-                    {matchedRequest.assessed_amount || matchedRequest.amount || (matchedCred?.price ? `₱${parseFloat(matchedCred.price).toFixed(0)}` : '₱100.00')}
+                  <span className="track-info-val text-[#0B0B36]" data-testid="track-amount-value">
+                    {(() => {
+                      const totalAmt = extractTotalAmount(matchedRequest, credentialTypes);
+                      if (totalAmt > 0) return `₱${totalAmt.toFixed(2)}`;
+                      return matchedRequest.assessed_amount || matchedRequest.amount || (matchedCred?.price ? `₱${parseFloat(matchedCred.price).toFixed(2)}` : '₱100.00');
+                    })()}
                   </span>
                 </div>
                 <div className="track-info-item">
