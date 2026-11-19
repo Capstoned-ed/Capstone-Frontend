@@ -7,6 +7,7 @@ import requestsApi from '../../api/requests';
 import usersApi from '../../api/users';
 import authApi from '../../api/auth';
 import useToast from '../../hooks/useToast';
+import CompactDatePicker from '../common/CompactDatePicker';
 
 const getStatusBadge = (statusStr) => {
   const s = String(statusStr || 'Pending').toUpperCase();
@@ -54,6 +55,7 @@ export default function StudentProfileModal({ isOpen, onClose }) {
   const toast = useToast();
 
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'information' | 'password'
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [requestsList, setRequestsList] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
 
@@ -319,16 +321,67 @@ export default function StudentProfileModal({ isOpen, onClose }) {
       onClick={onClose}
     >
       <div
-        className="relative bg-[#F8F9FA] border border-slate-200/90 rounded-2xl w-full max-w-6xl shadow-2xl flex flex-col md:flex-row overflow-hidden text-slate-800 max-h-[90vh] h-[660px]"
+        className="relative bg-[#F8F9FA] border border-slate-200/90 rounded-2xl w-full max-w-6xl shadow-2xl flex flex-col md:flex-row overflow-hidden text-slate-800 h-[85vh] max-h-[660px] md:h-[660px] md:max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Left Navigation Panel */}
-        <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200/80 p-5 md:p-6 flex flex-col justify-between shrink-0">
+        {/* Mobile Header Bar with Hamburger Menu */}
+        <div className="md:hidden bg-white border-b border-slate-200/80 px-4 py-3 flex items-center justify-between shrink-0">
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen((prev) => !prev)}
+            className="inline-flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            aria-label="Toggle profile navigation"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+              {mobileNavOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+            <span className="text-sm font-bold text-[#0B0B7A]">
+              {activeTab === 'overview'
+                ? 'Overview'
+                : activeTab === 'information'
+                ? 'My Information'
+                : 'Change Password'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onClose}
+            title="Close"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Mobile Drawer Backdrop */}
+        {mobileNavOpen && (
+          <div
+            className="md:hidden absolute inset-0 z-20 bg-black/40 backdrop-blur-[1px]"
+            onClick={() => setMobileNavOpen(false)}
+          />
+        )}
+
+        {/* Left Navigation Panel (Slide-out Drawer on Mobile, Fixed Sidebar on Desktop) */}
+        <div
+          className={`absolute md:static inset-y-0 left-0 z-30 w-64 bg-white border-r border-slate-200/80 p-5 md:p-6 flex flex-col justify-between shrink-0 shadow-2xl md:shadow-none transform transition-transform duration-300 ease-in-out ${
+            mobileNavOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          }`}
+        >
           <div className="space-y-2">
             {/* Overview Tab Button */}
             <button
               type="button"
-              onClick={() => setActiveTab('overview')}
+              onClick={() => {
+                setActiveTab('overview');
+                setMobileNavOpen(false);
+              }}
               className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl transition-colors text-left cursor-pointer ${
                 activeTab === 'overview'
                   ? 'text-[#0B0B7A] bg-indigo-50/70 font-bold'
@@ -345,7 +398,10 @@ export default function StudentProfileModal({ isOpen, onClose }) {
             {/* My Information Tab Button */}
             <button
               type="button"
-              onClick={() => setActiveTab('information')}
+              onClick={() => {
+                setActiveTab('information');
+                setMobileNavOpen(false);
+              }}
               className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl transition-colors text-left cursor-pointer ${
                 activeTab === 'information'
                   ? 'text-[#0B0B7A] bg-indigo-50/70 font-bold'
@@ -362,7 +418,10 @@ export default function StudentProfileModal({ isOpen, onClose }) {
             {/* Change Password Tab Button */}
             <button
               type="button"
-              onClick={() => setActiveTab('password')}
+              onClick={() => {
+                setActiveTab('password');
+                setMobileNavOpen(false);
+              }}
               className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl transition-colors text-left cursor-pointer ${
                 activeTab === 'password'
                   ? 'text-[#0B0B7A] bg-indigo-50/70 font-bold'
@@ -395,12 +454,12 @@ export default function StudentProfileModal({ isOpen, onClose }) {
 
         {/* Right Content Area */}
         <div className="flex-1 p-6 sm:p-8 md:p-9 flex flex-col justify-start relative overflow-y-auto">
-          {/* Close Button Top Right */}
+          {/* Close Button Top Right (Desktop) */}
           <button
             type="button"
             onClick={onClose}
             title="Close"
-            className="absolute top-5 right-5 sm:top-6 sm:right-6 p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition-colors cursor-pointer"
+            className="hidden md:inline-flex absolute top-5 right-5 sm:top-6 sm:right-6 p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition-colors cursor-pointer"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -616,12 +675,11 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                       <label className="block text-sm font-semibold text-slate-800 mb-1.5">
                         Birthdate
                       </label>
-                      <input
-                        type="date"
+                      <CompactDatePicker
                         value={editableBirthDate}
                         max={new Date().toISOString().split('T')[0]}
-                        onChange={(e) => setEditableBirthDate(e.target.value)}
-                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm"
+                        onChange={setEditableBirthDate}
+                        className="bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm"
                       />
                     </div>
                   </div>

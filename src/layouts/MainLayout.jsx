@@ -25,6 +25,10 @@ export default function MainLayout({ children }) {
     localStorage.setItem('regquest_sidebar_collapsed', JSON.stringify(isCollapsed));
   }, [isCollapsed]);
 
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
   const toggleSidebar = () => {
     setIsCollapsed((prev) => !prev);
   };
@@ -66,6 +70,7 @@ export default function MainLayout({ children }) {
             <Sidebar
               isCollapsed={false}
               onToggle={() => setMobileMenuOpen(false)}
+              onNavigate={() => setMobileMenuOpen(false)}
             />
           </div>
         </div>

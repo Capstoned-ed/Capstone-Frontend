@@ -3,6 +3,8 @@ import { ROLES } from '../../constants/roles';
 import usersApi from '../../api/users';
 import useToast from '../../hooks/useToast';
 import { useAuth } from '../../hooks/useAuth';
+import CustomSelectDropdown from '../common/CustomSelectDropdown';
+import CompactDatePicker from '../common/CompactDatePicker';
 
 const getNameError = (val, label = 'Name') => {
   if (!val) return '';
@@ -288,13 +290,11 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
           <label className="block text-xs font-semibold text-slate-700 mb-1">
             Birthdate
           </label>
-          <input
-            type="date"
-            name="birth_date"
+          <CompactDatePicker
             value={formData.birth_date}
             max={new Date().toISOString().split('T')[0]}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            onChange={(val) => setFormData((prev) => ({ ...prev, birth_date: val }))}
+            className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
           />
         </div>
 
@@ -302,17 +302,17 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
           <label className="block text-xs font-semibold text-slate-700 mb-1">
             Select Role Assignment <span className="text-rose-500">*</span>
           </label>
-          <select
-            name="role"
+          <CustomSelectDropdown
             disabled={isSelf}
             value={formData.role}
-            onChange={handleChange}
-            className={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${isSelf ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
-          >
-            <option value={ROLES.REGISTRAR}>Registrar</option>
-            <option value={ROLES.STAFF}>Staff</option>
-            <option value={ROLES.ADMIN}>Admin</option>
-          </select>
+            onChange={(val) => setFormData((prev) => ({ ...prev, role: val }))}
+            buttonClassName={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${isSelf ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
+            options={[
+              { value: ROLES.REGISTRAR, label: 'Registrar' },
+              { value: ROLES.STAFF, label: 'Staff' },
+              { value: ROLES.ADMIN, label: 'Admin' },
+            ]}
+          />
           <p className="text-[11px] text-slate-500 mt-1">
             {formData.role === ROLES.REGISTRAR
               ? 'Review and approve/reject credential requests'

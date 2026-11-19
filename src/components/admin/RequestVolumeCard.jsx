@@ -116,15 +116,15 @@ export default function RequestVolumeCard({
   const barWidth = isMonthly ? 40 : 64;
 
   return (
-    <div className="bg-white rounded-2xl p-6 sm:p-7 border border-slate-200/80 shadow-xs">
+    <div className="bg-white rounded-2xl p-4 sm:p-7 border border-slate-200/80 shadow-xs">
       {/* Header: Title & Daily/Monthly Toggle */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-        <h3 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3 sm:mb-5">
+        <h3 className="text-[15px] sm:text-lg font-bold text-slate-900 tracking-tight">
           Request Volume
         </h3>
 
         {/* Toggle buttons */}
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={() => setActivePeriod('daily')}
@@ -151,7 +151,7 @@ export default function RequestVolumeCard({
       </div>
 
       {/* Legend Row (only credentials with requests in current period) */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-slate-600 mb-6">
+      <div className="flex flex-wrap items-center gap-x-3.5 sm:gap-x-5 gap-y-1.5 text-[11px] sm:text-xs font-medium text-slate-600 mb-4 sm:mb-6">
         {activeSeries.map((series) => (
           <div key={series.key} className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: series.color }} />
@@ -176,8 +176,7 @@ export default function RequestVolumeCard({
         <div className="w-full overflow-x-auto pb-2">
           <svg
             viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-            className="w-full h-auto min-w-[620px] select-none"
-            style={{ maxHeight: '440px', minHeight: '330px' }}
+            className="w-full h-auto min-w-[540px] sm:min-w-[620px] min-h-[210px] sm:min-h-[330px] max-h-[440px] select-none"
           >
             {/* Horizontal Grid lines and Y-axis labels */}
             {yTicks.map((tickVal, i) => {
