@@ -20,14 +20,57 @@ export default function PrintRequestFormModal({
 }) {
   const { user } = useAuth();
   const formRef = useRef(null);
+  const previewContainerRef = useRef(null);
   const downloadingRef = useRef(false);
   const [downloading, setDownloading] = useState(false);
+  const [previewScale, setPreviewScale] = useState(1);
+  const [docHeight, setDocHeight] = useState(1056);
 
   const trackingCode =
     requestData?.tracking_number ||
     requestData?.trackingId ||
     requestData?.id ||
     'REQ-USTP';
+
+  // Auto-scale the 8.5in paper form to fit mobile/narrow viewports cleanly
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const updateScale = () => {
+      const container = previewContainerRef.current;
+      const docEl = formRef.current;
+      if (!container) return;
+
+      const horizontalPad = window.innerWidth < 640 ? 16 : 48;
+      const availableWidth = Math.max(200, container.clientWidth - horizontalPad);
+      const paperWidth = 816; // 8.5in at 96 DPI
+      const nextScale = availableWidth < paperWidth ? Math.max(0.28, availableWidth / paperWidth) : 1;
+
+      setPreviewScale(nextScale);
+      if (docEl && docEl.offsetHeight) {
+        setDocHeight(docEl.offsetHeight);
+      }
+    };
+
+    updateScale();
+    const rafId = requestAnimationFrame(updateScale);
+
+    let observer;
+    if (typeof ResizeObserver !== 'undefined' && previewContainerRef.current) {
+      observer = new ResizeObserver(updateScale);
+      observer.observe(previewContainerRef.current);
+      if (formRef.current) {
+        observer.observe(formRef.current);
+      }
+    }
+    window.addEventListener('resize', updateScale);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      if (observer) observer.disconnect();
+      window.removeEventListener('resize', updateScale);
+    };
+  }, [isOpen, requestData]);
 
   // Handle ESC key to close modal
   useEffect(() => {
@@ -110,6 +153,8 @@ export default function PrintRequestFormModal({
 
   if (!isOpen) return null;
 
+  const activeScale = downloading ? 1 : previewScale;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/75 backdrop-blur-xs"
@@ -120,25 +165,25 @@ export default function PrintRequestFormModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Toolbar (Matching Student Page Colors & Controls) */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-white/20 bg-[#0B0B36] text-white shrink-0 print:hidden">
-          <div className="flex items-center gap-3">
-            <h3 className="text-sm font-bold m-0 text-white flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-2.5 sm:py-3 border-b border-white/20 bg-[#0B0B36] text-white shrink-0 print:hidden">
+          <div className="flex items-center gap-2 min-w-0">
+            <h3 className="text-xs sm:text-sm font-bold m-0 text-white flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span>Official Request Form Preview</span>
-              <span className="font-mono text-xs font-semibold bg-white/20 px-2 py-0.5 rounded border border-white/30 text-amber-200">
+              <span className="font-mono text-[11px] sm:text-xs font-semibold bg-white/20 px-2 py-0.5 rounded border border-white/30 text-amber-200">
                 {trackingCode}
               </span>
             </h3>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 ml-auto">
             <button
               type="button"
               onClick={handleDownloadPdf}
               disabled={downloading}
-              className="px-3.5 py-1.5 bg-[#fbbf24] hover:bg-[#f59e0b] text-[#0B0B36] font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+              className="px-2.5 sm:px-3.5 py-1.5 bg-[#fbbf24] hover:bg-[#f59e0b] text-[#0B0B36] font-bold text-[11px] sm:text-xs rounded-lg transition-all flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50 whitespace-nowrap"
               title="Download official PDF (Long Bond Paper)"
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
               <span>{downloading ? 'Downloading...' : 'Download Form (PDF)'}</span>
@@ -147,10 +192,10 @@ export default function PrintRequestFormModal({
             <button
               type="button"
               onClick={handlePrint}
-              className="px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white font-bold text-xs rounded-lg border border-white/30 transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-2.5 sm:px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white font-bold text-[11px] sm:text-xs rounded-lg border border-white/30 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
               title="Print directly"
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
               </svg>
               <span>Print</span>
@@ -170,12 +215,42 @@ export default function PrintRequestFormModal({
         </div>
 
         {/* Scrollable Document Container (renders identical PDF reader workspace view) */}
-        <div className="p-3 sm:p-6 overflow-y-auto flex-1 flex justify-center bg-[#525659] print:p-0 print:bg-white print:overflow-visible">
-          <USTPRequestFormDocument
-            ref={formRef}
-            requestData={requestData}
-            user={user}
-          />
+        <div
+          ref={previewContainerRef}
+          className="p-2 sm:p-6 overflow-y-auto overflow-x-hidden flex-1 flex justify-center items-start bg-[#525659] print:p-0 print:bg-white print:overflow-visible"
+        >
+          <div
+            className="print:!w-auto print:!h-auto"
+            style={
+              activeScale < 1
+                ? {
+                    width: `${Math.round(816 * activeScale)}px`,
+                    height: `${Math.round(docHeight * activeScale)}px`,
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                  }
+                : undefined
+            }
+          >
+            <div
+              className="print:!transform-none print:!w-auto"
+              style={
+                activeScale < 1
+                  ? {
+                      width: '816px',
+                      transform: `scale(${activeScale})`,
+                      transformOrigin: 'top left',
+                    }
+                  : undefined
+              }
+            >
+              <USTPRequestFormDocument
+                ref={formRef}
+                requestData={requestData}
+                user={user}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -656,14 +656,14 @@ export default function TrackStatusPage() {
         {/* Submitted Requests Card */}
         {studentRequests.length > 0 && (
           <div className="track-selector-card">
-            <div className="track-selector-card-header">
-              <div className="flex items-center gap-2.5">
+            <div className="track-selector-card-header gap-3 flex-wrap sm:flex-nowrap">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
                 <div className="w-8 h-8 rounded-lg bg-[#0B0B36]/10 text-[#0B0B36] flex items-center justify-center shrink-0">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h3 className="text-sm font-bold text-slate-800 leading-tight">
                     {activeQueueTab === 'history' ? 'Completed & Claimed Requests History' : 'Select a Request to Track'}
                   </h3>
@@ -678,7 +678,7 @@ export default function TrackStatusPage() {
                 type="button"
                 onClick={() => fetchData(true)}
                 disabled={refreshing}
-                className="track-copy-btn"
+                className="track-copy-btn shrink-0 whitespace-nowrap"
                 title="Refresh live status from registrar"
               >
                 {refreshing ? 'Refreshing...' : '🔄 Refresh'}

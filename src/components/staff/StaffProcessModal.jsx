@@ -3,6 +3,7 @@ import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import { getStoredPaymentProof } from '../../api/payments';
 import useToast from '../../hooks/useToast';
 import PrintRequestFormModal from '../student/PrintRequestFormModal';
+import CustomSelectDropdown from '../common/CustomSelectDropdown';
 
 export default function StaffProcessModal({
   selectedRequest,
@@ -468,17 +469,12 @@ export default function StaffProcessModal({
                     <label className="block text-xs font-bold text-slate-700 mb-1">
                       Request Status
                     </label>
-                    <select
+                    <CustomSelectDropdown
                       value={localStatus || newStatus || 'For Processing'}
-                      onChange={(e) => handleManualStatusChange(e.target.value)}
-                      className="staff-select-input"
-                    >
-                      {statusOptions.map((st) => (
-                        <option key={st} value={st}>
-                          {st}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={handleManualStatusChange}
+                      buttonClassName="staff-select-input"
+                      options={statusOptions.map((st) => ({ value: st, label: st }))}
+                    />
                   </div>
 
                   <div>

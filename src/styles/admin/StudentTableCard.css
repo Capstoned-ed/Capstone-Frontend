@@ -93,12 +93,14 @@
   font-size: 0.875rem;
   font-weight: 700;
   color: #0f172a;
+  white-space: nowrap;
 }
 
 .student-table-cell {
   padding: 0.875rem 0.875rem;
   font-size: 0.8125rem;
   color: #1e293b;
+  white-space: nowrap;
 }
 
 .student-table-cell-email {
@@ -106,7 +108,7 @@
   font-size: 0.8125rem;
   color: #64748b;
   font-weight: 400;
-  word-break: break-word;
+  white-space: nowrap;
 }
 
 .btn-view-update {
@@ -147,4 +149,46 @@
 
 .table-see-more-btn {
   @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold text-[#14532d] bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-200 transition-all cursor-pointer;
+}
+
+@media (max-width: 639px) {
+  .student-table-header-bar {
+    padding: 0.875rem 1rem;
+    flex-wrap: wrap;
+    gap: 0.625rem;
+  }
+
+  .student-table-icon-wrap {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .student-table-title {
+    font-size: 0.9375rem;
+  }
+
+  .student-table-desc {
+    font-size: 0.6875rem;
+  }
+
+  .student-table-th {
+    padding: 0.5rem 0.625rem;
+    font-size: 0.6875rem;
+  }
+
+  .student-table-cell-name {
+    padding: 0.5rem 0.625rem;
+    font-size: 0.75rem;
+  }
+
+  .student-table-cell,
+  .student-table-cell-email {
+    padding: 0.5rem 0.625rem;
+    font-size: 0.6875rem;
+  }
+
+  .btn-view-update {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.6875rem;
+  }
 }

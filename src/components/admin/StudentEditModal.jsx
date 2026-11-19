@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import usersApi from '../../api/users';
 import useToast from '../../hooks/useToast';
 import CourseSelectDropdown, { USTP_COURSE_CODE_MAP } from './CourseSelectDropdown';
+import CustomSelectDropdown from '../common/CustomSelectDropdown';
+import CompactDatePicker from '../common/CompactDatePicker';
 
 function StudentEditForm({ student, onClose, onStudentUpdated }) {
   const toast = useToast();
@@ -113,13 +115,13 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
       <div
-        className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full overflow-visible border border-slate-200 transform transition-all"
+        className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto border border-slate-200 transform transition-all"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="bg-[#E6F8EE] border-b border-emerald-100 px-6 py-4 rounded-t-2xl flex items-center justify-between">
+        <div className="bg-[#E6F8EE] border-b border-emerald-100 px-4 sm:px-6 py-3.5 sm:py-4 rounded-t-2xl flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white text-emerald-600 flex items-center justify-center shadow-xs">
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -145,9 +147,9 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
         </div>
 
         {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
           {/* Row 1: First Name & Last Name */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 First Name
@@ -175,7 +177,7 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
           </div>
 
           {/* Row 2: Student ID & Active Email */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Student ID
@@ -205,18 +207,16 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
           </div>
 
           {/* Row 3: Birthdate & Contact Number */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Birthdate
               </label>
-              <input
-                type="date"
-                name="birth_date"
+              <CompactDatePicker
                 value={formData.birth_date}
                 max={new Date().toISOString().split('T')[0]}
-                onChange={handleChange}
-                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                onChange={(val) => setFormData((prev) => ({ ...prev, birth_date: val }))}
+                className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
               />
             </div>
             <div>
@@ -243,7 +243,7 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
           </div>
 
           {/* Row 4: Course & Year Level */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Course
@@ -261,19 +261,19 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Year Level
               </label>
-              <select
-                name="year_level"
+              <CustomSelectDropdown
                 value={formData.year_level}
-                onChange={handleChange}
-                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-              >
-                <option value="1st year">1st year</option>
-                <option value="2nd year">2nd year</option>
-                <option value="3rd year">3rd year</option>
-                <option value="4th year">4th year</option>
-                <option value="5th year">5th year</option>
-                <option value="Alumnus">Alumnus</option>
-              </select>
+                onChange={(val) => setFormData((prev) => ({ ...prev, year_level: val }))}
+                buttonClassName="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                options={[
+                  { value: '1st year', label: '1st year' },
+                  { value: '2nd year', label: '2nd year' },
+                  { value: '3rd year', label: '3rd year' },
+                  { value: '4th year', label: '4th year' },
+                  { value: '5th year', label: '5th year' },
+                  { value: 'Alumnus', label: 'Alumnus' },
+                ]}
+              />
             </div>
           </div>
 
