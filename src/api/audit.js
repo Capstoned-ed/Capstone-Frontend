@@ -13,6 +13,19 @@ export const auditApi = {
       return [];
     }
   },
+
+  /**
+   * Fetch system-wide audit log entries (Admin only).
+   */
+  getAllLogs: async (params = {}) => {
+    try {
+      const response = await apiClient.get('/api/audit/', { params });
+      return Array.isArray(response.data) ? response.data : (response.data?.results || []);
+    } catch (err) {
+      console.warn('Failed to fetch system audit logs:', err);
+      return [];
+    }
+  },
 };
 
 export default auditApi;

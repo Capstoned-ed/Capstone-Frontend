@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import { authApi } from '../api/auth';
 import usersApi from '../api/users';
@@ -14,6 +14,7 @@ function normalizeRole(roleVal) {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const lastFocusRefreshRef = useRef(0);
 
   const parseToken = useCallback((token) => {
     try {
@@ -117,23 +118,87 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  const logout = useCallback(async () => {
+    const refreshToken = localStorage.getItem('refresh_token');
+    try {
+      if (refreshToken) {
+        await authApi.logout(refreshToken);
+      }
+    } catch {
+    } finally {
+      try {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+      } catch (e) {
+        console.warn('Failed to clear auth tokens on logout:', e);
+      }
+      try {
+        sessionStorage.clear();
+      } catch (e) {
+        console.warn('Failed to clear sessionStorage on logout:', e);
+      }
+      setUser(null);
+    }
+  }, []);
+
+  const hydrateWithRefresh = useCallback(async (refreshToken) => {
+    const data = await authApi.refresh(refreshToken);
+    localStorage.setItem('access_token', data.access);
+    if (data.refresh) {
+      localStorage.setItem('refresh_token', data.refresh);
+    }
+    const freshUser = parseToken(data.access);
+    try {
+      const me = await usersApi.getMe();
+      if (me?.is_active === false) {
+        await logout();
+        return null;
+      }
+      return mergeWithMe(freshUser, me);
+    } catch {
+      return freshUser;
+    }
+  }, [parseToken, mergeWithMe, logout]);
+
+  const refreshProfile = useCallback(async () => {
+    const accessToken = localStorage.getItem('access_token');
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (!accessToken && !refreshToken) return null;
+
+    try {
+      const me = await usersApi.getMe();
+      if (!me) return null;
+
+      if (me.is_active === false) {
+        await logout();
+        return null;
+      }
+
+      setUser((prev) => {
+        if (!prev) return prev;
+        return mergeWithMe(prev, me);
+      });
+      return me;
+    } catch (err) {
+      if (err?.response?.status === 401 && refreshToken) {
+        try {
+          const freshUser = await hydrateWithRefresh(refreshToken);
+          if (freshUser) {
+            setUser(freshUser);
+            return freshUser;
+          }
+        } catch {
+          await logout();
+        }
+      } else if (err?.response?.status === 401 || err?.response?.status === 403) {
+        await logout();
+      }
+      return null;
+    }
+  }, [logout, mergeWithMe, hydrateWithRefresh]);
+
   useEffect(() => {
     let active = true;
-
-    const hydrateWithRefresh = async (refreshToken) => {
-      const data = await authApi.refresh(refreshToken);
-      localStorage.setItem('access_token', data.access);
-      if (data.refresh) {
-        localStorage.setItem('refresh_token', data.refresh);
-      }
-      const freshUser = parseToken(data.access);
-      try {
-        const me = await usersApi.getMe();
-        return mergeWithMe(freshUser, me);
-      } catch {
-        return freshUser;
-      }
-    };
 
     const initializeAuth = async () => {
       const accessToken = localStorage.getItem('access_token');
@@ -173,6 +238,10 @@ export function AuthProvider({ children }) {
           let hydratedUser = decoded;
           try {
             const me = await usersApi.getMe();
+            if (me?.is_active === false) {
+              await logout();
+              return;
+            }
             hydratedUser = mergeWithMe(decoded, me);
           } catch (meErr) {
             if (meErr?.response?.status === 401 && refreshToken) {
@@ -212,7 +281,31 @@ export function AuthProvider({ children }) {
     return () => {
       active = false;
     };
-  }, [parseToken, mergeWithMe]);
+  }, [parseToken, mergeWithMe, hydrateWithRefresh, logout]);
+
+  // Real-time role/profile sync on window focus and tab visibility change
+  useEffect(() => {
+    const handleFocus = () => {
+      const now = Date.now();
+      if (now - lastFocusRefreshRef.current > 4000) {
+        lastFocusRefreshRef.current = now;
+        refreshProfile();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        handleFocus();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [refreshProfile]);
 
   const login = useCallback(async (username, password) => {
     const data = await authApi.login(username, password);
@@ -249,29 +342,6 @@ export function AuthProvider({ children }) {
     return { user: decoded, access, refresh };
   }, [parseToken, mergeWithMe]);
 
-  const logout = useCallback(async () => {
-    const refreshToken = localStorage.getItem('refresh_token');
-    try {
-      if (refreshToken) {
-        await authApi.logout(refreshToken);
-      }
-    } catch {
-    } finally {
-      try {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-      } catch (e) {
-        console.warn('Failed to clear auth tokens on logout:', e);
-      }
-      try {
-        sessionStorage.clear();
-      } catch (e) {
-        console.warn('Failed to clear sessionStorage on logout:', e);
-      }
-      setUser(null);
-    }
-  }, []);
-
   const value = useMemo(() => ({
     user,
     role: user?.role || null,
@@ -280,9 +350,10 @@ export function AuthProvider({ children }) {
     loading,
     login,
     logout,
+    refreshProfile,
     isStaffOrRegistrar: user?.role === ROLES.STAFF || user?.role === ROLES.REGISTRAR,
     isAdminOrRegistrar: user?.role === ROLES.ADMIN || user?.role === ROLES.REGISTRAR,
-  }), [user, loading, login, logout]);
+  }), [user, loading, login, logout, refreshProfile]);
 
   return (
     <AuthContext.Provider value={value}>

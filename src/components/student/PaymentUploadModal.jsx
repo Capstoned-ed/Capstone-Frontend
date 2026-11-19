@@ -4,6 +4,7 @@ import { saveStoredNotification } from '../../api/notifications';
 import requestsApi, { getStaffAssignments, extractTotalAmount, resolveRequestDocType } from '../../api/requests';
 import useToast from '../../hooks/useToast';
 import { useAuth } from '../../hooks/useAuth';
+import { extractApiErrorMessage } from '../../utils/errorUtils';
 
 export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess, defaultOption = 'ONLINE' }) {
   const { user } = useAuth();
@@ -148,16 +149,7 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
       onClose();
     } catch (err) {
       console.error('Failed to submit proof of payment:', err);
-      const data = err?.response?.data;
-      const errMsg =
-        data?.detail ||
-        data?.receipt_reference_number?.[0] ||
-        data?.receipt_image?.[0] ||
-        data?.amount?.[0] ||
-        data?.request?.[0] ||
-        data?.non_field_errors?.[0] ||
-        (typeof data === 'string' ? data : null) ||
-        'Failed to submit payment proof. Please try again.';
+      const errMsg = extractApiErrorMessage(err, 'Failed to submit payment proof. Please try again.');
       toast.error(errMsg);
     } finally {
       setSubmitting(false);
