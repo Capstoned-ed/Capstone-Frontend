@@ -25,8 +25,8 @@ export default function UserDeleteDialog({ user, isOpen, onClose, onUserDeactiva
   const displayName = user.first_name && user.last_name
     ? `${user.first_name} ${user.last_name}`
     : user.first_name
-    ? user.first_name
-    : user.username;
+      ? user.first_name
+      : user.username;
 
   const handleDeactivate = async () => {
     setLoading(true);

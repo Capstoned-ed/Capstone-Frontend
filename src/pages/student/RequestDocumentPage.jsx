@@ -13,6 +13,7 @@ import settingsApi from '../../api/settings';
 import clearancesApi, { saveClearanceAttachment } from '../../api/clearances';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
+import { extractApiErrorMessage } from '../../utils/errorUtils';
 import ustpLogo from '../../assets/USTP Logo against Light Background 1.png';
 import '../../styles/student/RequestDocumentPage.css';
 
@@ -445,7 +446,7 @@ export default function RequestDocumentPage() {
     let ignore = false;
     async function loadCredTypes() {
       try {
-        const types = await credentialTypesApi.list();
+        const types = await credentialTypesApi.list({ include_inactive: true });
         if (!ignore && Array.isArray(types) && types.length > 0) {
           setCredentialTypes(types);
         }
@@ -458,6 +459,42 @@ export default function RequestDocumentPage() {
       ignore = true;
     };
   }, []);
+
+  const getCredentialTypeRecord = (docName, typesList = credentialTypes) => {
+    if (!docName || !Array.isArray(typesList) || typesList.length === 0) return null;
+    const lower = docName.toLowerCase();
+    const typeId = resolveCredentialTypeId(docName, typesList);
+    return (
+      typesList.find((t) => String(t.id) === String(typeId)) ||
+      typesList.find((t) => t.name && t.name.toLowerCase() === lower) ||
+      typesList.find((t) => t.code && t.code.toLowerCase() === lower) ||
+      null
+    );
+  };
+
+  const isCredentialActive = (docName, typesList = credentialTypes) => {
+    const record = getCredentialTypeRecord(docName, typesList);
+    if (!record) return true;
+    return record.is_active !== false;
+  };
+
+  const unavailableSelectedDocs = useMemo(() => {
+    return selectedDocs.filter((docName) => !isCredentialActive(docName, credentialTypes));
+  }, [selectedDocs, credentialTypes]);
+
+  const handleRemoveDocument = (docName) => {
+    if (!docName) return;
+    const lower = docName.toLowerCase();
+    setSelectedDocs((prev) =>
+      prev.filter((d) => d !== docName && d.toLowerCase() !== lower)
+    );
+    setDocCopies((prev) => {
+      const next = { ...prev };
+      delete next[docName];
+      return next;
+    });
+    toast.info(`Removed ${docName} from request.`);
+  };
 
   useEffect(() => {
     if (selectedDocs.length > 0 && credentialTypes.length > 0) {
@@ -934,6 +971,15 @@ export default function RequestDocumentPage() {
       return;
     }
 
+    if (unavailableSelectedDocs.length > 0) {
+      toast.error(
+        `The following document(s) are currently unavailable: ${unavailableSelectedDocs.join(', ')}. Please uncheck or remove them before proceeding.`
+      );
+      const el = document.getElementById('ustp-part-2-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
     if (selectedPurposes.length === 0 && !purposeInput.trim()) {
       toast.warning('Please check the purpose of your request in Part 3 before proceeding.');
       return;
@@ -958,6 +1004,14 @@ export default function RequestDocumentPage() {
 
     if (selectedDocs.length === 0) {
       toast.warning('Please select at least one document to request.');
+      setCurrentStep(1);
+      return;
+    }
+
+    if (unavailableSelectedDocs.length > 0) {
+      toast.error(
+        `Cannot submit: The following document(s) are currently unavailable: ${unavailableSelectedDocs.join(', ')}. Please remove them first.`
+      );
       setCurrentStep(1);
       return;
     }
@@ -1075,17 +1129,7 @@ export default function RequestDocumentPage() {
         } catch (apiErr) {
           console.warn('Backend create request returned validation response:', apiErr);
           if (apiErr.response) {
-            let errorMsg = 'Failed to submit request to server.';
-            const errData = apiErr.response.data;
-            if (typeof errData === 'string') {
-              errorMsg = errData;
-            } else if (Array.isArray(errData)) {
-              errorMsg = errData.join(' ');
-            } else if (typeof errData === 'object' && errData !== null) {
-              errorMsg = Object.entries(errData)
-                .map(([k, v]) => `${k !== 'detail' && k !== 'non_field_errors' ? `${k}: ` : ''}${Array.isArray(v) ? v.join(' ') : v}`)
-                .join(' ');
-            }
+            const errorMsg = extractApiErrorMessage(apiErr, 'Failed to submit request to server.');
             toast.error(errorMsg);
             setSubmitting(false);
             return;
@@ -1575,15 +1619,24 @@ export default function RequestDocumentPage() {
                       const isSelected = selectedDocs.some(
                         (d) => d === 'Evaluation (P50)' || d.toLowerCase().includes('evaluation') || d.toLowerCase() === 'eval'
                       );
+                      const isActive = isCredentialActive('Evaluation');
                       return (
-                        <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
+                        <label className={`ustp-doc-label ${isSelected ? 'selected' : ''} ${!isActive ? 'opacity-60 cursor-not-allowed bg-slate-50' : ''}`}>
                           <input
                             type="checkbox"
                             checked={isSelected}
+                            disabled={!isActive}
                             onChange={handleToggleEvaluation}
                             className="ustp-checkbox-input"
                           />
-                          <span>Evaluation (P{getLiveCredentialPrice('EVAL', 50)})</span>
+                          <span className="flex items-center gap-1.5 flex-wrap">
+                            <span>Evaluation (P{getLiveCredentialPrice('EVAL', 50)})</span>
+                            {!isActive && (
+                              <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase rounded bg-rose-100 text-rose-700 border border-rose-200">
+                                Unavailable
+                              </span>
+                            )}
+                          </span>
                         </label>
                       );
                     })()}
@@ -1593,15 +1646,24 @@ export default function RequestDocumentPage() {
                       const isSelected = selectedDocs.some(
                         (d) => d === 'Honorable Dismissal (P100)' || d.toLowerCase().includes('honorable') || d.toLowerCase().includes('dismissal') || d.toLowerCase() === 'hd'
                       );
+                      const isActive = isCredentialActive('Honorable Dismissal');
                       return (
-                        <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
+                        <label className={`ustp-doc-label ${isSelected ? 'selected' : ''} ${!isActive ? 'opacity-60 cursor-not-allowed bg-slate-50' : ''}`}>
                           <input
                             type="checkbox"
                             checked={isSelected}
+                            disabled={!isActive}
                             onChange={handleToggleHonorableDismissal}
                             className="ustp-checkbox-input"
                           />
-                          <span>Honorable Dismissal (P{getLiveCredentialPrice('HD', 100)})</span>
+                          <span className="flex items-center gap-1.5 flex-wrap">
+                            <span>Honorable Dismissal (P{getLiveCredentialPrice('HD', 100)})</span>
+                            {!isActive && (
+                              <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase rounded bg-rose-100 text-rose-700 border border-rose-200">
+                                Unavailable
+                              </span>
+                            )}
+                          </span>
                         </label>
                       );
                     })()}
@@ -1611,15 +1673,24 @@ export default function RequestDocumentPage() {
                       const isSelected = selectedDocs.some(
                         (d) => d.toLowerCase().includes('transcript') || d.toLowerCase().includes('tor')
                       );
+                      const isActive = isCredentialActive('Transcript of Records');
                       return (
-                        <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
+                        <label className={`ustp-doc-label ${isSelected ? 'selected' : ''} ${!isActive ? 'opacity-60 cursor-not-allowed bg-slate-50' : ''}`}>
                           <input
                             type="checkbox"
                             checked={isSelected}
+                            disabled={!isActive}
                             onChange={handleToggleTranscript}
                             className="ustp-checkbox-input"
                           />
-                          <span>Transcript of Records (P{getLiveCredentialPrice('TOR', 125)}/pg)</span>
+                          <span className="flex items-center gap-1.5 flex-wrap">
+                            <span>Transcript of Records (P{getLiveCredentialPrice('TOR', 125)}/pg)</span>
+                            {!isActive && (
+                              <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase rounded bg-rose-100 text-rose-700 border border-rose-200">
+                                Unavailable
+                              </span>
+                            )}
+                          </span>
                         </label>
                       );
                     })()}
@@ -1629,15 +1700,24 @@ export default function RequestDocumentPage() {
                       const isSelected = selectedDocs.some(
                         (d) => d.toLowerCase().includes('authentication') || d.toLowerCase().includes('auth')
                       );
+                      const isActive = isCredentialActive('Authentication');
                       return (
-                        <label className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}>
+                        <label className={`ustp-doc-label ${isSelected ? 'selected' : ''} ${!isActive ? 'opacity-60 cursor-not-allowed bg-slate-50' : ''}`}>
                           <input
                             type="checkbox"
                             checked={isSelected}
+                            disabled={!isActive}
                             onChange={handleToggleAuthentication}
                             className="ustp-checkbox-input"
                           />
-                          <span>Authentication (P{getLiveCredentialPrice('AUTH', 5)}/pg)</span>
+                          <span className="flex items-center gap-1.5 flex-wrap">
+                            <span>Authentication (P{getLiveCredentialPrice('AUTH', 5)}/pg)</span>
+                            {!isActive && (
+                              <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase rounded bg-rose-100 text-rose-700 border border-rose-200">
+                                Unavailable
+                              </span>
+                            )}
+                          </span>
                         </label>
                       );
                     })()}
@@ -1678,19 +1758,26 @@ export default function RequestDocumentPage() {
                         const isSelected = selectedDocs.some(
                           (d) => d === ctype.name || d.toLowerCase() === ctype.name.toLowerCase()
                         );
+                        const isActive = ctype.is_active !== false;
                         return (
                           <label
                             key={ctype.id}
-                            className={`ustp-doc-label ${isSelected ? 'selected' : ''}`}
+                            className={`ustp-doc-label ${isSelected ? 'selected' : ''} ${!isActive ? 'opacity-60 cursor-not-allowed bg-slate-50' : ''}`}
                           >
                             <input
                               type="checkbox"
                               checked={isSelected}
+                              disabled={!isActive}
                               onChange={() => handleToggleDocument(ctype.name)}
                               className="ustp-checkbox-input"
                             />
-                            <span className="ustp-dynamic-cred-name">
-                              {ctype.name} (P{parseFloat(ctype.price).toFixed(0)})
+                            <span className="ustp-dynamic-cred-name flex items-center gap-1.5 flex-wrap">
+                              <span>{ctype.name} (P{parseFloat(ctype.price).toFixed(0)})</span>
+                              {!isActive && (
+                                <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase rounded bg-rose-100 text-rose-700 border border-rose-200">
+                                  Unavailable
+                                </span>
+                              )}
                             </span>
                           </label>
                         );
@@ -1715,25 +1802,67 @@ export default function RequestDocumentPage() {
                         { label: 'Subjects w/ grades', key: 'Subjects w/ grades' },
                       ].map((cert) => {
                         const isSubSelected = isCertSubSelected(cert.label);
+                        const isActive = isCredentialActive(cert.label);
 
                         return (
                           <label
                             key={cert.key}
-                            className={`ustp-cert-subitem ${isSubSelected ? 'selected' : ''}`}
+                            className={`ustp-cert-subitem ${isSubSelected ? 'selected' : ''} ${!isActive ? 'opacity-60 cursor-not-allowed bg-slate-50' : ''}`}
                           >
                             <input
                               type="checkbox"
                               checked={isSubSelected}
+                              disabled={!isActive}
                               onChange={() => handleToggleCertSub(cert.label)}
                               className="ustp-checkbox-input"
                             />
-                            <span>{cert.label}</span>
+                            <span className="flex items-center gap-1 flex-wrap">
+                              <span>{cert.label}</span>
+                              {!isActive && (
+                                <span className="px-1 py-0.2 text-[9px] font-bold uppercase rounded bg-rose-100 text-rose-700 border border-rose-200">
+                                  Unavailable
+                                </span>
+                              )}
+                            </span>
                           </label>
                         );
                       })}
                     </div>
                   </div>
                 </div>
+
+                {/* Real-time warning banner when any selected document is or becomes unavailable */}
+                {unavailableSelectedDocs.length > 0 && (
+                  <div className="mt-4 p-4 bg-amber-50 border border-amber-300 rounded-xl text-amber-900 flex items-start gap-3 animate-fadeIn">
+                    <svg className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div className="flex-1 text-sm">
+                      <span className="font-bold text-amber-950">Unavailable Credential Warning:</span>
+                      <p className="mt-0.5 text-xs text-amber-800">
+                        The following selected document(s) are currently deactivated or unavailable:
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {unavailableSelectedDocs.map((docName) => (
+                          <span key={docName} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-rose-100 text-rose-800 border border-rose-200">
+                            <span>{docName}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDocument(docName)}
+                              className="text-rose-600 hover:text-rose-900 font-bold ml-1 cursor-pointer text-sm"
+                              title={`Remove ${docName}`}
+                            >
+                              &times;
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-xs font-medium text-rose-700">
+                        Please remove or uncheck unavailable document(s) before proceeding to the next step.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Part 3: Purpose of Request */}

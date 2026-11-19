@@ -498,14 +498,13 @@ export default function RegistrarRequestsPage() {
     return users
       .filter((u) => {
         const r = String(u.role || '').toLowerCase();
-        return (r === 'staff' || r === 'registrar') && u.is_active !== false;
+        return r === 'staff' && u.is_active !== false;
       })
       .map((u) => {
-        const r = String(u.role || '').toLowerCase();
         return {
           id: u.id,
           name: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.username,
-          role: r === 'registrar' ? 'Registrar' : 'Registrar staff',
+          role: 'Registrar staff',
           username: u.username,
         };
       });
@@ -859,20 +858,17 @@ export default function RegistrarRequestsPage() {
           updated[requestId] = staffName;
           updated[String(requestId)] = staffName;
         }
-        updated[`status_${rawId}`] = 'For Processing';
-        updated[`status_${String(rawId)}`] = 'For Processing';
-        updated[`status_${requestId}`] = 'For Processing';
-        updated[`status_${String(requestId)}`] = 'For Processing';
       } else {
         delete updated[rawId];
         delete updated[String(rawId)];
         delete updated[requestId];
         delete updated[String(requestId)];
-        delete updated[`status_${rawId}`];
-        delete updated[`status_${String(rawId)}`];
-        delete updated[`status_${requestId}`];
-        delete updated[`status_${String(requestId)}`];
       }
+      // Clean up legacy status_ overrides
+      delete updated[`status_${rawId}`];
+      delete updated[`status_${String(rawId)}`];
+      delete updated[`status_${requestId}`];
+      delete updated[`status_${String(requestId)}`];
       saveStoredAssignments(updated);
       return updated;
     });
@@ -885,7 +881,6 @@ export default function RegistrarRequestsPage() {
         assigned_staff: staffName || '',
         assigned_at: staffName ? nowIso : null,
         updated_at: nowIso,
-        status: staffName ? 'For Processing' : undefined,
       });
       recordStaffAssignmentTimestamp(requestId, now);
       if (rawId && rawId !== requestId) recordStaffAssignmentTimestamp(rawId, now);
@@ -903,7 +898,7 @@ export default function RegistrarRequestsPage() {
           String(r.id) === String(requestId) ||
           String(r.rawId) === String(rawId) ||
           String(r.tracking_number) === String(requestId)
-            ? { ...r, assigned_staff: staffName, assigned_at: now, updated_at: nowIso, status: 'For Processing' }
+            ? { ...r, assigned_staff: staffName, assigned_at: now, updated_at: nowIso }
             : r
         )
       );
@@ -982,6 +977,27 @@ export default function RegistrarRequestsPage() {
       window.dispatchEvent(new Event('regquest_requests_updated'));
       await loadData();
     } else {
+      const targetBackendId = rawId || requestId;
+      if (targetBackendId && !String(targetBackendId).startsWith('TRK-')) {
+        try {
+          await requestsApi.assign(targetBackendId, {
+            assigned_staff: null,
+            in_process_queue: false,
+          });
+        } catch (err) {
+          console.error('Failed to unassign staff on backend:', err);
+        }
+      }
+      setRawRequests((prev) =>
+        prev.map((r) =>
+          String(r.id) === String(rawId) ||
+          String(r.id) === String(requestId) ||
+          String(r.rawId) === String(rawId) ||
+          String(r.tracking_number) === String(requestId)
+            ? { ...r, assigned_staff: null, assigned_at: null, updated_at: nowIso }
+            : r
+        )
+      );
       toast.info(`Unassigned staff from ${requestId}`);
       window.dispatchEvent(new Event('regquest_assignments_updated'));
       window.dispatchEvent(new Event('regquest_requests_updated'));

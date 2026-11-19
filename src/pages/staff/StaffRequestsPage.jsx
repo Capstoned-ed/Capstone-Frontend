@@ -412,23 +412,9 @@ export default function StaffRequestsPage() {
           return false;
         });
 
-        // When Registrar assigns staff, registrar verified all -> 'For Processing'
-        // When Staff claims/assigns to self, staff must verify all -> 'Pending'
-        const assignedByRegistrarStatus =
-          assignments[`status_${r.id}`] ||
-          assignments[`status_${String(r.id)}`] ||
-          assignments[`status_${r.rawId}`] ||
-          assignments[`status_${String(r.rawId)}`] ||
-          assignments[`status_${r.tracking_number}`] ||
-          assignments[`status_${String(r.tracking_number)}`];
-
-        const isNonPending = (s) => s && String(s).trim().toUpperCase() !== 'PENDING';
         const effectiveRawStatus =
-          (isNonPending(matchedStored?.status) ? matchedStored.status : null) ||
-          (isNonPending(r.status) ? r.status : null) ||
-          assignedByRegistrarStatus ||
-          matchedStored?.status ||
           r.status ||
+          matchedStored?.status ||
           'Pending';
 
         return {

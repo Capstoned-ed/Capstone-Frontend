@@ -4,6 +4,7 @@ export const REQUEST_STATUS = Object.freeze({
   REQUIREMENTS_VERIFICATION: 'REQUIREMENTS_VERIFICATION',
   REQUIREMENTS_REJECTED: 'REQUIREMENTS_REJECTED',
   PAYMENT_PENDING: 'PAYMENT_PENDING',
+  FOR_VERIFICATION: 'FOR_VERIFICATION',
   PAYMENT_VERIFIED: 'PAYMENT_VERIFIED',
   PROCESSING: 'PROCESSING',
   READY_FOR_RELEASE: 'READY_FOR_RELEASE',
@@ -47,6 +48,11 @@ export const BACKEND_STATUS_MAP = Object.freeze({
   'PAYMENT_PENDING': REQUEST_STATUS.PAYMENT_PENDING,
   'Cleared for Payment': REQUEST_STATUS.PAYMENT_PENDING,
   'CLEARED FOR PAYMENT': REQUEST_STATUS.PAYMENT_PENDING,
+
+  // For Verification
+  'For Verification': REQUEST_STATUS.FOR_VERIFICATION,
+  'FOR VERIFICATION': REQUEST_STATUS.FOR_VERIFICATION,
+  'FOR_VERIFICATION': REQUEST_STATUS.FOR_VERIFICATION,
 
   // Payment Verified / For Processing
   'For Processing': REQUEST_STATUS.PAYMENT_VERIFIED,
@@ -157,6 +163,12 @@ export const STATUS_CONFIG = Object.freeze({
     badgeClass: 'for-payment',
     badgeColor: 'bg-amber-100 text-amber-900 border-amber-300',
   },
+  [REQUEST_STATUS.FOR_VERIFICATION]: {
+    label: 'For Verification',
+    detailLabel: 'For Verification',
+    badgeClass: 'for-verification',
+    badgeColor: 'bg-indigo-100 text-indigo-900 border-indigo-200',
+  },
   [REQUEST_STATUS.PAYMENT_VERIFIED]: {
     label: 'For Processing',
     detailLabel: 'Payment Verified',
@@ -222,6 +234,7 @@ export function isClaimedStatus(status) {
 export const REQUEST_STATUSES = Object.freeze([
   'Pending',
   'Pending Payment',
+  'For Verification',
   'For Processing',
   'Processing',
   'Releasing',
