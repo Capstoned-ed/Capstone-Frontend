@@ -248,11 +248,10 @@ export default function UserTable({
                 setRoleFilter(tab.key);
                 setCurrentPage(1);
               }}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
-                roleFilter === tab.key
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${roleFilter === tab.key
                   ? 'bg-[#0B0B36] text-white shadow-sm'
                   : 'bg-white/80 text-slate-600 hover:bg-white border border-slate-200'
-              }`}
+                }`}
             >
               {tab.label}
             </button>
