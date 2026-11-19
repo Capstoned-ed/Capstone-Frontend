@@ -471,27 +471,35 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  width: 100%;
+  min-width: 0;
 }
 
 .review-attached-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.875rem;
   padding-top: 0.25rem;
+  width: 100%;
+  min-width: 0;
 }
 
 @media (min-width: 640px) {
   .review-attached-grid.dual {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .review-attached-grid.single {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     max-width: 36rem;
   }
 }
 
 .review-attached-card {
-  padding: 0.875rem 1rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0.75rem 0.875rem;
   background-color: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 0.75rem;
@@ -506,6 +514,7 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  width: 100%;
   min-width: 0;
 }
 
@@ -522,6 +531,7 @@
 .review-attached-info {
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-width: 0;
 }
 
@@ -537,13 +547,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 10rem;
-}
-
-@media (min-width: 640px) {
-  .review-attached-filename {
-    max-width: 13rem;
-  }
+  width: 100%;
+  max-width: 100%;
 }
 
 .review-attached-badge {
@@ -677,8 +682,10 @@
   background-color: #e0e7ff;
   border: 1.5px solid #c7d2fe;
   border-radius: 1rem;
-  padding: 1.25rem 3rem;
-  margin-bottom: 2rem;
+  padding: 1rem 0.875rem;
+  margin-bottom: 1.5rem;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .complete-tracking-label {
@@ -690,11 +697,24 @@
 }
 
 .complete-tracking-code {
-  font-size: 1.875rem;
+  font-size: clamp(0.8rem, 3.8vw, 1.875rem);
   font-weight: 900;
   color: #0b0b36;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
   margin-top: 0.25rem;
+  white-space: nowrap;
+}
+
+@media (min-width: 640px) {
+  .complete-tracking-box {
+    padding: 1.25rem 3rem;
+    margin-bottom: 2rem;
+  }
+
+  .complete-tracking-code {
+    font-size: 1.875rem;
+    letter-spacing: 0.05em;
+  }
 }
 
 .complete-btn-group {
