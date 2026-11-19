@@ -29,6 +29,147 @@ function saveStoredAssignments(map) {
   saveStaffAssignments(map);
 }
 
+function CustomSelectDropdown({
+  value,
+  options,
+  onChange,
+  buttonClassName = 'req-dropdown-field',
+  wrapperClassName = 'w-full',
+  placeholder = 'Select...',
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, [open]);
+
+  const selectedOption = options.find((opt) => String(opt.value) === String(value ?? ''));
+  const displayLabel = selectedOption ? selectedOption.label : placeholder;
+
+  return (
+    <div ref={containerRef} className={`relative ${wrapperClassName}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className={`${buttonClassName} w-full flex items-center justify-between gap-2 text-left cursor-pointer`}
+      >
+        <span className="truncate min-w-0">{displayLabel}</span>
+        <svg className="w-3.5 h-3.5 text-slate-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-40 py-1">
+          {options.map((opt) => {
+            const isSelected = String(opt.value) === String(value ?? '');
+            return (
+              <button
+                key={String(opt.value)}
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  if (String(opt.value) !== String(value ?? '')) {
+                    onChange(opt.value);
+                  }
+                }}
+                className={`w-full text-left px-3 py-1.5 text-xs whitespace-normal break-words leading-snug transition-colors cursor-pointer ${
+                  isSelected
+                    ? 'bg-[#0B0B36] text-white font-semibold'
+                    : 'text-slate-700 hover:bg-[#0B0B36]/10 hover:text-[#0B0B36]'
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StaffAssignDropdown({ value, staffMembers, onChange }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, [open]);
+
+  const options = [''];
+  if (value && !staffMembers.some((s) => s.name === value)) {
+    options.push(value);
+  }
+  staffMembers.forEach((s) => options.push(s.name));
+
+  return (
+    <div ref={containerRef} className="relative w-[155px] sm:w-[180px]">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        title="Assign or reassign staff"
+        className="staff-select-dropdown w-full flex items-center justify-between gap-2 text-left cursor-pointer"
+      >
+        <span className="truncate">{value || '-- Unassigned --'}</span>
+        <svg className="w-3.5 h-3.5 text-slate-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1 w-full max-h-44 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-40 py-1">
+          {options.map((opt) => {
+            const isSelected = (value || '') === opt;
+            return (
+              <button
+                key={opt || '__unassigned__'}
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  if (opt !== (value || '')) {
+                    onChange(opt);
+                  }
+                }}
+                className={`w-full text-left px-3 py-1.5 text-xs truncate transition-colors cursor-pointer ${
+                  isSelected
+                    ? 'bg-[#0B0B36] text-white font-semibold'
+                    : 'text-slate-700 hover:bg-[#0B0B36]/10 hover:text-[#0B0B36]'
+                }`}
+              >
+                {opt || '-- Unassigned --'}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function calculateReleaseDate(createdAt, processingDays = 5) {
   if (!createdAt) return 'N/A';
   const d = new Date(createdAt);
@@ -915,13 +1056,24 @@ export default function RegistrarRequestsPage() {
   );
 
   useEffect(() => {
-    if (
-      totalStaffWorkloadPages > 1 &&
-      paginatedStaffWorkload.length === STAFF_WORKLOAD_PAGE_SIZE &&
-      staffWorkloadGridRef.current
-    ) {
-      setLockedStaffGridHeight(staffWorkloadGridRef.current.offsetHeight);
-    }
+    const measureHeight = () => {
+      if (
+        totalStaffWorkloadPages > 1 &&
+        paginatedStaffWorkload.length === STAFF_WORKLOAD_PAGE_SIZE &&
+        staffWorkloadGridRef.current
+      ) {
+        setLockedStaffGridHeight(null);
+        requestAnimationFrame(() => {
+          if (staffWorkloadGridRef.current) {
+            setLockedStaffGridHeight(staffWorkloadGridRef.current.offsetHeight);
+          }
+        });
+      }
+    };
+
+    measureHeight();
+    window.addEventListener('resize', measureHeight);
+    return () => window.removeEventListener('resize', measureHeight);
   }, [totalStaffWorkloadPages, paginatedStaffWorkload.length]);
 
   useEffect(() => {
@@ -1264,17 +1416,13 @@ export default function RegistrarRequestsPage() {
             </p>
             <div className="batch-select-row">
               <span className="batch-select-label">Select Batch:</span>
-              <select
+              <CustomSelectDropdown
                 value={selectedBatch}
-                onChange={(e) => setSelectedBatch(e.target.value)}
-                className="batch-select-input"
-              >
-                {batchOptions.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.label}
-                  </option>
-                ))}
-              </select>
+                onChange={setSelectedBatch}
+                buttonClassName="batch-select-input"
+                wrapperClassName="flex-1 min-w-0 sm:flex-initial sm:min-w-[165px]"
+                options={batchOptions.map((b) => ({ value: b.id, label: b.label }))}
+              />
             </div>
           </div>
         </div>
@@ -1308,11 +1456,6 @@ export default function RegistrarRequestsPage() {
         <div
           ref={staffWorkloadGridRef}
           className="staff-workload-grid"
-          style={
-            totalStaffWorkloadPages > 1 && lockedStaffGridHeight
-              ? { minHeight: `${lockedStaffGridHeight}px`, alignContent: 'start' }
-              : undefined
-          }
         >
           {staffWorkload.length === 0 ? (
             <div className="py-4 text-sm text-slate-500">
@@ -1463,23 +1606,11 @@ export default function RegistrarRequestsPage() {
                     </td>
                     <td>{getStatusBadge(item.batch_status || item.status)}</td>
                     <td>
-                      <select
+                      <StaffAssignDropdown
                         value={item.assigned_staff || ''}
-                        onChange={(e) => handleAssignStaff(item.id, item.rawId, e.target.value)}
-                        title="Assign or reassign staff"
-                        className="staff-select-dropdown w-[180px] truncate cursor-pointer"
-                      >
-                        <option value="">-- Unassigned --</option>
-                        {item.assigned_staff &&
-                          !staffMembers.some((s) => s.name === item.assigned_staff) && (
-                            <option value={item.assigned_staff}>{item.assigned_staff}</option>
-                          )}
-                        {staffMembers.map((staff) => (
-                          <option key={staff.id || staff.name} value={staff.name}>
-                            {staff.name}
-                          </option>
-                        ))}
-                      </select>
+                        staffMembers={staffMembers}
+                        onChange={(nextStaff) => handleAssignStaff(item.id, item.rawId, nextStaff)}
+                      />
                     </td>
                     <td>
                       {item.assigned_staff ? (
@@ -1566,40 +1697,34 @@ export default function RegistrarRequestsPage() {
           </div>
 
           <div className="req-input-wrap">
-            <svg className="req-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="req-input-icon z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <select
+            <CustomSelectDropdown
               value={docTypeFilter}
-              onChange={(e) => setDocTypeFilter(e.target.value)}
-              className="req-dropdown-field"
-            >
-              <option value="">Document Type</option>
-              {credentialTypes.map((ct) => (
-                <option key={ct.id} value={ct.name}>
-                  {ct.name}
-                </option>
-              ))}
-            </select>
+              onChange={setDocTypeFilter}
+              buttonClassName="req-dropdown-field"
+              options={[
+                { value: '', label: 'Document Type' },
+                ...credentialTypes.map((ct) => ({ value: ct.name, label: ct.name })),
+              ]}
+            />
           </div>
 
           {activeTab !== 'history' && (
             <div className="req-input-wrap">
-              <svg className="req-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="req-input-icon z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
               </svg>
-              <select
+              <CustomSelectDropdown
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="req-dropdown-field"
-              >
-                <option value="">All Statuses</option>
-                {REQUEST_STATUSES.filter((st) => st !== 'Claimed').map((st) => (
-                  <option key={st} value={st}>
-                    {st}
-                  </option>
-                ))}
-              </select>
+                onChange={setStatusFilter}
+                buttonClassName="req-dropdown-field"
+                options={[
+                  { value: '', label: 'All Statuses' },
+                  ...REQUEST_STATUSES.filter((st) => st !== 'Claimed').map((st) => ({ value: st, label: st })),
+                ]}
+              />
             </div>
           )}
         </div>
@@ -1874,17 +1999,13 @@ export default function RegistrarRequestsPage() {
                 </button>
                 <div className="batch-select-row !mt-0">
                   <span className="batch-select-label">Select Batch:</span>
-                  <select
+                  <CustomSelectDropdown
                     value={selectedBatch}
-                    onChange={(e) => setSelectedBatch(e.target.value)}
-                    className="batch-select-input"
-                  >
-                    {batchOptions.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setSelectedBatch}
+                    buttonClassName="batch-select-input"
+                    wrapperClassName="flex-1 min-w-0 sm:flex-initial sm:min-w-[165px]"
+                    options={batchOptions.map((b) => ({ value: b.id, label: b.label }))}
+                  />
                 </div>
               </div>
             </div>
@@ -1905,21 +2026,18 @@ export default function RegistrarRequestsPage() {
               </div>
 
               <div className="req-input-wrap">
-                <svg className="req-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="req-input-icon z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <select
+                <CustomSelectDropdown
                   value={assignmentHistoryDocType}
-                  onChange={(e) => setAssignmentHistoryDocType(e.target.value)}
-                  className="req-dropdown-field"
-                >
-                  <option value="">All Document Types</option>
-                  {credentialTypes.map((ct) => (
-                    <option key={ct.id} value={ct.name}>
-                      {ct.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setAssignmentHistoryDocType}
+                  buttonClassName="req-dropdown-field"
+                  options={[
+                    { value: '', label: 'All Document Types' },
+                    ...credentialTypes.map((ct) => ({ value: ct.name, label: ct.name })),
+                  ]}
+                />
               </div>
             </div>
 
@@ -2098,21 +2216,18 @@ export default function RegistrarRequestsPage() {
                 </div>
 
                 <div className="req-input-wrap">
-                  <svg className="req-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="req-input-icon z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  <select
+                  <CustomSelectDropdown
                     value={docTypeFilter}
-                    onChange={(e) => setDocTypeFilter(e.target.value)}
-                    className="req-dropdown-field"
-                  >
-                    <option value="">All Document Types</option>
-                    {credentialTypes.map((ct) => (
-                      <option key={ct.id} value={ct.name}>
-                        {ct.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setDocTypeFilter}
+                    buttonClassName="req-dropdown-field"
+                    options={[
+                      { value: '', label: 'All Document Types' },
+                      ...credentialTypes.map((ct) => ({ value: ct.name, label: ct.name })),
+                    ]}
+                  />
                 </div>
               </div>
             }

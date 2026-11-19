@@ -6,6 +6,8 @@ import { ROLES } from '../../constants/roles';
 import UserTable from '../../components/admin/UserTable';
 import StudentTableCard from '../../components/admin/StudentTableCard';
 import CourseSelectDropdown, { USTP_COURSE_CODE_MAP } from '../../components/admin/CourseSelectDropdown';
+import CustomSelectDropdown from '../../components/common/CustomSelectDropdown';
+import CompactDatePicker from '../../components/common/CompactDatePicker';
 import '../../styles/admin/UserManagementPage.css';
 
 const capitalizeNameWords = (val) =>
@@ -819,15 +821,16 @@ export default function UserManagementPage() {
               </div>
 
               <div>
-                <select
+                <CustomSelectDropdown
                   value={addUserRole}
-                  onChange={(e) => setAddUserRole(e.target.value)}
-                  className="add-user-select"
-                >
-                  <option value={ROLES.REGISTRAR}>Registrar</option>
-                  <option value={ROLES.STAFF}>Staff</option>
-                  <option value={ROLES.ADMIN}>Administrator</option>
-                </select>
+                  onChange={setAddUserRole}
+                  buttonClassName="add-user-select"
+                  options={[
+                    { value: ROLES.REGISTRAR, label: 'Registrar' },
+                    { value: ROLES.STAFF, label: 'Staff' },
+                    { value: ROLES.ADMIN, label: 'Administrator' },
+                  ]}
+                />
               </div>
             </div>
 
@@ -979,12 +982,10 @@ export default function UserManagementPage() {
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
                   Birthdate
                 </label>
-                <input
-                  type="date"
+                <CompactDatePicker
                   value={studentBirthDate}
                   max={new Date().toISOString().split('T')[0]}
-                  onChange={(e) => setStudentBirthDate(e.target.value)}
-                  required
+                  onChange={setStudentBirthDate}
                   className="add-student-input"
                 />
               </div>
@@ -1022,18 +1023,19 @@ export default function UserManagementPage() {
               </div>
 
               <div>
-                <select
+                <CustomSelectDropdown
                   value={studentYearLevel}
-                  onChange={(e) => setStudentYearLevel(e.target.value)}
-                  className="add-student-select"
-                >
-                  <option value="1st year">1st year</option>
-                  <option value="2nd year">2nd year</option>
-                  <option value="3rd year">3rd year</option>
-                  <option value="4th year">4th year</option>
-                  <option value="5th year">5th year</option>
-                  <option value="Alumnus">Alumnus</option>
-                </select>
+                  onChange={setStudentYearLevel}
+                  buttonClassName="add-student-select"
+                  options={[
+                    { value: '1st year', label: '1st year' },
+                    { value: '2nd year', label: '2nd year' },
+                    { value: '3rd year', label: '3rd year' },
+                    { value: '4th year', label: '4th year' },
+                    { value: '5th year', label: '5th year' },
+                    { value: 'Alumnus', label: 'Alumnus' },
+                  ]}
+                />
               </div>
             </div>
 

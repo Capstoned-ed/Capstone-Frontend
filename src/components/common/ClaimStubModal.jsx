@@ -92,17 +92,17 @@ export default function ClaimStubModal({
       >
         {/* Modal Controls (Hidden in Print) */}
         <div className="claim-stub-modal-header claim-stub-no-print">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 min-w-0">
             <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
               Document Claim Stub
             </span>
             {trackingNumber && (
-              <span className="text-xs text-slate-400 font-medium">
+              <span className="text-xs text-slate-400 font-medium break-all">
                 • {trackingNumber}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
               type="button"
               onClick={handleDownloadPdf}
@@ -110,7 +110,7 @@ export default function ClaimStubModal({
               className="claim-stub-download-btn"
               title="Download Claim Stub as PDF"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
               <span>{downloading ? 'Downloading...' : 'Download'}</span>
@@ -121,7 +121,7 @@ export default function ClaimStubModal({
               className="claim-stub-print-btn"
               title="Print Claim Stub"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zM7 9V5a2 2 0 012-2h6a2 2 0 012 2v4" />
               </svg>
               <span>Print</span>
@@ -129,7 +129,7 @@ export default function ClaimStubModal({
             <button
               type="button"
               onClick={onClose}
-              className="claim-stub-close-btn"
+              className="claim-stub-close-btn shrink-0"
               title="Close"
             >
               ✕
