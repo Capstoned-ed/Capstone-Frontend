@@ -681,11 +681,30 @@
 
 .claim-stub-modal-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 0.75rem;
   margin-bottom: 1.5rem;
   padding-bottom: 0.75rem;
   border-bottom: 1px solid #e2e8f0;
+}
+
+@media (max-width: 640px) {
+  .claim-stub-modal-content {
+    padding: 1rem;
+  }
+  .claim-stub-modal-header {
+    flex-direction: column;
+    align-items: stretch;
+    margin-bottom: 1rem;
+  }
+  .claim-stub-download-btn,
+  .claim-stub-print-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 0.5rem 0.75rem;
+  }
 }
 
 .claim-stub-download-btn {
