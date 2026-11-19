@@ -217,13 +217,16 @@
   background-color: #ffffff;
   border-radius: 0.75rem;
   border: 1px solid #cbd5e1;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .calendar-weekdays-row {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
+  min-width: 640px;
   background-color: #A3C1FA;
   border-bottom: 1px solid #cbd5e1;
   text-align: center;
@@ -253,6 +256,7 @@
 .calendar-weeks-body {
   display: flex;
   flex-direction: column;
+  min-width: 640px;
 }
 
 .calendar-week-row {
@@ -266,8 +270,8 @@
 }
 
 .calendar-day-cell {
-  min-height: 140px;
-  padding: 0.5rem;
+  min-height: 115px;
+  padding: 0.375rem;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -281,6 +285,7 @@
 @media (min-width: 640px) {
   .calendar-day-cell {
     min-height: 160px;
+    padding: 0.5rem;
   }
 }
 

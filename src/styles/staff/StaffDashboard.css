@@ -110,11 +110,11 @@
 }
 
 .staff-dash-metrics-grid {
-  @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4;
+  @apply grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-4;
 }
 
 .staff-dash-metric-card {
-  @apply bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-5 hover:shadow-md transition-shadow;
+  @apply bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3 sm:p-5 min-w-0 hover:shadow-md transition-shadow;
 }
 
 .staff-dash-metric-card.pending {
@@ -138,19 +138,19 @@
 }
 
 .staff-dash-metric-top {
-  @apply flex items-center justify-between;
+  @apply flex items-center justify-between gap-1.5;
 }
 
 .staff-dash-metric-label {
-  @apply text-xs font-bold text-slate-800;
+  @apply text-[11px] sm:text-xs font-bold text-slate-800 leading-tight;
 }
 
 .staff-dash-metric-val {
-  @apply text-2xl font-black text-slate-900 mt-2;
+  @apply text-xl sm:text-2xl font-black text-slate-900 mt-1.5 sm:mt-2;
 }
 
 .staff-dash-metric-sub {
-  @apply text-xs text-slate-400 mt-1;
+  @apply text-[11px] sm:text-xs text-slate-400 mt-1;
 }
 
 .staff-dash-insight-card {
@@ -178,31 +178,31 @@
 }
 
 .staff-dash-calendar-card {
-  @apply bg-[#EAF0FE] rounded-2xl p-6 border border-[#D5E0FA] shadow-sm;
+  @apply bg-[#EAF0FE] rounded-2xl p-3.5 sm:p-6 border border-[#D5E0FA] shadow-sm;
 }
 
 .staff-dash-calendar-top {
-  @apply flex flex-col sm:flex-row sm:items-center justify-between gap-4;
+  @apply flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4;
 }
 
 .staff-dash-calendar-title-wrap {
-  @apply flex items-center gap-4;
+  @apply flex items-start sm:items-center gap-2.5 sm:gap-4 min-w-0;
 }
 
 .staff-dash-calendar-icon {
-  @apply w-12 h-12 bg-blue-500/20 text-blue-600 rounded-xl flex items-center justify-center shrink-0;
+  @apply w-10 h-10 sm:w-12 sm:h-12 bg-blue-500/20 text-blue-600 rounded-xl flex items-center justify-center shrink-0;
 }
 
 .staff-dash-calendar-range-badge {
-  @apply text-xs font-semibold text-blue-700 bg-blue-100/80 px-2.5 py-0.5 rounded-full;
+  @apply text-[11px] sm:text-xs font-semibold text-blue-700 bg-blue-100/80 px-2.5 py-0.5 rounded-full whitespace-nowrap;
 }
 
 .staff-dash-calendar-selected-badge {
-  @apply text-xs font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full flex items-center gap-1;
+  @apply text-[11px] sm:text-xs font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full inline-flex items-center gap-1 whitespace-nowrap;
 }
 
 .staff-dash-calendar-heading {
-  @apply text-xl font-bold text-slate-900 mt-1;
+  @apply text-lg sm:text-xl font-bold text-slate-900 mt-1;
 }
 
 .staff-dash-calendar-nav {
@@ -230,15 +230,15 @@
 }
 
 .staff-dash-calendar-weekday {
-  @apply py-2.5 font-bold text-xs text-[#0A0A7C] border-r last:border-r-0 border-slate-300/60 truncate px-1;
+  @apply py-2 sm:py-2.5 font-bold text-[10px] sm:text-xs text-[#0A0A7C] border-r last:border-r-0 border-slate-300/60 px-0.5 sm:px-1;
 }
 
 .staff-dash-calendar-days {
-  @apply grid grid-cols-7 divide-x divide-slate-200 min-h-[175px];
+  @apply grid grid-cols-7 divide-x divide-slate-200 min-h-[100px] sm:min-h-[175px];
 }
 
 .staff-dash-calendar-day {
-  @apply p-2 sm:p-2.5 flex flex-col justify-between cursor-pointer transition-all hover:bg-blue-50/50 select-none;
+  @apply p-1 sm:p-2.5 flex flex-col justify-between cursor-pointer transition-all hover:bg-blue-50/50 select-none min-w-0;
 }
 
 .staff-dash-calendar-day.selected {

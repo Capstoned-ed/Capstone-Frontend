@@ -26,6 +26,8 @@ import {
 } from '../../constants/workflowStatuses';
 import PrintRequestFormModal from '../student/PrintRequestFormModal';
 import ClaimStubModal from '../common/ClaimStubModal';
+import CustomSelectDropdown from '../common/CustomSelectDropdown';
+import CompactDatePicker from '../common/CompactDatePicker';
 
 function formatCleanPurpose(text) {
   if (!text) return 'For Personal File / Employment';
@@ -1719,23 +1721,23 @@ export default function ProcessRequestModal({
       <div className="staff-process-backdrop" onClick={onClose}>
         <div className="staff-process-dialog max-w-3xl" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
           {/* Sticky Header */}
-          <div className="staff-process-header">
-            <div>
-              <div className="flex items-center gap-2">
+          <div className="staff-process-header flex-wrap gap-2.5 sm:flex-nowrap">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <h2 className="staff-process-title">Process Credential Request</h2>
-                <span className="text-xs font-mono font-bold text-indigo-900 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                <span className="text-[11px] sm:text-xs font-mono font-bold text-indigo-900 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 whitespace-nowrap">
                   {requestItem.tracking_number || requestItem.id}
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
               <button
                 type="button"
                 onClick={() => setIsPrintModalOpen(true)}
-                className="px-3 py-1.5 bg-[#0B0B36] hover:bg-[#1E1E6B] text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="px-2 sm:px-3 py-1 sm:py-1.5 bg-[#0B0B36] hover:bg-[#1E1E6B] text-white text-[11px] sm:text-xs font-bold rounded-lg transition-colors flex items-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                 title="View & print official updated request form"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                 </svg>
                 <span>Print Form</span>
@@ -1759,7 +1761,7 @@ export default function ProcessRequestModal({
 
               {/* Box 1: Request Summary */}
               <div className="staff-process-box">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2 mb-3">
                   <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
                     1. Request Summary
                   </span>
@@ -1811,7 +1813,7 @@ export default function ProcessRequestModal({
 
               {/* Box 2: Student Clearance */}
               <div className="staff-process-box">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2 mb-3">
                   <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                     <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
@@ -1853,31 +1855,33 @@ export default function ProcessRequestModal({
                   </div>
                 ) : clearanceDoc || requestItem.clearance_preview || requestItem.clearance_id ? (
                   <div className="p-3 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
-                    <div className="flex items-center gap-3">
-                      {clearanceDoc?.isPdf || requestItem.clearance_is_pdf ? (
-                        <div
-                          className="w-10 h-10 rounded-lg bg-red-100 text-red-700 flex flex-col items-center justify-center font-bold text-xs shrink-0 border border-red-200 cursor-pointer"
-                          onClick={() => setShowInlineClearance((p) => !p)}
-                        >
-                          <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                          </svg>
-                          <span className="text-[8px] uppercase font-bold tracking-tight">PDF</span>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {clearanceDoc?.isPdf || requestItem.clearance_is_pdf ? (
+                          <div
+                            className="w-10 h-10 rounded-lg bg-red-100 text-red-700 flex flex-col items-center justify-center font-bold text-xs shrink-0 border border-red-200 cursor-pointer"
+                            onClick={() => setShowInlineClearance((p) => !p)}
+                          >
+                            <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                            <span className="text-[8px] uppercase font-bold tracking-tight">PDF</span>
+                          </div>
+                        ) : (
+                          <img
+                            src={clearanceDoc?.url || requestItem.clearance_preview}
+                            alt="Clearance"
+                            className="w-10 h-10 rounded-lg object-cover border border-slate-200 shrink-0 cursor-pointer"
+                            onClick={() => setShowInlineClearance((p) => !p)}
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-bold text-slate-900 block truncate">
+                            {clearanceDoc?.fileName || requestItem.clearance_file_name || 'Certificate_of_Clearance.pdf'}
+                          </span>
                         </div>
-                      ) : (
-                        <img
-                          src={clearanceDoc?.url || requestItem.clearance_preview}
-                          alt="Clearance"
-                          className="w-10 h-10 rounded-lg object-cover border border-slate-200 shrink-0 cursor-pointer"
-                          onClick={() => setShowInlineClearance((p) => !p)}
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <span className="text-xs font-bold text-slate-900 block truncate">
-                          {clearanceDoc?.fileName || requestItem.clearance_file_name || 'Certificate_of_Clearance.pdf'}
-                        </span>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:shrink-0">
                         {reviewingClearance ? (
                           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 font-semibold text-xs rounded-lg">
                             <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -2057,14 +2061,13 @@ export default function ProcessRequestModal({
                   </div>
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Release Date *</label>
-                    <input
-                      type="date"
+                    <CompactDatePicker
                       value={dateOfRelease}
-                      onChange={(e) => {
-                        setDateOfRelease(e.target.value);
+                      onChange={(val) => {
+                        setDateOfRelease(val);
                         setTurnaroundHint('');
                       }}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-600 bg-white"
+                      className="px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-600 bg-white"
                     />
                     {turnaroundHint && (
                       <p className="text-[10px] text-slate-500 mt-1">{turnaroundHint}</p>
@@ -2096,10 +2099,10 @@ export default function ProcessRequestModal({
                         </span>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <div
                           data-testid="approved-by-display"
-                          className="px-3 py-2 text-xs bg-amber-50 border border-amber-200 text-amber-800 font-semibold rounded-lg flex-1 truncate"
+                          className="px-3 py-2 text-xs bg-amber-50 border border-amber-200 text-amber-800 font-semibold rounded-lg flex-1 min-w-[180px]"
                         >
                           Pending Registrar Approval
                         </div>
@@ -2155,69 +2158,71 @@ export default function ProcessRequestModal({
                       </span>
                     ) : null}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsPrintModalOpen(true)}
-                      className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
-                    >
-                      <svg className="w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                      <span>Preview Form</span>
-                    </button>
-                    {isPersistedRejected ? (
-                      <div className="px-3.5 py-2 bg-rose-50 border border-rose-300 text-rose-800 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs">
-                        <svg className="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 w-full sm:w-auto">
+                    <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+                      <button
+                        type="button"
+                        onClick={() => setIsPrintModalOpen(true)}
+                        className="flex-1 sm:flex-initial min-w-0 justify-center px-2 sm:px-3 py-1.5 sm:py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-[11px] sm:text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 whitespace-nowrap"
+                      >
+                        <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                         </svg>
-                        <span>Request Rejected</span>
-                      </div>
-                    ) : isOrderConfirmed ? (
-                      <div className="px-3.5 py-2 bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs">
-                        <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span>Request Confirmed</span>
-                      </div>
-                    ) : (
-                      <>
+                        <span>Preview Form</span>
+                      </button>
+                      {isPersistedRejected ? (
+                        <div className="flex-1 sm:flex-initial min-w-0 justify-center px-2 sm:px-3.5 py-1.5 sm:py-2 bg-rose-50 border border-rose-300 text-rose-800 font-bold text-[11px] sm:text-xs rounded-xl flex items-center gap-1 sm:gap-1.5 shadow-2xs whitespace-nowrap">
+                          <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-rose-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          <span>Request Rejected</span>
+                        </div>
+                      ) : isOrderConfirmed ? (
+                        <div className="flex-1 sm:flex-initial min-w-0 justify-center px-2 sm:px-3.5 py-1.5 sm:py-2 bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-[11px] sm:text-xs rounded-xl flex items-center gap-1 sm:gap-1.5 shadow-2xs whitespace-nowrap">
+                          <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Request Confirmed</span>
+                        </div>
+                      ) : (
                         <button
                           type="button"
                           disabled={isPersistedTerminal}
                           onClick={handleRejectRequest}
-                          className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+                          className="flex-1 sm:flex-initial min-w-0 justify-center px-2 sm:px-3.5 py-1.5 sm:py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-[11px] sm:text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 whitespace-nowrap"
                           title="Reject this request"
                         >
-                          <svg className="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-rose-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                           </svg>
                           <span>Reject Request</span>
                         </button>
-                        <button
-                          type="button"
-                          disabled={!isClearanceVerified || isPersistedTerminal || confirmingAssessment || isWaitingForRegistrarApproval}
-                          onClick={handleConfirmAssessmentAndIssuePayment}
-                          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-                            isClearanceVerified && !isPersistedTerminal && !confirmingAssessment && !isWaitingForRegistrarApproval
-                              ? 'bg-indigo-900 hover:bg-indigo-950 text-white shadow-md cursor-pointer'
-                              : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
-                          }`}
-                          title={
-                            !isClearanceVerified
-                              ? 'Please verify student clearance first before confirming the request.'
-                              : isWaitingForRegistrarApproval
-                              ? 'Waiting for Registrar Approval: Auto-Approve is OFF. A Registrar must approve first.'
-                              : 'Confirm request and order of payment'
-                          }
-                        >
-                          <span>Confirm Request & Order of Payment</span>
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                          </svg>
-                        </button>
-                      </>
+                      )}
+                    </div>
+                    {!isPersistedRejected && !isOrderConfirmed && (
+                      <button
+                        type="button"
+                        disabled={!isClearanceVerified || isPersistedTerminal || confirmingAssessment || isWaitingForRegistrarApproval}
+                        onClick={handleConfirmAssessmentAndIssuePayment}
+                        className={`w-full sm:w-auto justify-center px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                          isClearanceVerified && !isPersistedTerminal && !confirmingAssessment && !isWaitingForRegistrarApproval
+                            ? 'bg-indigo-900 hover:bg-indigo-950 text-white shadow-md cursor-pointer'
+                            : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
+                        }`}
+                        title={
+                          !isClearanceVerified
+                            ? 'Please verify student clearance first before confirming the request.'
+                            : isWaitingForRegistrarApproval
+                            ? 'Waiting for Registrar Approval: Auto-Approve is OFF. A Registrar must approve first.'
+                            : 'Confirm request and order of payment'
+                        }
+                      >
+                        <span>Confirm Request & Order of Payment</span>
+                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -2225,7 +2230,7 @@ export default function ProcessRequestModal({
 
               {/* Box 4: Payment Verification */}
               <div className="staff-process-box">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2 mb-3">
                   <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                     <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 14l2 2 4-4m-7 9l3-1.5 3 1.5 3-1.5 3 1.5V4l-3 1.5L14 4l-3 1.5L8 4 5 5.5v16.5l3-1.5z" />
@@ -2257,45 +2262,47 @@ export default function ProcessRequestModal({
                 {/* Online Upload Proof, Local Attach, or Notice */}
                 {hasReceiptUploaded || paymentProof || activeOrNumber || requestItem.or_number ? (
                   <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3" data-testid="payment-receipt-box">
-                    <div className="flex items-center gap-3">
-                      {hasReceiptUploaded ? (
-                        loadingReceiptBlob ? (
-                          <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
-                            <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                          </div>
-                        ) : receiptIsPdf || !displayReceiptImage ? (
-                          <div
-                            onClick={() => setShowInlineReceipt((p) => !p)}
-                            className="w-12 h-12 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center justify-center font-bold text-[10px] shrink-0 cursor-pointer"
-                          >
-                            {receiptIsPdf ? 'PDF' : 'FILE'}
-                          </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {hasReceiptUploaded ? (
+                          loadingReceiptBlob ? (
+                            <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                              <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                          ) : receiptIsPdf || !displayReceiptImage ? (
+                            <div
+                              onClick={() => setShowInlineReceipt((p) => !p)}
+                              className="w-12 h-12 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center justify-center font-bold text-[10px] shrink-0 cursor-pointer"
+                            >
+                              {receiptIsPdf ? 'PDF' : 'FILE'}
+                            </div>
+                          ) : (
+                            <img
+                              src={displayReceiptImage}
+                              alt="Official Receipt"
+                              data-testid="receipt-thumbnail-img"
+                              className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0 cursor-pointer"
+                              onClick={() => setShowInlineReceipt((p) => !p)}
+                            />
+                          )
                         ) : (
-                          <img
-                            src={displayReceiptImage}
-                            alt="Official Receipt"
-                            data-testid="receipt-thumbnail-img"
-                            className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0 cursor-pointer"
-                            onClick={() => setShowInlineReceipt((p) => !p)}
-                          />
-                        )
-                      ) : (
-                        <div className="w-12 h-12 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center font-bold text-lg shrink-0">
-                          <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 14l2 2 4-4m-7 9l3-1.5 3 1.5 3-1.5 3 1.5V4l-3 1.5L14 4l-3 1.5L8 4 5 5.5v16.5l3-1.5z" />
-                          </svg>
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <span className="text-xs font-bold text-slate-900 block truncate">Official Receipt</span>
-                        <div className="text-[11px] text-slate-600 mt-0.5 flex flex-wrap gap-2">
-                          <span>Amount: <strong className="text-indigo-900">{latestPayment?.amount || paymentProof?.amount || assessedAmount}</strong></span>
-                          <span>•</span>
-                          <span>Reference: <strong className="font-mono text-slate-800">{activeOrNumber || 'N/A'}</strong></span>
+                          <div className="w-12 h-12 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center font-bold text-lg shrink-0">
+                            <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 14l2 2 4-4m-7 9l3-1.5 3 1.5 3-1.5 3 1.5V4l-3 1.5L14 4l-3 1.5L8 4 5 5.5v16.5l3-1.5z" />
+                            </svg>
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-bold text-slate-900 block truncate">Official Receipt</span>
+                          <div className="text-[11px] text-slate-600 mt-0.5 flex flex-wrap gap-2">
+                            <span>Amount: <strong className="text-indigo-900">{latestPayment?.amount || paymentProof?.amount || assessedAmount}</strong></span>
+                            <span>•</span>
+                            <span>Reference: <strong className="font-mono text-slate-800">{activeOrNumber || 'N/A'}</strong></span>
+                          </div>
                         </div>
                       </div>
                       {hasReceiptUploaded && (
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:shrink-0">
                           <button
                             type="button"
                             onClick={() => setShowInlineReceipt((p) => !p)}
@@ -2364,7 +2371,7 @@ export default function ProcessRequestModal({
                     />
                   </div>
                   {paymentStatus === 'VERIFIED' ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                       <div className="px-3.5 py-2 bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-2xs">
                         <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -2381,7 +2388,7 @@ export default function ProcessRequestModal({
                       </button>
                     </div>
                   ) : paymentStatus === 'REJECTED' ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                       <div className="px-3 py-1.5 bg-rose-50 border border-rose-300 text-rose-800 font-bold text-xs rounded-lg flex items-center gap-1.5">
                         <svg className="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -2476,11 +2483,12 @@ export default function ProcessRequestModal({
                   )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <select
+                  <CustomSelectDropdown
                     value={localStatus || newStatus || 'Pending'}
-                    onChange={(e) => handleManualStatusChange(e.target.value)}
+                    onChange={handleManualStatusChange}
                     disabled={!canOverrideStatus}
-                    className={`staff-select-input ${
+                    options={statusOptions}
+                    buttonClassName={`staff-select-input ${
                       !canOverrideStatus
                         ? 'opacity-60 bg-slate-100 cursor-not-allowed border-slate-300 text-slate-500'
                         : ''
@@ -2494,13 +2502,7 @@ export default function ProcessRequestModal({
                         ? 'Manual status override is locked: Please verify student clearance first.'
                         : 'Select status to override'
                     }
-                  >
-                    {statusOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value} disabled={opt.disabled}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                  />
                   <input
                     type="text"
                     placeholder="Staff remarks / notes (optional)..."

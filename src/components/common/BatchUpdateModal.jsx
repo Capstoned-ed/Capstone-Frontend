@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import CompactDatePicker from './CompactDatePicker';
 
 const STATUS_OPTIONS = [
   { value: '', label: '-- No change (Keep current status) --' },
@@ -132,11 +133,10 @@ export default function BatchUpdateModal({
               Releasing Date
             </label>
             <div className="relative">
-              <input
-                type="date"
+              <CompactDatePicker
                 value={releasingDate}
-                onChange={(e) => setReleasingDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-950/20 focus:border-indigo-950 transition-all font-medium text-slate-800"
+                onChange={setReleasingDate}
+                className="px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-950/20 focus:border-indigo-950 transition-all font-medium text-slate-800"
               />
             </div>
             <p className="text-[11px] text-slate-500 mt-1">

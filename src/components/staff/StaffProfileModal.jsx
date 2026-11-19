@@ -9,6 +9,7 @@ import auditApi from '../../api/audit';
 import authApi from '../../api/auth';
 import { getProcessedActions } from '../../api/requests';
 import useToast from '../../hooks/useToast';
+import CompactDatePicker from '../common/CompactDatePicker';
 
 export default function StaffProfileModal({ isOpen, onClose }) {
   const { user, logout } = useAuth();
@@ -16,6 +17,7 @@ export default function StaffProfileModal({ isOpen, onClose }) {
   const toast = useToast();
 
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'information' | 'password'
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [accountUpdates, setAccountUpdates] = useState([]);
   const [loadingUpdates, setLoadingUpdates] = useState(false);
 
@@ -115,7 +117,7 @@ export default function StaffProfileModal({ isOpen, onClose }) {
         );
         setEditableDepartment(
           profile.department ||
-          (isAdmin ? 'Management Information Systems (MIS)' : 'Office of the University Registrar')
+          (isAdmin ? '' : 'Office of the University Registrar')
         );
         setEditableOfficeLocation(
           profile.office_location ||
@@ -388,16 +390,67 @@ export default function StaffProfileModal({ isOpen, onClose }) {
       onClick={onClose}
     >
       <div
-        className="relative bg-[#F8F9FA] border border-slate-200/90 rounded-2xl w-full max-w-6xl shadow-2xl flex flex-col md:flex-row overflow-hidden text-slate-800 max-h-[90vh] h-[660px]"
+        className="relative bg-[#F8F9FA] border border-slate-200/90 rounded-2xl w-full max-w-6xl shadow-2xl flex flex-col md:flex-row overflow-hidden text-slate-800 h-[85vh] max-h-[660px] md:h-[660px] md:max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Left Navigation Panel */}
-        <div className="w-full md:w-56 lg:w-60 bg-white border-b md:border-b-0 md:border-r border-slate-200/80 p-5 md:p-6 flex flex-col justify-between shrink-0">
+        {/* Mobile Header Bar with Hamburger Menu */}
+        <div className="md:hidden bg-white border-b border-slate-200/80 px-4 py-3 flex items-center justify-between shrink-0">
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen((prev) => !prev)}
+            className="inline-flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            aria-label="Toggle profile navigation"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+              {mobileNavOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+            <span className="text-sm font-bold text-[#0B0B7A]">
+              {activeTab === 'overview'
+                ? 'Account Overview'
+                : activeTab === 'information'
+                ? 'My Information'
+                : 'Change Password'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onClose}
+            title="Close"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Mobile Drawer Backdrop */}
+        {mobileNavOpen && (
+          <div
+            className="md:hidden absolute inset-0 z-20 bg-black/40 backdrop-blur-[1px]"
+            onClick={() => setMobileNavOpen(false)}
+          />
+        )}
+
+        {/* Left Navigation Panel (Slide-out Drawer on Mobile, Fixed Sidebar on Desktop) */}
+        <div
+          className={`absolute md:static inset-y-0 left-0 z-30 w-64 md:w-56 lg:w-60 bg-white border-r border-slate-200/80 p-5 md:p-6 flex flex-col justify-between shrink-0 shadow-2xl md:shadow-none transform transition-transform duration-300 ease-in-out ${
+            mobileNavOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          }`}
+        >
           <div className="space-y-3">
             {/* Overview Tab Button */}
             <button
               type="button"
-              onClick={() => setActiveTab('overview')}
+              onClick={() => {
+                setActiveTab('overview');
+                setMobileNavOpen(false);
+              }}
               className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl transition-colors text-left ${
                 activeTab === 'overview'
                   ? 'text-[#0B0B7A] font-bold bg-blue-50/70'
@@ -413,7 +466,10 @@ export default function StaffProfileModal({ isOpen, onClose }) {
             {/* My Information Tab Button */}
             <button
               type="button"
-              onClick={() => setActiveTab('information')}
+              onClick={() => {
+                setActiveTab('information');
+                setMobileNavOpen(false);
+              }}
               className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl transition-colors text-left ${
                 activeTab === 'information'
                   ? 'text-[#0B0B7A] font-bold bg-blue-50/70'
@@ -429,7 +485,10 @@ export default function StaffProfileModal({ isOpen, onClose }) {
             {/* Change Password Tab Button (Optional) */}
             <button
               type="button"
-              onClick={() => setActiveTab('password')}
+              onClick={() => {
+                setActiveTab('password');
+                setMobileNavOpen(false);
+              }}
               className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl transition-colors text-left ${
                 activeTab === 'password'
                   ? 'text-[#0B0B7A] font-bold bg-blue-50/70'
@@ -462,12 +521,12 @@ export default function StaffProfileModal({ isOpen, onClose }) {
 
         {/* Right Content Area */}
         <div className="flex-1 min-w-0 p-6 md:p-8 flex flex-col justify-start relative overflow-y-auto">
-          {/* Close Button Top Right */}
+          {/* Close Button Top Right (Desktop) */}
           <button
             type="button"
             onClick={onClose}
             title="Close"
-            className="absolute top-6 right-6 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer z-10"
+            className="hidden md:inline-flex absolute top-6 right-6 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer z-10"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -503,7 +562,8 @@ export default function StaffProfileModal({ isOpen, onClose }) {
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium mt-1">
-                Employee ID: <strong className="text-slate-700 font-mono">{employeeId}</strong> &bull; {editableDepartment}
+                Employee ID: <strong className="text-slate-700 font-mono">{employeeId}</strong>
+                {!isAdmin && editableDepartment ? <> &bull; {editableDepartment}</> : null}
               </p>
             </div>
           </div>
@@ -512,29 +572,29 @@ export default function StaffProfileModal({ isOpen, onClose }) {
           {activeTab === 'overview' && (
             <div className="mt-5">
               {/* Summary Metrics Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-5">
-                <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-sm">
-                  <span className="text-xs font-semibold text-slate-500 block mb-1">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 mb-4 sm:mb-5">
+                <div className="bg-white rounded-xl border border-slate-200/90 p-3 sm:p-4 shadow-sm min-w-0">
+                  <span className="text-[11px] sm:text-xs font-semibold text-slate-500 block mb-1 truncate">
                     {isAdmin ? 'Actions Processed' : 'Processed Requests'}
                   </span>
-                  <div className="text-2xl font-extrabold text-[#0B0B7A]">
+                  <div className="text-xl sm:text-2xl font-extrabold text-[#0B0B7A]">
                     {accountUpdates.length}
                   </div>
-                  <span className="text-[11px] text-slate-400 mt-0.5 block">
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 block leading-tight">
                     {isAdmin
                       ? 'Accounts & requests managed by this account'
                       : 'Requests processed using this staff account'}
                   </span>
                 </div>
 
-                <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-sm">
-                  <span className="text-xs font-semibold text-slate-500 block mb-1">
+                <div className="bg-white rounded-xl border border-slate-200/90 p-3 sm:p-4 shadow-sm min-w-0">
+                  <span className="text-[11px] sm:text-xs font-semibold text-slate-500 block mb-1 truncate">
                     Role Authority
                   </span>
-                  <div className="text-base font-bold text-slate-800 truncate">
+                  <div className="text-sm sm:text-base font-bold text-slate-800 truncate">
                     {isAdmin ? 'Full System Admin' : isRegistrar ? 'Registrar Operations' : 'Staff'}
                   </div>
-                  <span className="text-[11px] text-emerald-600 font-medium mt-0.5 block">
+                  <span className="text-[10px] sm:text-[11px] text-emerald-600 font-medium mt-0.5 block">
                     &bull; Active Session
                   </span>
                 </div>
@@ -679,98 +739,89 @@ export default function StaffProfileModal({ isOpen, onClose }) {
                 onSubmit={handleSaveInfo}
                 className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_4px_16px_rgba(0,0,0,0.05)] p-6 md:p-8"
               >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
-                  {/* Left Column */}
-                  <div className="space-y-4">
-                    {/* First Name */}
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        First Name
-                      </label>
-                      <input
-                        type="text"
-                        value={editableFirstName}
-                        onChange={(e) => setEditableFirstName(e.target.value)}
-                        required
-                        placeholder="Enter first name"
-                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm font-medium"
-                      />
-                    </div>
-
-                    {/* Official Email */}
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        Official Email Address
-                      </label>
-                      <input
-                        type="email"
-                        value={editableEmail}
-                        onChange={(e) => setEditableEmail(e.target.value)}
-                        required
-                        placeholder="Enter official email"
-                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm"
-                      />
-                    </div>
-
-                    {/* Birthday */}
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        Birthday
-                      </label>
-                      <input
-                        type="date"
-                        value={editableBirthDate}
-                        max={new Date().toISOString().split('T')[0]}
-                        onChange={(e) => setEditableBirthDate(e.target.value)}
-                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm"
-                      />
-                    </div>
-
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                  {/* First Name */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                      First Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editableFirstName}
+                      onChange={(e) => setEditableFirstName(e.target.value)}
+                      required
+                      placeholder="Enter first name"
+                      className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm font-medium"
+                    />
                   </div>
 
-                  {/* Right Column */}
-                  <div className="space-y-4">
-                    {/* Last Name */}
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        Last Name
-                      </label>
-                      <input
-                        type="text"
-                        value={editableLastName}
-                        onChange={(e) => setEditableLastName(e.target.value)}
-                        placeholder="Enter last name"
-                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm font-medium"
-                      />
-                    </div>
+                  {/* Last Name */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                      Last Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editableLastName}
+                      onChange={(e) => setEditableLastName(e.target.value)}
+                      placeholder="Enter last name"
+                      className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm font-medium"
+                    />
+                  </div>
 
-                    {/* Employee ID */}
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        Employee ID Number
-                      </label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={employeeId}
-                        className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2.5 text-sm text-slate-600 outline-none select-text cursor-not-allowed font-mono font-semibold"
-                      />
-                    </div>
+                  {/* Official Email */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                      Official Email Address
+                    </label>
+                    <input
+                      type="email"
+                      value={editableEmail}
+                      onChange={(e) => setEditableEmail(e.target.value)}
+                      required
+                      placeholder="Enter official email"
+                      className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm"
+                    />
+                  </div>
 
-                    {/* Contact Number */}
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                        Contact / Phone Number
-                      </label>
-                      <input
-                        type="tel"
-                        value={editablePhone}
-                        onChange={(e) => setEditablePhone(e.target.value)}
-                        placeholder="09xxxxxxxxx"
-                        className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm"
-                      />
-                    </div>
+                  {/* Employee ID */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                      Employee ID Number
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={employeeId}
+                      className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2.5 text-sm text-slate-600 outline-none select-text cursor-not-allowed font-mono font-semibold"
+                    />
+                  </div>
 
+                  {/* Birthday */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                      Birthday
+                    </label>
+                    <CompactDatePicker
+                      value={editableBirthDate}
+                      max={new Date().toISOString().split('T')[0]}
+                      onChange={setEditableBirthDate}
+                      className="bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm"
+                    />
+                  </div>
+
+                  {/* Contact Number */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                      Contact / Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={editablePhone}
+                      onChange={(e) => setEditablePhone(e.target.value)}
+                      placeholder="09xxxxxxxxx"
+                      className="w-full bg-white border border-slate-300 focus:border-[#000080] focus:ring-2 focus:ring-[#000080]/15 rounded-lg px-3.5 py-2.5 text-sm text-slate-800 outline-none transition-all shadow-sm"
+                    />
                   </div>
                 </div>
 

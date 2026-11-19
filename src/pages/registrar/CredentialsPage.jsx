@@ -21,6 +21,7 @@ export default function RegistrarCredentialsPage() {
 
   const [deleteDialogOpen, setDeleteDialogOpenOpen] = useState(false);
   const [selectedForDelete, setSelectedForDelete] = useState(null);
+  const [activatingId, setActivatingId] = useState(null);
 
   // RBAC: Registrar can mutate credential types
   const canMutate = user?.role === ROLES.REGISTRAR || user?.role === ROLES.ADMIN;
@@ -81,22 +82,28 @@ export default function RegistrarCredentialsPage() {
     );
   };
 
+  // Handle Activation
+  const handleActivate = async (type) => {
+    if (!type || activatingId) return;
+    setActivatingId(type.id);
+    try {
+      const updated = await credentialTypesApi.update(type.id, { is_active: true });
+      setCredentialTypes((prev) =>
+        prev.map((t) => (t.id === type.id ? { ...t, ...updated, is_active: true } : t))
+      );
+      toast.success(`Credential "${type.name}" has been activated.`);
+    } catch (err) {
+      console.error('Failed to activate credential type:', err);
+      toast.error('Failed to activate credential type.');
+    } finally {
+      setActivatingId(null);
+    }
+  };
+
   // Metrics Calculations
   const totalCount = credentialTypes.length;
   const activeCount = credentialTypes.filter((t) => t.is_active).length;
   const inactiveCount = credentialTypes.filter((t) => !t.is_active).length;
-  const averagePrice =
-    totalCount > 0
-      ? credentialTypes.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0) /
-        totalCount
-      : 0;
-
-  const formatCurrency = (val) =>
-    new Intl.NumberFormat('en-PH', {
-      style: 'currency',
-      currency: 'PHP',
-      minimumFractionDigits: 2,
-    }).format(val);
 
   return (
     <div className="credentials-page-wrapper">
@@ -164,20 +171,6 @@ export default function RegistrarCredentialsPage() {
             <div className="credential-stat-label">Inactive / Archived</div>
           </div>
         </div>
-
-        <div className="credential-stat-card">
-          <div className="credential-stat-icon-wrap bg-amber-50 text-amber-600">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <div>
-            <div className="credential-stat-value text-slate-900 font-bold">
-              {formatCurrency(averagePrice)}
-            </div>
-            <div className="credential-stat-label">Average Fee Amount</div>
-          </div>
-        </div>
       </div>
 
       {/* Main Credential Types Table */}
@@ -187,6 +180,8 @@ export default function RegistrarCredentialsPage() {
         canMutate={canMutate}
         onEdit={handleOpenEdit}
         onDeactivate={handleOpenDeactivate}
+        onActivate={handleActivate}
+        activatingId={activatingId}
       />
 
       {/* Modals */}

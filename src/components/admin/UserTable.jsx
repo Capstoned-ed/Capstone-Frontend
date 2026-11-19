@@ -178,15 +178,15 @@ export default function UserTable({
   return (
     <div className="user-table-card" style={{ overflowAnchor: 'none' }}>
       {/* Card Header Bar (Light Blue/Periwinkle matching the photo) */}
-      <div className="user-table-header-bar flex flex-wrap items-center justify-between gap-3">
+      <div className="user-table-header-bar flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         {/* Left Title & Shield Icon */}
-        <div className="user-table-header-left">
+        <div className="user-table-header-left items-start sm:items-center min-w-0">
           <div className="w-8 h-8 text-[#3B82F6] flex items-center justify-center flex-shrink-0">
             <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3z" />
             </svg>
           </div>
-          <div>
+          <div className="min-w-0">
             <h3 className="user-table-card-title">
               {overviewOnly
                 ? 'Staff, Registrar & Role Overview'
@@ -197,65 +197,70 @@ export default function UserTable({
                 ? 'Overview of Registrar, Staff, and Administrator accounts and roles'
                 : 'Assign roles and access levels for Registrar, Staff, and Administrator'}
             </p>
-            <div className="relative mt-2.5 max-w-xs sm:max-w-sm">
-              <svg
-                className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-                placeholder="Search staff by name, ID, or email..."
-                className="w-full pl-9 pr-8 py-1.5 text-xs bg-white border border-blue-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setCurrentPage(1);
-                  }}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
-                  aria-label="Clear staff search"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
           </div>
         </div>
 
-        {/* Role Filter Pills */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {[
-            { key: 'ALL', label: 'All Roles' },
-            { key: ROLES.REGISTRAR, label: 'Registrar' },
-            { key: ROLES.STAFF, label: 'Staff' },
-            { key: ROLES.ADMIN, label: 'Administrator' },
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => {
-                setRoleFilter(tab.key);
+        {/* Search & Role Filter Controls */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full lg:w-auto">
+          <div className="relative w-full sm:w-60">
+            <svg
+              className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${roleFilter === tab.key
-                  ? 'bg-[#0B0B36] text-white shadow-sm'
-                  : 'bg-white/80 text-slate-600 hover:bg-white border border-slate-200'
+              placeholder="Search staff by name, ID, or email..."
+              className="w-full pl-9 pr-8 py-1.5 text-xs bg-white border border-blue-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setCurrentPage(1);
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                aria-label="Clear staff search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Role Filter Pills */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {[
+              { key: 'ALL', label: 'All Roles' },
+              { key: ROLES.REGISTRAR, label: 'Registrar' },
+              { key: ROLES.STAFF, label: 'Staff' },
+              { key: ROLES.ADMIN, label: 'Administrator' },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => {
+                  setRoleFilter(tab.key);
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-bold transition-colors cursor-pointer ${
+                  roleFilter === tab.key
+                    ? 'bg-[#0B0B36] text-white shadow-sm'
+                    : 'bg-white/80 text-slate-600 hover:bg-white border border-slate-200'
                 }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -342,32 +347,17 @@ export default function UserTable({
                       {/* Current Role (matching color pills) */}
                       <td className="user-table-cell">
                         {user.role === ROLES.ADMIN ? (
-                          <div>
-                            <span className="role-badge role-badge-admin">
-                              Administrator
-                            </span>
-                            <div className="text-[10px] text-slate-400 mt-0.5">
-                              Manage accounts, roles, settings &amp; reports
-                            </div>
-                          </div>
+                          <span className="role-badge role-badge-admin">
+                            Administrator
+                          </span>
                         ) : user.role === ROLES.STAFF ? (
-                          <div>
-                            <span className="role-badge role-badge-staff">
-                              Staff
-                            </span>
-                            <div className="text-[10px] text-slate-400 mt-0.5">
-                              Process requests, prepare docs &amp; update status
-                            </div>
-                          </div>
+                          <span className="role-badge role-badge-staff">
+                            Staff
+                          </span>
                         ) : (
-                          <div>
-                            <span className="role-badge role-badge-registrar">
-                              Registrar
-                            </span>
-                            <div className="text-[10px] text-slate-400 mt-0.5">
-                              Review &amp; approve/reject credential requests
-                            </div>
-                          </div>
+                          <span className="role-badge role-badge-registrar">
+                            Registrar
+                          </span>
                         )}
                       </td>
 
