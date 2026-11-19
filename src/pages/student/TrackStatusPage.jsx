@@ -248,21 +248,26 @@ export default function TrackStatusPage() {
   }, [rawRequests, user]);
 
   // Split student requests into Active vs History
-  // Automatically move Claimed / Released and Cancelled requests directly to History!
+  // Automatically move Claimed / Released, Cancelled, and Rejected requests directly to History!
+  const isHistoryOrTerminalRequest = (r) => {
+    const norm = normalizeToBackendStatus(r?.status);
+    if (
+      norm === REQUEST_STATUS.RELEASED ||
+      norm === REQUEST_STATUS.CANCELLED ||
+      norm === REQUEST_STATUS.REJECTED ||
+      norm === REQUEST_STATUS.REQUIREMENTS_REJECTED
+    ) {
+      return true;
+    }
+    return isClaimedStatus(r) || isRequestArchived(r, archivedMap);
+  };
+
   const activeStudentRequests = useMemo(() => {
-    return studentRequests.filter((r) => {
-      const norm = normalizeToBackendStatus(r?.status);
-      if (norm === REQUEST_STATUS.RELEASED || norm === REQUEST_STATUS.CANCELLED) return false;
-      return !isClaimedStatus(r) && !isRequestArchived(r, archivedMap);
-    });
+    return studentRequests.filter((r) => !isHistoryOrTerminalRequest(r));
   }, [studentRequests, archivedMap]);
 
   const historyStudentRequests = useMemo(() => {
-    return studentRequests.filter((r) => {
-      const norm = normalizeToBackendStatus(r?.status);
-      if (norm === REQUEST_STATUS.RELEASED || norm === REQUEST_STATUS.CANCELLED) return true;
-      return isClaimedStatus(r) || isRequestArchived(r, archivedMap);
-    });
+    return studentRequests.filter((r) => isHistoryOrTerminalRequest(r));
   }, [studentRequests, archivedMap]);
 
   // Displayed requests in the selector based on active tab
@@ -649,6 +654,14 @@ export default function TrackStatusPage() {
                 }`}
             >
               <span>Request History</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${activeQueueTab === 'history'
+                    ? 'bg-amber-400 text-slate-900'
+                    : 'bg-slate-200 text-slate-700'
+                  }`}
+              >
+                {historyStudentRequests.length}
+              </span>
             </button>
           </div>
         )}

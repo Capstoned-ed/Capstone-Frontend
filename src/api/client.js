@@ -40,6 +40,22 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Sanitize any raw HTML 500 error pages to clean user-friendly object
+    if (
+      error?.response?.data &&
+      typeof error.response.data === 'string' &&
+      (/<[a-z][\s\S]*>/i.test(error.response.data) ||
+        error.response.data.trim().toLowerCase().startsWith('<!doctype'))
+    ) {
+      const statusCode = error.response.status || 500;
+      error.response.data = {
+        detail:
+          statusCode >= 500
+            ? 'A server error occurred. Please try again later.'
+            : 'An unexpected error occurred while communicating with the server.',
+      };
+    }
+
     const originalRequest = error.config;
 
     // Reject immediately if no response or not a 401 or request already retried

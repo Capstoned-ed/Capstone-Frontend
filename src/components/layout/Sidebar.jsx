@@ -232,9 +232,8 @@ export default function Sidebar({ isCollapsed, onToggle, onNavigate }) {
   return (
     <>
       <aside
-        className={`relative z-30 min-h-screen bg-[#0B0B36] text-white flex flex-col justify-between transition-all duration-300 ease-in-out select-none shadow-xl ${
-          isCollapsed ? 'w-[80px]' : 'w-[270px]'
-        }`}
+        className={`relative z-30 min-h-screen bg-[#0B0B36] text-white flex flex-col justify-between transition-all duration-300 ease-in-out select-none shadow-xl ${isCollapsed ? 'w-[80px]' : 'w-[270px]'
+          }`}
       >
         <div>
           {isCollapsed ? (
@@ -290,12 +289,10 @@ export default function Sidebar({ isCollapsed, onToggle, onNavigate }) {
                 onClick={() => onNavigate?.()}
                 title={isCollapsed ? (item.badge > 0 ? `${item.label} (${item.badge} unread)` : item.label) : undefined}
                 className={({ isActive }) =>
-                  `group flex items-center rounded-xl transition-all font-medium ${
-                    isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-4 text-[15px]'
-                  } ${
-                    isActive
-                      ? 'bg-white/15 text-white shadow-sm font-semibold'
-                      : 'text-white/80 hover:text-white hover:bg-white/10'
+                  `group flex items-center rounded-xl transition-all font-medium ${isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-4 text-[15px]'
+                  } ${isActive
+                    ? 'bg-white/15 text-white shadow-sm font-semibold'
+                    : 'text-white/80 hover:text-white hover:bg-white/10'
                   }`
                 }
               >
@@ -329,12 +326,10 @@ export default function Sidebar({ isCollapsed, onToggle, onNavigate }) {
             onClick={() => onNavigate?.()}
             title={isCollapsed ? (unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications') : undefined}
             className={({ isActive }) =>
-              `group flex items-center rounded-xl transition-all font-medium ${
-                isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-4 text-[15px]'
-              } ${
-                isActive
-                  ? 'bg-white/15 text-white shadow-sm font-semibold'
-                  : 'text-white/80 hover:text-white hover:bg-white/10'
+              `group flex items-center rounded-xl transition-all font-medium ${isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-4 text-[15px]'
+              } ${isActive
+                ? 'bg-white/15 text-white shadow-sm font-semibold'
+                : 'text-white/80 hover:text-white hover:bg-white/10'
               }`
             }
           >
@@ -364,11 +359,10 @@ export default function Sidebar({ isCollapsed, onToggle, onNavigate }) {
             type="button"
             onClick={() => setShowUserMenu((prev) => !prev)}
             title={isCollapsed ? `${displayName} (${roleDisplay})` : 'Profile Options'}
-            className={`w-full flex items-center rounded-xl transition-all text-left ${
-              isCollapsed
-                ? 'justify-center p-2 hover:bg-white/10'
-                : 'px-4 py-2.5 gap-4 hover:bg-white/10'
-            }`}
+            className={`w-full flex items-center rounded-xl transition-all text-left ${isCollapsed
+              ? 'justify-center p-2 hover:bg-white/10'
+              : 'px-4 py-2.5 gap-4 hover:bg-white/10'
+              }`}
           >
             <div className="w-10 h-10 rounded-full bg-[#64748B] flex items-center justify-center overflow-hidden flex-shrink-0 text-white shadow-inner">
               <svg className="w-7 h-7 text-white mt-1" fill="currentColor" viewBox="0 0 24 24">
@@ -394,9 +388,8 @@ export default function Sidebar({ isCollapsed, onToggle, onNavigate }) {
                 type="button"
                 onClick={() => setShowProfileModal(true)}
                 title={isCollapsed ? 'My Profile' : undefined}
-                className={`w-full flex items-center rounded-xl transition-all font-medium text-white/90 hover:text-white hover:bg-white/10 ${
-                  isCollapsed ? 'justify-center p-3' : 'px-4 py-2.5 gap-4 text-[15px]'
-                }`}
+                className={`w-full flex items-center rounded-xl transition-all font-medium text-white/90 hover:text-white hover:bg-white/10 ${isCollapsed ? 'justify-center p-3' : 'px-4 py-2.5 gap-4 text-[15px]'
+                  }`}
               >
                 <div className="w-6 h-6 flex items-center justify-center shrink-0">
                   <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -410,9 +403,8 @@ export default function Sidebar({ isCollapsed, onToggle, onNavigate }) {
                 type="button"
                 onClick={handleLogout}
                 title={isCollapsed ? 'Logout' : undefined}
-                className={`w-full flex items-center rounded-xl transition-all font-medium text-white/90 hover:text-white hover:bg-white/10 ${
-                  isCollapsed ? 'justify-center p-3' : 'px-4 py-2.5 gap-4 text-[15px]'
-                }`}
+                className={`w-full flex items-center rounded-xl transition-all font-medium text-white/90 hover:text-white hover:bg-white/10 ${isCollapsed ? 'justify-center p-3' : 'px-4 py-2.5 gap-4 text-[15px]'
+                  }`}
               >
                 <div className="w-6 h-6 flex items-center justify-center shrink-0">
                   <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
