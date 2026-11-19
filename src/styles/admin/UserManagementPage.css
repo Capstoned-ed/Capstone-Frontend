@@ -8,13 +8,13 @@
 
 .user-stat-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.25rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
 }
 
 @media (min-width: 640px) {
   .user-stat-grid {
-    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
   }
 }
 
@@ -27,12 +27,19 @@
 .user-stat-card {
   position: relative;
   background-color: #ffffff;
-  border-radius: 1rem;
-  padding: 1.25rem 1.25rem 1.25rem 1.75rem;
+  border-radius: 0.875rem;
+  padding: 0.875rem 0.875rem 0.875rem 1.25rem;
   border: 1px solid rgba(226, 232, 240, 0.9);
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   overflow: hidden;
   transition: all 0.15s ease-in-out;
+}
+
+@media (min-width: 640px) {
+  .user-stat-card {
+    border-radius: 1rem;
+    padding: 1.25rem 1.25rem 1.25rem 1.75rem;
+  }
 }
 
 .user-stat-card:hover {
@@ -44,7 +51,13 @@
   left: 0;
   top: 0;
   bottom: 0;
-  width: 0.625rem;
+  width: 0.4375rem;
+}
+
+@media (min-width: 640px) {
+  .user-stat-pill {
+    width: 0.625rem;
+  }
 }
 
 .user-stat-pill-slate {
@@ -80,24 +93,32 @@
 }
 
 .user-stat-title {
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: #1e293b;
   letter-spacing: -0.025em;
 }
 
 .user-stat-body {
-  margin-top: 0.75rem;
+  margin-top: 0.5rem;
 }
 
 .user-stat-value {
-  font-size: 1.875rem;
+  font-size: 1.5rem;
   font-weight: 800;
   color: #0f172a;
   line-height: 1;
 }
 
 @media (min-width: 640px) {
+  .user-stat-title {
+    font-size: 0.875rem;
+  }
+
+  .user-stat-body {
+    margin-top: 0.75rem;
+  }
+
   .user-stat-value {
     font-size: 2.25rem;
   }

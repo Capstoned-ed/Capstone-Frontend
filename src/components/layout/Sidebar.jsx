@@ -3,13 +3,13 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { ROLES } from '../../constants/roles';
 import { ROUTES } from '../../constants/routes';
-import logoExpanded from '../../assets/RegQuest-Logo-2-cropped.png';
-import logoShrunk from '../../assets/RegQuest-Logo-3-cropped.png';
+import logoExpanded from '../../assets/RegQuest-Logo-USTP-2.png';
+import logoShrunk from '../../assets/RegQuest-Logo-USTP-3.png';
 import { useNotifications } from '../../context/NotificationContext';
 import StudentProfileModal from '../student/StudentProfileModal';
 import StaffProfileModal from '../staff/StaffProfileModal';
 
-export default function Sidebar({ isCollapsed, onToggle }) {
+export default function Sidebar({ isCollapsed, onToggle, onNavigate }) {
   const { user, logout } = useAuth();
   const { unreadCount } = useNotifications();
   const navigate = useNavigate();
@@ -242,7 +242,7 @@ export default function Sidebar({ isCollapsed, onToggle }) {
                 <img
                   src={logoShrunk}
                   alt="RegQuest Logo"
-                  className="h-10 w-10 object-contain drop-shadow"
+                  className="h-12 w-12 object-contain drop-shadow"
                 />
               </NavLink>
               <button
@@ -258,12 +258,12 @@ export default function Sidebar({ isCollapsed, onToggle }) {
               </button>
             </div>
           ) : (
-            <div className="pt-7 pb-5 flex items-center justify-between px-6">
-              <NavLink to={navLinks[0]?.to || '/'} className="flex items-center transition-opacity hover:opacity-90">
+            <div className="pt-8 pb-3 flex items-center justify-between px-4">
+              <NavLink to={navLinks[0]?.to || '/'} onClick={() => onNavigate?.()} className="flex items-center h-14 overflow-hidden transition-opacity hover:opacity-90">
                 <img
                   src={logoExpanded}
                   alt="RegQuest Logo"
-                  className="h-10 w-auto object-contain max-w-[160px]"
+                  className="w-[185px] h-[185px] -my-14 -ml-2 object-contain shrink-0"
                 />
               </NavLink>
               <button
@@ -286,6 +286,7 @@ export default function Sidebar({ isCollapsed, onToggle }) {
                 key={item.to}
                 to={item.to}
                 end
+                onClick={() => onNavigate?.()}
                 title={isCollapsed ? (item.badge > 0 ? `${item.label} (${item.badge} unread)` : item.label) : undefined}
                 className={({ isActive }) =>
                   `group flex items-center rounded-xl transition-all font-medium ${isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-4 text-[15px]'
@@ -322,6 +323,7 @@ export default function Sidebar({ isCollapsed, onToggle }) {
           <NavLink
             to={ROUTES.NOTIFICATIONS}
             end
+            onClick={() => onNavigate?.()}
             title={isCollapsed ? (unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications') : undefined}
             className={({ isActive }) =>
               `group flex items-center rounded-xl transition-all font-medium ${isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-4 text-[15px]'

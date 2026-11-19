@@ -328,8 +328,8 @@ export default function StaffDashboard() {
       : requestsList;
 
     return list
-      .filter((r) => !isRequestArchived(r, {}))
-      .filter((r) => isRequestAssignedToUser(r, user, {}, usersList))
+      .filter((r) => !isRequestArchived(r, archivedMap))
+      .filter((r) => isRequestAssignedToUser(r, user, assignments, usersList))
       .sort((a, b) => {
         const getAssignTime = (item) => {
           const keys = [item.tracking_number, item.id, item.rawId].filter(Boolean).map(String);
@@ -887,51 +887,6 @@ export default function StaffDashboard() {
           </div>
         </div>
 
-        <div className="staff-dash-insight-card">
-          <div className="staff-dash-insight-header">
-            <div className="staff-dash-insight-icon">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-2.04zm5 0A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-2.04z" />
-              </svg>
-            </div>
-            <h3 className="staff-dash-insight-title">Predicted Insight this week</h3>
-          </div>
-
-          <div className="staff-dash-insight-body">
-            {metrics.total > 0 ? (
-              <>
-                <p className="staff-dash-insight-item">
-                  <span className="text-white text-base leading-none">•</span>
-                  <span>
-                    Current registrar workload: <strong className="font-bold text-white">{metrics.total} total {metrics.total === 1 ? 'request' : 'requests'}</strong> ({metrics.pending} pending, {metrics.processing} in progress).
-                  </span>
-                </p>
-                {targetedSection.cards.length > 0 && (
-                  <p className="staff-dash-insight-item">
-                    <span className="text-white text-base leading-none">•</span>
-                    <span>
-                      Primary requested document: <strong className="font-bold text-white">{targetedSection.topDocName}</strong> ({targetedSection.cards[0].count} {targetedSection.cards[0].count === 1 ? 'copy' : 'copies'} requested).
-                    </span>
-                  </p>
-                )}
-                <p className="staff-dash-insight-item">
-                  <span className="text-white text-base leading-none">•</span>
-                  <span>
-                    Ready for collection: <strong className="font-bold text-white">{metrics.forRelease} {metrics.forRelease === 1 ? 'document' : 'documents'}</strong> ready for release.
-                  </span>
-                </p>
-              </>
-            ) : (
-              <p className="staff-dash-insight-item">
-                <span className="text-white text-base leading-none">•</span>
-                <span>
-                  No document requests currently in the pipeline. New student submissions will appear here automatically.
-                </span>
-              </p>
-            )}
-          </div>
-        </div>
-
         <div id="calendar" className="staff-dash-calendar-card">
           <div className="staff-dash-calendar-top">
             <div className="staff-dash-calendar-title-wrap">
@@ -943,8 +898,8 @@ export default function StaffDashboard() {
                   <line x1="3" y1="10" x2="21" y2="10" strokeLinecap="round" />
                 </svg>
               </div>
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                   <span className="staff-dash-calendar-range-badge">
                     {calendarHeaderLabel.range}
                   </span>
@@ -1007,7 +962,8 @@ export default function StaffDashboard() {
             <div className="staff-dash-calendar-weekdays">
               {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day) => (
                 <div key={day} className="staff-dash-calendar-weekday">
-                  {day}
+                  <span className="sm:hidden">{day.slice(0, 3)}</span>
+                  <span className="hidden sm:inline">{day}</span>
                 </div>
               ))}
             </div>
@@ -1071,10 +1027,10 @@ export default function StaffDashboard() {
                         </div>
                       </div>
                     ) : (
-                      <div className="p-1 font-bold text-slate-800 text-lg flex items-center justify-between">
+                      <div className="p-0.5 sm:p-1 font-bold text-slate-800 text-sm sm:text-lg flex flex-col sm:flex-row items-center sm:justify-between gap-0.5">
                         <span className={d.isToday ? 'text-blue-800 font-black' : ''}>{d.dayNumber}</span>
                         {d.isToday && (
-                          <span className="text-[10px] font-semibold text-blue-600 bg-blue-100 px-1 rounded">
+                          <span className="text-[8px] sm:text-[10px] font-semibold text-blue-600 bg-blue-100 px-1 py-0.5 rounded leading-none">
                             Today
                           </span>
                         )}
