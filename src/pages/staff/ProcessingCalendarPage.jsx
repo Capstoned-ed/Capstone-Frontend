@@ -341,6 +341,24 @@ export default function ProcessingCalendarPage() {
 
   return (
     <div className="processing-calendar-page">
+      {isAdmin && (
+        <div
+          data-testid="admin-view-only-banner"
+          className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-900 flex items-center justify-between"
+        >
+          <div className="flex items-center gap-2">
+            <span
+              data-testid="admin-view-only-badge"
+              className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300"
+            >
+              View Only (Admin)
+            </span>
+            <span className="text-xs text-amber-800 font-medium">
+              Administrators have view-only access to processing batches and request schedules.
+            </span>
+          </div>
+        </div>
+      )}
       <ProcessCalendarCard
         requests={requestsList}
         selectedDate={selectedDate}
