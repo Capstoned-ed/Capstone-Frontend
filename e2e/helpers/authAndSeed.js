@@ -107,8 +107,8 @@ export async function loginAs(page, role) {
         ? '/registrar'
         : '/staff';
 
-  await page.waitForURL(new RegExp(expectedPath), { timeout: 60000 });
-  await page.waitForLoadState('networkidle').catch(() => {});
+  await page.waitForURL(new RegExp(expectedPath), { timeout: 45000 });
+  await page.waitForLoadState('domcontentloaded');
 }
 
 /**
@@ -218,6 +218,19 @@ export class E2ETestTracker {
 
     const created = await res.json();
     this.createdUserIds.push(created.id);
+
+    // Explicitly enforce is_active: false if requested (DRF create defaults to true)
+    if (userData && userData.is_active === false) {
+      await this.request.patch(`${apiBaseUrl}/api/users/${created.id}/`, {
+        headers: {
+          Authorization: `Bearer ${this.adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        data: { is_active: false },
+      });
+      created.is_active = false;
+    }
+
     return { ...created, plainPassword: payload.password };
   }
 
@@ -281,3 +294,4 @@ export async function setRegistrarAutoApprove(request, registrarToken, autoAppro
   }
   return await res.json();
 }
+

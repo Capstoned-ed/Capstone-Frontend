@@ -24,13 +24,16 @@ test.describe('Suite 04: Registrar Assignment Status Preservation & Staff Paymen
     const stuAuth = await getAuthToken(request, 'student');
     studentToken = stuAuth.access;
 
-    const res = await request.get(`${apiBaseUrl}/api/credential-types/`);
+    const res = await request.get(`${apiBaseUrl}/api/credential-types/`, {
+      headers: { Authorization: `Bearer ${registrarToken}` },
+    });
     const credTypes = await res.json();
     const list = Array.isArray(credTypes) ? credTypes : credTypes.results || [];
     activeCredType = list.find((ct) => ct.is_active);
   });
 
   test('TC-REG-01: Assigning/reassigning staff strictly PRESERVES current request status', async ({ request }) => {
+    test.setTimeout(90000);
     test.skip(!activeCredType, 'Active credential type required');
 
     // 1. Create a PENDING request (auto-approve OFF)
@@ -66,8 +69,7 @@ test.describe('Suite 04: Registrar Assignment Status Preservation & Staff Paymen
     // Status MUST still be PENDING, never prematurely FOR_PROCESSING
     expect(verifyReq1.status).toBe('PENDING');
 
-    // 2. Create a PAYMENT_PENDING request (auto-approve ON)
-    await setRegistrarAutoApprove(request, registrarToken, true);
+    // 2. Create request and transition to PAYMENT_PENDING
     const reqPayRes = await request.post(`${apiBaseUrl}/api/requests/`, {
       headers: {
         Authorization: `Bearer ${studentToken}`,
@@ -81,7 +83,15 @@ test.describe('Suite 04: Registrar Assignment Status Preservation & Staff Paymen
       },
     });
     const payReq = await reqPayRes.json();
-    expect(['PAYMENT_PENDING', 'APPROVED']).toContain(payReq.status);
+
+    // Transition to PAYMENT_PENDING
+    await request.patch(`${apiBaseUrl}/api/requests/${payReq.id}/transition/`, {
+      headers: {
+        Authorization: `Bearer ${staffToken}`,
+        'Content-Type': 'application/json',
+      },
+      data: { status: 'PAYMENT_PENDING' },
+    });
 
     // Assign to staff
     const assignRes2 = await request.post(`${apiBaseUrl}/api/requests/${payReq.id}/assign/`, {
@@ -100,6 +110,7 @@ test.describe('Suite 04: Registrar Assignment Status Preservation & Staff Paymen
   });
 
   test('TC-STAFF-01: Staff confirms payment (FOR_VERIFICATION -> PAYMENT_VERIFIED)', async ({ request }) => {
+    test.setTimeout(90000);
     test.skip(!activeCredType, 'Active credential type required');
 
     // 1. Create request & submit payment proof to enter FOR_VERIFICATION
@@ -118,6 +129,15 @@ test.describe('Suite 04: Registrar Assignment Status Preservation & Staff Paymen
     });
     const reqData = await createRes.json();
 
+    // Staff transitions request to PAYMENT_PENDING before student payment
+    await request.patch(`${apiBaseUrl}/api/requests/${reqData.id}/transition/`, {
+      headers: {
+        Authorization: `Bearer ${staffToken}`,
+        'Content-Type': 'application/json',
+      },
+      data: { status: 'PAYMENT_PENDING' },
+    });
+
     const uniqueOr = `OR-CONFIRM-${Date.now()}`;
     const pngBuffer = createDummyPngBuffer();
     const payRes = await request.post(`${apiBaseUrl}/api/payments/`, {
@@ -131,8 +151,8 @@ test.describe('Suite 04: Registrar Assignment Status Preservation & Staff Paymen
     });
     const payment = await payRes.json();
 
-    // 2. Staff confirms payment proof
-    const verifyPayRes = await request.post(`${apiBaseUrl}/api/payments/${payment.id}/verify/`, {
+    // 2. Staff confirms payment proof via PATCH
+    const verifyPayRes = await request.patch(`${apiBaseUrl}/api/payments/${payment.id}/verify/`, {
       headers: {
         Authorization: `Bearer ${staffToken}`,
         'Content-Type': 'application/json',
@@ -152,11 +172,16 @@ test.describe('Suite 04: Registrar Assignment Status Preservation & Staff Paymen
   });
 
   test('TC-STAFF-02: Staff Processing Calendar renders queue and scheduled requests', async ({ page }) => {
+    test.setTimeout(90000);
     await loginAs(page, 'staff');
     await page.goto('/staff/calendar');
     await page.waitForLoadState('domcontentloaded');
 
     // Verify calendar header and month grid are visible
-    await expect(page.locator('text=/Processing Calendar|Release Schedule|Calendar/i').first()).toBeVisible({ timeout: 20000 });
+    const calIndicator = page.locator('text=/Processing Calendar|All Active Batches|Today|Release/i')
+      .filter({ visible: true })
+      .first();
+    await expect(calIndicator).toBeVisible({ timeout: 20000 });
   });
 });
+

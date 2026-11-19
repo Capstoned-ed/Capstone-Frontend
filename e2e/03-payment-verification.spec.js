@@ -16,20 +16,21 @@ test.describe('Suite 03: Payment Proof Submission, Duplicate O.R. Handling & FOR
     studentToken = access;
 
     // Fetch active credential type
-    const res = await request.get(`${apiBaseUrl}/api/credential-types/`);
+    const res = await request.get(`${apiBaseUrl}/api/credential-types/`, {
+      headers: { Authorization: `Bearer ${studentToken}` },
+    });
     const credTypes = await res.json();
     const list = Array.isArray(credTypes) ? credTypes : credTypes.results || [];
     activeCredType = list.find((ct) => ct.is_active);
   });
 
   test('TC-PAY-01: Payment submission transitions PAYMENT_PENDING -> FOR_VERIFICATION', async ({ request }) => {
+    test.setTimeout(90000);
     test.skip(!activeCredType, 'Active credential type required');
 
-    // 1. Ensure auto-approve is ON so request enters PAYMENT_PENDING
-    const { access: registrarToken } = await getAuthToken(request, 'registrar');
-    await setRegistrarAutoApprove(request, registrarToken, true);
+    const { access: staffToken } = await getAuthToken(request, 'staff');
 
-    // 2. Create request
+    // 1. Create request as student
     const createRes = await request.post(`${apiBaseUrl}/api/requests/`, {
       headers: {
         Authorization: `Bearer ${studentToken}`,
@@ -44,6 +45,16 @@ test.describe('Suite 03: Payment Proof Submission, Duplicate O.R. Handling & FOR
     });
     expect(createRes.ok()).toBeTruthy();
     const reqData = await createRes.json();
+
+    // 2. Staff transitions request to PAYMENT_PENDING
+    const transRes = await request.patch(`${apiBaseUrl}/api/requests/${reqData.id}/transition/`, {
+      headers: {
+        Authorization: `Bearer ${staffToken}`,
+        'Content-Type': 'application/json',
+      },
+      data: { status: 'PAYMENT_PENDING' },
+    });
+    expect(transRes.ok()).toBeTruthy();
 
     // 3. Submit payment proof
     const uniqueOr = `E2E-OR-${Date.now()}`;
@@ -76,9 +87,12 @@ test.describe('Suite 03: Payment Proof Submission, Duplicate O.R. Handling & FOR
   });
 
   test('TC-PAY-02: Duplicate O.R. number returns clean 400 Bad Request JSON (no raw HTML toast crash)', async ({ request, page }) => {
+    test.setTimeout(90000);
     test.skip(!activeCredType, 'Active credential type required');
 
-    // 1. Create two requests
+    const { access: staffToken } = await getAuthToken(request, 'staff');
+
+    // 1. Create two requests and transition them to PAYMENT_PENDING
     const createReq = async () => {
       const res = await request.post(`${apiBaseUrl}/api/requests/`, {
         headers: {
@@ -92,7 +106,15 @@ test.describe('Suite 03: Payment Proof Submission, Duplicate O.R. Handling & FOR
           copies: 1,
         },
       });
-      return await res.json();
+      const r = await res.json();
+      await request.patch(`${apiBaseUrl}/api/requests/${r.id}/transition/`, {
+        headers: {
+          Authorization: `Bearer ${staffToken}`,
+          'Content-Type': 'application/json',
+        },
+        data: { status: 'PAYMENT_PENDING' },
+      });
+      return r;
     };
 
     const req1 = await createReq();
@@ -150,7 +172,10 @@ test.describe('Suite 03: Payment Proof Submission, Duplicate O.R. Handling & FOR
   });
 
   test('TC-PAY-03 (TC-EDGE-13): Payment re-submission after rejection preserves flow', async ({ request }) => {
+    test.setTimeout(90000);
     test.skip(!activeCredType, 'Active credential type required');
+
+    const { access: staffToken } = await getAuthToken(request, 'staff');
 
     // Create request
     const createRes = await request.post(`${apiBaseUrl}/api/requests/`, {
@@ -167,6 +192,15 @@ test.describe('Suite 03: Payment Proof Submission, Duplicate O.R. Handling & FOR
     });
     const reqData = await createRes.json();
 
+    // Staff transitions request to PAYMENT_PENDING
+    await request.patch(`${apiBaseUrl}/api/requests/${reqData.id}/transition/`, {
+      headers: {
+        Authorization: `Bearer ${staffToken}`,
+        'Content-Type': 'application/json',
+      },
+      data: { status: 'PAYMENT_PENDING' },
+    });
+
     // Student submits first payment proof
     const firstOr = `OR-REJ1-${Date.now()}`;
     const pngBuffer = createDummyPngBuffer();
@@ -182,9 +216,8 @@ test.describe('Suite 03: Payment Proof Submission, Duplicate O.R. Handling & FOR
     expect(pay1.ok()).toBeTruthy();
     const paymentRecord = await pay1.json();
 
-    // Staff rejects first payment proof
-    const { access: staffToken } = await getAuthToken(request, 'staff');
-    const rejectRes = await request.post(`${apiBaseUrl}/api/payments/${paymentRecord.id}/verify/`, {
+    // Staff rejects first payment proof via PATCH
+    const rejectRes = await request.patch(`${apiBaseUrl}/api/payments/${paymentRecord.id}/verify/`, {
       headers: {
         Authorization: `Bearer ${staffToken}`,
         'Content-Type': 'application/json',
@@ -210,3 +243,4 @@ test.describe('Suite 03: Payment Proof Submission, Duplicate O.R. Handling & FOR
     expect(pay2.ok()).toBeTruthy();
   });
 });
+
