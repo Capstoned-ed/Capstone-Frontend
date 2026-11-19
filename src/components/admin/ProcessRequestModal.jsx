@@ -90,6 +90,8 @@ export default function ProcessRequestModal({
         'PENDING PAYMENT',
         'FOR PAYMENT',
         'FOR_PAYMENT',
+        'FOR_VERIFICATION',
+        'FOR VERIFICATION',
         'PAYMENT_VERIFIED',
         'FOR PROCESSING',
         'FOR_PROCESSING',
@@ -561,6 +563,7 @@ export default function ProcessRequestModal({
         case REQUEST_STATUS.PENDING:
         case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
         case REQUEST_STATUS.PAYMENT_PENDING:
+        case REQUEST_STATUS.FOR_VERIFICATION:
           nextTransitions = [
             'Approved / Ready for Release',
             'Returned to Staff / For Processing',
@@ -599,6 +602,9 @@ export default function ProcessRequestModal({
             nextTransitions = ['On Hold', 'Rejected'];
             break;
           case REQUEST_STATUS.PAYMENT_PENDING:
+            nextTransitions = ['For Verification', 'For Processing', 'Rejected'];
+            break;
+          case REQUEST_STATUS.FOR_VERIFICATION:
             nextTransitions = ['For Processing', 'Rejected'];
             break;
           case REQUEST_STATUS.PAYMENT_VERIFIED:
