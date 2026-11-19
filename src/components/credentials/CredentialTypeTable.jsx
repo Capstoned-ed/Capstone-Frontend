@@ -12,6 +12,8 @@ export default function CredentialTypeTable({
   canMutate = false,
   onEdit,
   onDeactivate,
+  onActivate,
+  activatingId = null,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -215,7 +217,7 @@ export default function CredentialTypeTable({
                         >
                           Edit
                         </button>
-                        {type.is_active && (
+                        {type.is_active ? (
                           <button
                             type="button"
                             onClick={() => onDeactivate && onDeactivate(type)}
@@ -223,6 +225,16 @@ export default function CredentialTypeTable({
                             title="Deactivate Credential Type"
                           >
                             Deactivate
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onActivate && onActivate(type)}
+                            disabled={activatingId === type.id}
+                            className="btn-action-activate disabled:opacity-50"
+                            title="Activate Credential Type"
+                          >
+                            {activatingId === type.id ? 'Activating...' : 'Activate'}
                           </button>
                         )}
                       </div>

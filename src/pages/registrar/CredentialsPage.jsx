@@ -21,6 +21,7 @@ export default function RegistrarCredentialsPage() {
 
   const [deleteDialogOpen, setDeleteDialogOpenOpen] = useState(false);
   const [selectedForDelete, setSelectedForDelete] = useState(null);
+  const [activatingId, setActivatingId] = useState(null);
 
   // RBAC: Registrar can mutate credential types
   const canMutate = user?.role === ROLES.REGISTRAR || user?.role === ROLES.ADMIN;
@@ -79,6 +80,24 @@ export default function RegistrarCredentialsPage() {
     setCredentialTypes((prev) =>
       prev.map((t) => (t.id === deactivatedId ? { ...t, is_active: false } : t))
     );
+  };
+
+  // Handle Activation
+  const handleActivate = async (type) => {
+    if (!type || activatingId) return;
+    setActivatingId(type.id);
+    try {
+      const updated = await credentialTypesApi.update(type.id, { is_active: true });
+      setCredentialTypes((prev) =>
+        prev.map((t) => (t.id === type.id ? { ...t, ...updated, is_active: true } : t))
+      );
+      toast.success(`Credential "${type.name}" has been activated.`);
+    } catch (err) {
+      console.error('Failed to activate credential type:', err);
+      toast.error('Failed to activate credential type.');
+    } finally {
+      setActivatingId(null);
+    }
   };
 
   // Metrics Calculations
@@ -161,6 +180,8 @@ export default function RegistrarCredentialsPage() {
         canMutate={canMutate}
         onEdit={handleOpenEdit}
         onDeactivate={handleOpenDeactivate}
+        onActivate={handleActivate}
+        activatingId={activatingId}
       />
 
       {/* Modals */}
