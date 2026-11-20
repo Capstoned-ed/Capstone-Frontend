@@ -34,26 +34,53 @@ export const usersApi = {
     return response.data;
   },
 
+  async getStaffUsers(params = {}) {
+    // Primary: fetch active staff users directly from /api/users/?role=STAFF
+    try {
+      const response = await apiClient.get('/api/users/', { params: { role: 'STAFF', is_active: true, ...params } });
+      const data = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+      if (Array.isArray(data) && data.length > 0) return data;
+    } catch {
+      // Fallback to staff endpoints
+    }
+    try {
+      const response = await apiClient.get('/api/users/staff/');
+      const data = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+      if (Array.isArray(data) && data.length > 0) return data;
+    } catch {}
+    try {
+      const response = await apiClient.get('/api/users/staff-directory/', { params: { role: 'STAFF' } });
+      const data = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+      if (Array.isArray(data) && data.length > 0) return data;
+    } catch {}
+    return [];
+  },
+
   async getStaffDirectory() {
+    try {
+      const response = await apiClient.get('/api/users/?role=STAFF');
+      const data = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+      if (Array.isArray(data) && data.length > 0) return data;
+    } catch {}
+    try {
+      const response = await apiClient.get('/api/users/staff/');
+      const data = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+      if (Array.isArray(data) && data.length > 0) return data;
+    } catch {}
     try {
       const response = await apiClient.get('/api/users/staff-directory/');
       const data = Array.isArray(response.data) ? response.data : (response.data?.results || []);
-      return data;
-    } catch (err) {
-      // If staff-directory endpoint returns 404 or 403, fallback to listing active staff/admin
-      if (err.response?.status === 404 || err.response?.status === 403) {
-        try {
-          const response = await apiClient.get('/api/users/');
-          const raw = Array.isArray(response.data) ? response.data : (response.data?.results || []);
-          return raw.filter((u) => {
-            const r = String(u.role || '').toLowerCase();
-            return (r === 'staff' || r === 'registrar' || r === 'admin') && u.is_active !== false;
-          });
-        } catch {
-          return [];
-        }
-      }
-      throw err;
+      if (Array.isArray(data) && data.length > 0) return data;
+    } catch {}
+    try {
+      const response = await apiClient.get('/api/users/');
+      const raw = Array.isArray(response.data) ? response.data : (response.data?.results || []);
+      return raw.filter((u) => {
+        const r = String(u.role || '').toLowerCase();
+        return (r === 'staff' || r === 'registrar' || r === 'admin') && u.is_active !== false;
+      });
+    } catch {
+      return [];
     }
   },
 

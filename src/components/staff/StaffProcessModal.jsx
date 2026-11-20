@@ -71,7 +71,13 @@ export default function StaffProcessModal({
     selectedRequest?.release_date ||
     'N/A';
 
-  const normalizeStatus = (val) => (val === 'For Payment' || val === 'FOR PAYMENT' ? 'Pending Payment' : val);
+  const normalizeStatus = (val) => {
+    if (!val) return val;
+    const s = String(val).trim();
+    if (s === 'For Payment' || s === 'FOR PAYMENT' || s === 'FOR_PAYMENT') return 'Pending Payment';
+    if (s === 'FOR_VERIFICATION' || s === 'FOR VERIFICATION') return 'For Verification';
+    return val;
+  };
   const [localStatus, setLocalStatus] = useState(() =>
     normalizeStatus(newStatus || selectedRequest?.status || 'For Processing')
   );
@@ -97,6 +103,7 @@ export default function StaffProcessModal({
   // Staff status options focused on processing approved requests, preparing documents & releasing
   const statusOptions = useMemo(() => {
     const defaultStatuses = [
+      'For Verification',
       'For Processing',
       'Processing',
       'Releasing',

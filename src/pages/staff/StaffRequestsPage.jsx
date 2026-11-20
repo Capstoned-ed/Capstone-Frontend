@@ -52,6 +52,8 @@ function getStatusBadge(status) {
       return <span className="status-badge pending">Pending</span>;
     case REQUEST_STATUS.PAYMENT_PENDING:
       return <span className="status-badge payment-pending">Pending Payment</span>;
+    case REQUEST_STATUS.FOR_VERIFICATION:
+      return <span className="status-badge for-verification bg-indigo-100 text-indigo-900 border border-indigo-200">For Verification</span>;
     case REQUEST_STATUS.PAYMENT_VERIFIED:
       return <span className="status-badge for-processing">For Processing</span>;
     case REQUEST_STATUS.PROCESSING:
@@ -933,6 +935,10 @@ export default function StaffRequestsPage() {
       case 'PAYMENT_PENDING':
       case 'Payment Pending':
         return <span className="status-pill for-payment">Pending Payment</span>;
+      case 'For Verification':
+      case 'FOR VERIFICATION':
+      case 'FOR_VERIFICATION':
+        return <span className="status-pill for-verification bg-indigo-100 text-indigo-900 border border-indigo-200">For Verification</span>;
       case 'For Processing':
       case 'FOR_PROCESSING':
       case 'PAYMENT_VERIFIED':
