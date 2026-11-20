@@ -46,7 +46,7 @@ export default function StaffRequestsTable({
     }
   }, [totalPages, visibleRequests.length]);
   const showCheckboxCol = enableSelection && isSelectionMode;
-  const colSpanCount = (showAssignedStaff ? 8 : 7) + (showCheckboxCol ? 1 : 0);
+  const colSpanCount = (showAssignedStaff ? 9 : 8) + (showCheckboxCol ? 1 : 0);
 
   const isAllSelected =
     showCheckboxCol &&
@@ -220,6 +220,7 @@ export default function StaffRequestsTable({
               )}
               <th>Request ID</th>
               <th>Student</th>
+              <th>Course</th>
               <th>Document Type</th>
               <th>Status</th>
               {showAssignedStaff && <th>Assigned Staff</th>}
@@ -269,6 +270,18 @@ export default function StaffRequestsTable({
                   <td>
                     <div className="staff-student-name">{item.student_name}</div>
                     <div className="staff-student-sub">{item.student_id}</div>
+                  </td>
+                  <td className="whitespace-nowrap">
+                    {item.student_course_code || item.student_course ? (
+                      <span
+                        className="inline-block px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-900 border border-indigo-200/80 font-bold text-xs"
+                        title={item.student_course || item.student_course_code}
+                      >
+                        {item.student_course_code || item.student_course}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-xs">—</span>
+                    )}
                   </td>
                   <td>
                     <div className="staff-doc-name">{item.document_type}</div>

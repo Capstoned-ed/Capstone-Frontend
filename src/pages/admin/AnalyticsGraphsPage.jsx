@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import requestsApi, { isValidRequest, resolveRequestDocType, extractDocumentItems } from '../../api/requests';
+import useToast from '../../hooks/useToast';
 import '../../styles/admin/AnalyticsGraphsPage.css';
 
 // Institutional palette used deterministically for dynamically discovered document types
@@ -157,25 +160,34 @@ export default function AnalyticsGraphsPage() {
     [credTypes]
   );
 
-  // Build dynamic series list strictly from ALL requested document items in live requests
+  // Build series list from ALL catalog credential types + any extra requested document items
   const allDynamicSeries = useMemo(() => {
     const map = new Map();
+    const addEntry = (label) => {
+      const cleanLabel = String(label || '').trim();
+      if (!cleanLabel) return;
+      const key = makeSeriesKey(cleanLabel);
+      if (!map.has(key)) {
+        const idx = map.size;
+        map.set(key, {
+          key,
+          label: cleanLabel,
+          shortLabel: makeShortLabel(cleanLabel),
+          color: SERIES_COLOR_PALETTE[idx % SERIES_COLOR_PALETTE.length],
+        });
+      }
+    };
+
+    credTypes.forEach((ct) => {
+      if (ct?.name) addEntry(ct.name);
+    });
+
     requestsList.forEach((r) => {
       const items = resolveRequestDocItems(r);
-      items.forEach(({ key, label }) => {
-        if (!map.has(key)) {
-          const idx = map.size;
-          map.set(key, {
-            key,
-            label,
-            shortLabel: makeShortLabel(label),
-            color: SERIES_COLOR_PALETTE[idx % SERIES_COLOR_PALETTE.length],
-          });
-        }
-      });
+      items.forEach(({ label }) => addEntry(label));
     });
     return Array.from(map.values());
-  }, [requestsList, resolveRequestDocItems]);
+  }, [credTypes, requestsList, resolveRequestDocItems]);
 
   // Helper to build Mon-Sun week buckets around an anchor date
   const buildWeekBuckets = useCallback((anchorDate) => {
@@ -188,7 +200,8 @@ export default function AnalyticsGraphsPage() {
     const daysData = dayLabels.map((label, idx) => {
       const d = new Date(monday);
       d.setDate(monday.getDate() + idx);
-      return { label, dateStr: toLocalDateStr(d), counts: {}, totalLine: 0 };
+      const shortDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return { label, shortDate, dateStr: toLocalDateStr(d), counts: {}, totalLine: 0 };
     });
 
     const dateIndexMap = {};
@@ -234,7 +247,7 @@ export default function AnalyticsGraphsPage() {
   const dynamicMonthlyData = useMemo(() => {
     const buildYearBuckets = (targetYear) => {
       const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const monthsData = monthLabels.map((label) => ({ label, counts: {}, totalLine: 0 }));
+      const monthsData = monthLabels.map((label) => ({ label, year: targetYear, counts: {}, totalLine: 0 }));
 
       requestsList.forEach((r) => {
         const reqDateStr = toLocalDateStr(r.created_at || r.request_date);
@@ -310,8 +323,249 @@ export default function AnalyticsGraphsPage() {
   // Line Chart Path
   const linePoints = currentData.map((d, i) => `${getXCoord(i)},${getYCoord(d.totalLine)}`).join(' ');
 
-  // Table Totals
+  // Table Totals & Period Range Label
   const grandTotal = currentData.reduce((sum, d) => sum + d.totalLine, 0);
+  const breakdownPeriodLabel = useMemo(() => {
+    if (isMonthly) {
+      const yr = dynamicMonthlyData[0]?.year || new Date().getFullYear();
+      return `January – December ${yr}`;
+    }
+    const firstStr = dynamicDailyData[0]?.dateStr;
+    const lastStr = dynamicDailyData[dynamicDailyData.length - 1]?.dateStr;
+    if (!firstStr || !lastStr) return '';
+    const firstDate = new Date(`${firstStr}T12:00:00`);
+    const lastDate = new Date(`${lastStr}T12:00:00`);
+    const fromText = firstDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const toText = lastDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return `${fromText} – ${toText}`;
+  }, [isMonthly, dynamicDailyData, dynamicMonthlyData]);
+
+  const toast = useToast();
+  const breakdownCardRef = useRef(null);
+  const breakdownTableRef = useRef(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  const handlePrintBreakdown = () => {
+    const tableEl = breakdownTableRef.current;
+    if (!tableEl) return;
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      return;
+    }
+
+    const monthlyCompact = isMonthly
+      ? `
+        .breakdown-table th, .breakdown-table td {
+          padding: 12px 4px;
+          font-size: 10.5px;
+        }
+        .th-doc-type, .td-doc-type {
+          min-width: 135px;
+        }
+      `
+      : `
+        .breakdown-table th, .breakdown-table td {
+          padding: 14px 6px;
+          font-size: 12px;
+        }
+        .th-doc-type, .td-doc-type {
+          min-width: 165px;
+        }
+      `;
+
+    doc.open();
+    doc.write(`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title></title>
+    <style>
+      @page {
+        size: A4 portrait;
+        margin: 0;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        margin: 0;
+        padding: 10mm;
+        background: #ffffff;
+        color: #000000;
+        font-family: 'Segoe UI', Arial, sans-serif;
+        font-variant-numeric: tabular-nums;
+      }
+      .breakdown-table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1.5px solid #000000;
+        background: #ffffff;
+        color: #000000;
+        text-align: center;
+        page-break-inside: avoid;
+      }
+      .breakdown-table th,
+      .breakdown-table td {
+        border: 1px solid #000000;
+        background: #ffffff;
+        color: #000000;
+      }
+      ${monthlyCompact}
+      .breakdown-thead th {
+        font-weight: 700;
+        border-bottom: 1.5px solid #000000;
+      }
+      .breakdown-period-row th {
+        text-align: left;
+        font-weight: 700;
+        padding: 7px 10px;
+        border-bottom: 1.5px solid #000000;
+      }
+      .th-doc-type,
+      .td-doc-type {
+        text-align: left;
+        padding-left: 10px !important;
+        font-weight: 600;
+      }
+      .th-total,
+      .td-total {
+        font-weight: 700;
+      }
+      .breakdown-total-row td {
+        font-weight: 800;
+        border-top: 1.5px solid #000000;
+        border-bottom: 1.5px solid #000000;
+      }
+      .text-\\[10px\\] {
+        font-size: 9px;
+        font-weight: 500;
+        margin-top: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    ${tableEl.outerHTML}
+  </body>
+</html>`);
+    doc.close();
+
+    const cleanup = () => {
+      if (iframe.parentNode) {
+        iframe.parentNode.removeChild(iframe);
+      }
+    };
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } finally {
+        setTimeout(cleanup, 1500);
+      }
+    }, 100);
+  };
+
+  const handleDownloadBreakdownCsv = () => {
+    const escapeCsv = (val) => {
+      const s = String(val ?? '');
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const headers = [
+      'Document Type',
+      ...currentData.map((col) => (col.shortDate ? `${col.label} (${col.shortDate})` : col.label)),
+      'Total',
+    ];
+    const rows = allDynamicSeries.map((row) => {
+      const rowTotal = currentData.reduce((sum, col) => sum + (col.counts[row.key] || 0), 0);
+      return [
+        row.label,
+        ...currentData.map((col) => col.counts[row.key] || 0),
+        rowTotal,
+      ];
+    });
+    const totalRow = ['Total', ...currentData.map((col) => col.totalLine), grandTotal];
+    const csvLines = [headers, ...rows, totalRow]
+      .map((line) => line.map(escapeCsv).join(','))
+      .join('\r\n');
+
+    const blob = new Blob(['\uFEFF' + csvLines], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStamp = new Date().toISOString().split('T')[0];
+    link.href = url;
+    link.download = `USTP_Document_Breakdown_${isMonthly ? 'Monthly' : 'Daily'}_${dateStamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success('Document Type Breakdown CSV downloaded!');
+  };
+
+  const handleDownloadBreakdownPdf = async () => {
+    const cardEl = breakdownCardRef.current;
+    const tableEl = breakdownTableRef.current;
+    if (!tableEl || downloadingPdf) return;
+    setDownloadingPdf(true);
+    try {
+      cardEl?.classList.add('breakdown-exporting');
+      tableEl.classList.add('breakdown-table-exporting');
+      const captureWidth = Math.max(tableEl.scrollWidth + 24, 760);
+      const canvas = await html2canvas(tableEl, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: captureWidth,
+      });
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true,
+      });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const availW = pageW - margin * 2;
+      const availH = pageH - margin * 2;
+      let imgW = availW;
+      let imgH = (canvas.height * imgW) / canvas.width;
+      if (imgH > availH) {
+        const ratio = availH / imgH;
+        imgW *= ratio;
+        imgH = availH;
+      }
+      const x = (pageW - imgW) / 2;
+      const y = margin;
+      const imgData = canvas.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', x, y, imgW, imgH);
+      const dateStamp = new Date().toISOString().split('T')[0];
+      pdf.save(`USTP_Document_Breakdown_${isMonthly ? 'Monthly' : 'Daily'}_${dateStamp}.pdf`);
+      toast.success('Document Type Breakdown PDF downloaded!');
+    } catch (err) {
+      console.error('Failed to export Document Breakdown PDF:', err);
+      toast.error('Could not generate PDF. You can use Print or CSV instead.');
+    } finally {
+      tableEl.classList.remove('breakdown-table-exporting');
+      cardEl?.classList.remove('breakdown-exporting');
+      setDownloadingPdf(false);
+    }
+  };
 
   const colors = {
     transcript: '#001FD1',
@@ -574,29 +828,86 @@ export default function AnalyticsGraphsPage() {
       {/* ------------------------------------------------------------------
           4. Card 3: Document Type Breakdown Table
           ------------------------------------------------------------------ */}
-      <div className="analytics-table-card">
-        <h2 className="analytics-card-title">Document Type Breakdown</h2>
+      <div ref={breakdownCardRef} className="analytics-table-card breakdown-print-section">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 className="analytics-card-title !mb-0">Document Type Breakdown</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {isMonthly ? 'Monthly' : 'Weekly'} Summary ({breakdownPeriodLabel}) • Generated {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 print:hidden breakdown-no-export">
+            <button
+              type="button"
+              onClick={handleDownloadBreakdownCsv}
+              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Download breakdown as CSV"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>CSV</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadBreakdownPdf}
+              disabled={downloadingPdf}
+              className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-500 text-[#0B0B36] text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Download breakdown as PDF (A4 Bondpaper)"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>{downloadingPdf ? 'Exporting...' : 'Download PDF'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handlePrintBreakdown}
+              className="px-3 py-1.5 rounded-lg bg-[#0B0B36] hover:bg-[#1E1E6B] text-white text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Print Document Type Breakdown"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              <span>Print</span>
+            </button>
+          </div>
+        </div>
 
         <div className="analytics-table-wrap">
-          <table className="breakdown-table">
+          <table ref={breakdownTableRef} className={`breakdown-table ${isMonthly ? 'breakdown-table-monthly' : 'breakdown-table-weekly'}`}>
             <thead className="breakdown-thead">
+              {breakdownPeriodLabel && (
+                <tr className="breakdown-period-row">
+                  <th colSpan={currentData.length + 2}>
+                    {isMonthly ? 'Monthly Period' : 'Weekly Period'}: {breakdownPeriodLabel}
+                  </th>
+                </tr>
+              )}
               <tr>
                 <th className="th-doc-type">Document Type</th>
                 {currentData.map((col) => (
-                  <th key={`th-${col.label}`}>{col.label}</th>
+                  <th key={`th-${col.label}`}>
+                    <div>{col.label}</div>
+                    {col.shortDate && (
+                      <div className="text-[10px] font-medium text-slate-500 leading-tight mt-0.5">
+                        {col.shortDate}
+                      </div>
+                    )}
+                  </th>
                 ))}
                 <th className="th-total">Total</th>
               </tr>
             </thead>
             <tbody className="breakdown-tbody">
-              {activeSeries.length === 0 ? (
+              {allDynamicSeries.length === 0 ? (
                 <tr>
                   <td colSpan={currentData.length + 2} className="text-center text-slate-400 py-6">
-                    No credential requests recorded for this period.
+                    No credential types configured in catalog.
                   </td>
                 </tr>
               ) : (
-                activeSeries.map((row) => {
+                allDynamicSeries.map((row) => {
                   const rowTotal = currentData.reduce((sum, col) => sum + (col.counts[row.key] || 0), 0);
                   return (
                     <tr key={row.key}>

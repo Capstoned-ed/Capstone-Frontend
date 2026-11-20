@@ -28,6 +28,7 @@ import usersApi from '../../api/users';
 import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
 import useToast from '../../hooks/useToast';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
+import CourseSelectDropdown, { USTP_COURSE_GROUPS, USTP_COURSE_CODE_MAP } from '../../components/admin/CourseSelectDropdown';
 import BatchUpdateModal from '../../components/common/BatchUpdateModal';
 import { StaffRequestsTable, StaffSearchFilter } from '../../components/staff';
 import {
@@ -95,6 +96,7 @@ export default function StaffRequestsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [docTypeFilter, setDocTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [unassignedCourseFilter, setUnassignedCourseFilter] = useState('');
 
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [newStatus, setNewStatus] = useState('Pending');
@@ -421,6 +423,77 @@ export default function StaffRequestsPage() {
           matchedStored?.status ||
           'Pending';
 
+        const rawCourse = (() => {
+          const direct =
+            user?.program ||
+            user?.course ||
+            r.program ||
+            r.course ||
+            r.student_program ||
+            matchedStored?.program ||
+            matchedStored?.course ||
+            '';
+          if (direct) return String(direct).trim();
+          try {
+            const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+            const prof =
+              (user?.id && profiles[user.id]) ||
+              (r.student_id && profiles[r.student_id]) ||
+              (user?.username && profiles[user.username]) ||
+              null;
+            if (prof?.program || prof?.course) return String(prof.program || prof.course).trim();
+          } catch {}
+          return '';
+        })();
+
+        const resolvedCourseCode = (() => {
+          const shortToFull = {
+            IT: 'BSIT',
+            CS: 'BSCS',
+            TCM: 'BSTCM',
+            DS: 'BSDS',
+            CE: 'BSCE',
+            CPE: 'BSCpE',
+            EE: 'BSEE',
+            GE: 'BSGE',
+            ME: 'BSME',
+            ARCH: 'BS Arch',
+            AM: 'BSAM',
+            AP: 'BSAP',
+            CHEM: 'BSChem',
+            ES: 'BSES',
+            FT: 'BSFT',
+          };
+          const normalizeCode = (val) => {
+            const clean = String(val || '').trim();
+            if (!clean) return '';
+            if (USTP_COURSE_CODE_MAP[clean]) return USTP_COURSE_CODE_MAP[clean];
+            const upper = clean.toUpperCase();
+            if (shortToFull[upper]) return shortToFull[upper];
+            const lower = clean.toLowerCase();
+            for (const grp of USTP_COURSE_GROUPS) {
+              const found = grp.courses.find(
+                (c) =>
+                  c.code.toLowerCase() === lower ||
+                  c.name.toLowerCase() === lower ||
+                  lower.includes(`(${c.code.toLowerCase()})`)
+              );
+              if (found) return found.code;
+            }
+            return clean;
+          };
+
+          if (rawCourse) return normalizeCode(rawCourse);
+
+          const tCode = String(r.tracking_number || r.id || '').trim();
+          const prefixMatch = tCode.match(/^([A-Za-z][A-Za-z\s-]{0,12}?)-\d{2}-\d{2}-/);
+          if (prefixMatch && prefixMatch[1]) {
+            const p = prefixMatch[1].trim();
+            if (!['REQ', 'RQ'].includes(p.toUpperCase())) return normalizeCode(p);
+          }
+          return '';
+        })();
+
         return {
           rawId: r.rawId || r.id,
           id: r.tracking_number || r.id,
@@ -428,6 +501,8 @@ export default function StaffRequestsPage() {
           user: r.user,
           student_name: studentName,
           student_id: studentId,
+          student_course: rawCourse,
+          student_course_code: resolvedCourseCode,
           document_type: documentType,
           copies: r.copies || '1 copy',
           status: formatStatusDisplay(effectiveRawStatus),
@@ -581,7 +656,7 @@ export default function StaffRequestsPage() {
   }, [activeFilteredRequests, user, assignments, users, activityTimestamps]);
 
   // Card 2: All unassigned requests (from Active queue)
-  const unassignedRequests = useMemo(() => {
+  const unassignedRequestsBase = useMemo(() => {
     return activeFilteredRequests
       .filter((r) => {
         const isAssigned = isRequestAssignedToUser(r, user, assignments, users);
@@ -590,6 +665,22 @@ export default function StaffRequestsPage() {
       })
       .sort(sortRequestsNewestFirst);
   }, [activeFilteredRequests, user, assignments, users, activityTimestamps]);
+
+  const unassignedRequests = useMemo(() => {
+    if (!unassignedCourseFilter) return unassignedRequestsBase;
+    const selectedCode = (USTP_COURSE_CODE_MAP[unassignedCourseFilter] || unassignedCourseFilter).toLowerCase();
+    const selectedName = unassignedCourseFilter.toLowerCase();
+    return unassignedRequestsBase.filter((r) => {
+      const rCode = String(r.student_course_code || '').toLowerCase();
+      const rName = String(r.student_course || '').toLowerCase();
+      return (
+        rCode === selectedCode ||
+        rName === selectedName ||
+        rName.includes(selectedCode) ||
+        rName.includes(selectedName)
+      );
+    });
+  }, [unassignedRequestsBase, unassignedCourseFilter]);
 
   // Handlers for Archiving (Move to History) and Restoring
   const handleArchiveRequest = (item) => {
@@ -1431,7 +1522,22 @@ export default function StaffRequestsPage() {
             loading={loading}
             error={error}
             filteredRequests={unassignedRequests}
-            totalRequestsCount={unassignedRequests.length}
+            totalRequestsCount={unassignedRequestsBase.length}
+            searchControls={
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider shrink-0">
+                  Filter by Course:
+                </span>
+                <div className="w-full sm:w-96">
+                  <CourseSelectDropdown
+                    value={unassignedCourseFilter}
+                    onChange={setUnassignedCourseFilter}
+                    allowClear={true}
+                    placeholder={`All Courses (${unassignedRequestsBase.length})`}
+                  />
+                </div>
+              </div>
+            }
             getStatusBadge={getStatusBadge}
             onOpenProcess={handleOpenProcess}
             actionType="claim"
