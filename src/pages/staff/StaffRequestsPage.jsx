@@ -19,7 +19,9 @@ import requestsApi, {
   ASSIGNMENTS_KEY,
   ASSIGNMENT_TIMESTAMPS_KEY,
   preserveDocTagInRemarks,
+  mergeStaffNoteIntoRemarks,
   formatCleanPurpose,
+  extractStaffRemark,
 } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
@@ -438,6 +440,8 @@ export default function StaffRequestsPage() {
           verified_by_name: matchedStored?.verified_by_name || r.verified_by_name || null,
           purpose: formatCleanPurpose(r.purpose || r.remarks),
           remarks: matchedStored?.remarks || r.remarks || '',
+          notes: matchedStored?.notes || matchedStored?.staff_notes || r.notes || '',
+          staff_notes: matchedStored?.staff_notes || matchedStored?.notes || r.staff_notes || '',
           clearance_preview: effectiveClearancePreview,
           clearance_id: r.clearance_id || userClearance?.id || null,
           clearance_status:
@@ -971,7 +975,7 @@ export default function StaffRequestsPage() {
   const handleOpenProcess = (req) => {
     setSelectedRequest(req);
     setNewStatus(formatStatusDisplay(req.status) || 'Pending');
-    setNotes('');
+    setNotes(extractStaffRemark(req));
   };
 
   const handleClaimAndProcess = async (item, options = {}) => {
@@ -1217,6 +1221,8 @@ export default function StaffRequestsPage() {
       'Staff';
 
     const nowIso = new Date().toISOString();
+    const trimmedNotes = String(notes || '').trim();
+    const nextRemarks = mergeStaffNoteIntoRemarks(selectedRequest, trimmedNotes);
 
     const fullPatch = {
       status: effectiveStatus,
@@ -1224,7 +1230,9 @@ export default function StaffRequestsPage() {
       assigned_at: selectedRequest.assigned_at,
       accepted_at: selectedRequest.accepted_at,
       updated_at: nowIso,
-      remarks: notes || selectedRequest.remarks || '',
+      notes: trimmedNotes,
+      staff_notes: trimmedNotes,
+      remarks: nextRemarks,
       clearance_status: selectedRequest.clearance_status,
       assessed_amount: selectedRequest.assessed_amount,
       amount: selectedRequest.amount || selectedRequest.assessed_amount,
@@ -1244,7 +1252,7 @@ export default function StaffRequestsPage() {
         try {
           await requestsApi.transition(targetRawId, {
             status: backendStatus,
-            remarks: preserveDocTagInRemarks(selectedRequest, notes || selectedRequest.remarks || ''),
+            remarks: nextRemarks,
           });
         } catch (apiErr) {
           console.warn('Backend transition notice:', apiErr);

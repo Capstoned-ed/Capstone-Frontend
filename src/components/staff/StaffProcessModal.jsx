@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import { getStoredPaymentProof } from '../../api/payments';
-import { formatCleanPurpose, sanitizeRemarks } from '../../api/requests';
+import { formatCleanPurpose, sanitizeRemarks, extractStaffRemark } from '../../api/requests';
 import useToast from '../../hooks/useToast';
 import PrintRequestFormModal from '../student/PrintRequestFormModal';
 import CustomSelectDropdown from '../common/CustomSelectDropdown';
@@ -229,7 +230,7 @@ export default function StaffProcessModal({
   const isClearanceApproved = rawClearance === 'VERIFIED' || rawClearance === 'APPROVED';
   const isClearanceRejected = rawClearance === 'REJECTED' || rawClearance === 'NOT_VERIFIED';
 
-  return (
+  return createPortal(
     <>
       <div className="staff-process-backdrop" onClick={onBackToList}>
         <div className="staff-process-dialog max-w-3xl" onClick={(e) => e.stopPropagation()}>
@@ -352,7 +353,7 @@ export default function StaffProcessModal({
                     <div className={`staff-field-box text-xs ${
                       isTerminal || isClearanceRejected ? 'bg-rose-50 text-rose-800 border-rose-200' : ''
                     }`}>
-                      {sanitizeRemarks(selectedRequest.remarks) || (isTerminal ? 'Request closed or rejected.' : '—')}
+                      {extractStaffRemark(selectedRequest) || (isTerminal ? 'Request closed or rejected.' : '—')}
                     </div>
                   </div>
                 )}
@@ -572,6 +573,7 @@ export default function StaffProcessModal({
           date_of_release: dateOfRelease,
         }}
       />
-    </>
+    </>,
+    document.body
   );
 }
