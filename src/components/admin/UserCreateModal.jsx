@@ -21,6 +21,7 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
   if (!isOpen) return null;
 
   const handleChange = (e) => {
+    if (loading) return;
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) {
@@ -180,8 +181,12 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
                 name="first_name"
                 value={formData.first_name}
                 onChange={handleChange}
+                disabled={loading}
+                readOnly={loading}
+                tabIndex={loading ? -1 : undefined}
+                aria-disabled={loading ? 'true' : undefined}
                 placeholder="e.g. Maria"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36]"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36] disabled:bg-slate-100 disabled:cursor-not-allowed"
               />
             </div>
             <div>
@@ -193,8 +198,12 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
                 name="last_name"
                 value={formData.last_name}
                 onChange={handleChange}
+                disabled={loading}
+                readOnly={loading}
+                tabIndex={loading ? -1 : undefined}
+                aria-disabled={loading ? 'true' : undefined}
                 placeholder="e.g. Santos"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36]"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36] disabled:bg-slate-100 disabled:cursor-not-allowed"
               />
             </div>
           </div>
@@ -209,8 +218,12 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
               name="username"
               value={formData.username}
               onChange={handleChange}
+              disabled={loading}
+              readOnly={loading}
+              tabIndex={loading ? -1 : undefined}
+              aria-disabled={loading ? 'true' : undefined}
               placeholder="e.g. 2024-001 or EMP-1029"
-              className={`w-full px-3 py-2 border rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 ${
+              className={`w-full px-3 py-2 border rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 disabled:bg-slate-100 disabled:cursor-not-allowed ${
                 errors.username
                   ? 'border-rose-400 focus:ring-rose-200'
                   : 'border-slate-300 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36]'
@@ -231,8 +244,12 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
               name="email"
               value={formData.email}
               onChange={handleChange}
+              disabled={loading}
+              readOnly={loading}
+              tabIndex={loading ? -1 : undefined}
+              aria-disabled={loading ? 'true' : undefined}
               placeholder="e.g. maria.santos@ustp.edu.ph"
-              className={`w-full px-3 py-2 border rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 ${
+              className={`w-full px-3 py-2 border rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 disabled:bg-slate-100 disabled:cursor-not-allowed ${
                 errors.email
                   ? 'border-rose-400 focus:ring-rose-200'
                   : 'border-slate-300 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36]'
@@ -253,8 +270,12 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
               name="password"
               value={formData.password}
               onChange={handleChange}
+              disabled={loading}
+              readOnly={loading}
+              tabIndex={loading ? -1 : undefined}
+              aria-disabled={loading ? 'true' : undefined}
               placeholder="Leave blank to use ID Number"
-              className={`w-full px-3 py-2 border rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 ${
+              className={`w-full px-3 py-2 border rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 disabled:bg-slate-100 disabled:cursor-not-allowed ${
                 errors.password
                   ? 'border-rose-400 focus:ring-rose-200'
                   : 'border-slate-300 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36]'
@@ -275,8 +296,12 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
             </label>
             <CustomSelectDropdown
               value={formData.role}
-              onChange={(val) => setFormData((prev) => ({ ...prev, role: val }))}
-              buttonClassName="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36]"
+              onChange={(val) => {
+                if (loading) return;
+                setFormData((prev) => ({ ...prev, role: val }));
+              }}
+              disabled={loading}
+              buttonClassName="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36] disabled:bg-slate-100 disabled:cursor-not-allowed"
               options={[
                 { value: ROLES.REGISTRAR, label: 'Registrar — Review and approve/reject credential requests' },
                 { value: ROLES.STAFF, label: 'Staff — Process approved requests, prepare documents, and update statuses' },

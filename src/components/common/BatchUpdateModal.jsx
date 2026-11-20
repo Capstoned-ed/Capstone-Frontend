@@ -112,8 +112,15 @@ export default function BatchUpdateModal({
             <div className="relative">
               <select
                 value={newStatus}
-                onChange={(e) => setNewStatus(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-950/20 focus:border-indigo-950 transition-all font-medium text-slate-800"
+                onChange={(e) => {
+                  if (isSubmitting) return;
+                  setNewStatus(e.target.value);
+                }}
+                disabled={isSubmitting}
+                readOnly={isSubmitting}
+                tabIndex={isSubmitting ? -1 : undefined}
+                aria-disabled={isSubmitting ? 'true' : undefined}
+                className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-950/20 focus:border-indigo-950 transition-all font-medium text-slate-800 disabled:bg-slate-100 disabled:cursor-not-allowed"
               >
                 {STATUS_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -135,7 +142,12 @@ export default function BatchUpdateModal({
             <div className="relative">
               <CompactDatePicker
                 value={releasingDate}
-                onChange={setReleasingDate}
+                onChange={(val) => {
+                  if (isSubmitting) return;
+                  setReleasingDate(val);
+                }}
+                disabled={isSubmitting}
+                readOnly={isSubmitting}
                 className="px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-950/20 focus:border-indigo-950 transition-all font-medium text-slate-800"
               />
             </div>
@@ -152,9 +164,16 @@ export default function BatchUpdateModal({
             <textarea
               rows={3}
               value={note}
-              onChange={(e) => setNote(e.target.value)}
+              onChange={(e) => {
+                if (isSubmitting) return;
+                setNote(e.target.value);
+              }}
+              disabled={isSubmitting}
+              readOnly={isSubmitting}
+              tabIndex={isSubmitting ? -1 : undefined}
+              aria-disabled={isSubmitting ? 'true' : undefined}
               placeholder="e.g. Ready for pickup at Window 3, verified all clearances..."
-              className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-950/20 focus:border-indigo-950 transition-all font-medium text-slate-800 placeholder-slate-400"
+              className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-950/20 focus:border-indigo-950 transition-all font-medium text-slate-800 placeholder-slate-400 disabled:bg-slate-100 disabled:cursor-not-allowed"
             />
             <p className="text-[11px] text-slate-500 mt-1">
               This note will be attached to the remarks and history audit logs of each request.

@@ -791,8 +791,12 @@ export default function StaffProfileModal({ isOpen, onClose }) {
                     </label>
                     <input
                       type="text"
+                      disabled
                       readOnly
+                      tabIndex={-1}
+                      aria-disabled="true"
                       value={employeeId}
+                      onChange={() => {}}
                       className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2.5 text-sm text-slate-600 outline-none select-text cursor-not-allowed font-mono font-semibold"
                     />
                   </div>

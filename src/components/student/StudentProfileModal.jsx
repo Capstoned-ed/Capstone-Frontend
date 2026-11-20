@@ -624,8 +624,12 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                         </label>
                         <input
                           type="text"
+                          disabled
                           readOnly
+                          tabIndex={-1}
+                          aria-disabled="true"
                           value={firstName}
+                          onChange={() => {}}
                           className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2.5 text-sm text-slate-500 outline-none select-text cursor-not-allowed font-medium"
                         />
                       </div>
@@ -635,8 +639,12 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                         </label>
                         <input
                           type="text"
+                          disabled
                           readOnly
+                          tabIndex={-1}
+                          aria-disabled="true"
                           value={lastName}
+                          onChange={() => {}}
                           className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2.5 text-sm text-slate-500 outline-none select-text cursor-not-allowed font-medium"
                         />
                       </div>
@@ -664,8 +672,12 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                       </label>
                       <input
                         type="text"
+                        disabled
                         readOnly
+                        tabIndex={-1}
+                        aria-disabled="true"
                         value={academicProgram}
+                        onChange={() => {}}
                         className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2.5 text-sm text-slate-500 outline-none select-text cursor-not-allowed truncate font-medium"
                       />
                     </div>
@@ -693,8 +705,12 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                       </label>
                       <input
                         type="text"
+                        disabled
                         readOnly
+                        tabIndex={-1}
+                        aria-disabled="true"
                         value={studentId}
+                        onChange={() => {}}
                         className="w-full bg-[#F1F3F5] border border-slate-200/90 rounded-lg px-3.5 py-2.5 text-sm text-slate-500 outline-none select-text cursor-not-allowed font-medium"
                       />
                     </div>

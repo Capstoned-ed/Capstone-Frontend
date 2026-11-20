@@ -39,6 +39,8 @@ export default function CustomSelectDropdown({
       <button
         type="button"
         disabled={disabled}
+        aria-disabled={disabled ? "true" : undefined}
+        tabIndex={disabled ? -1 : undefined}
         title={title}
         onClick={() => {
           if (!disabled) setOpen((prev) => !prev);

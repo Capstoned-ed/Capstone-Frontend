@@ -145,11 +145,18 @@ export default function CredentialTypeFormModal({
                   type="text"
                   placeholder="e.g. TOR"
                   value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  onChange={(e) => {
+                    if (loading) return;
+                    setCode(e.target.value.toUpperCase());
+                  }}
+                  disabled={loading}
+                  readOnly={loading}
+                  tabIndex={loading ? -1 : undefined}
+                  aria-disabled={loading ? 'true' : undefined}
                   maxLength={10}
                   className={`w-full px-3 py-2 text-sm bg-white border ${
                     fieldErrors.code ? 'border-rose-400 focus:ring-rose-200' : 'border-slate-200'
-                  } rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono font-bold uppercase transition-all`}
+                  } rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono font-bold uppercase transition-all disabled:bg-slate-100 disabled:cursor-not-allowed`}
                   required
                 />
                 {fieldErrors.code && (
@@ -165,10 +172,17 @@ export default function CredentialTypeFormModal({
                   type="text"
                   placeholder="e.g. Transcript of records"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    if (loading) return;
+                    setName(e.target.value);
+                  }}
+                  disabled={loading}
+                  readOnly={loading}
+                  tabIndex={loading ? -1 : undefined}
+                  aria-disabled={loading ? 'true' : undefined}
                   className={`w-full px-3 py-2 text-sm bg-white border ${
                     fieldErrors.name ? 'border-rose-400 focus:ring-rose-200' : 'border-slate-200'
-                  } rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all`}
+                  } rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all disabled:bg-slate-100 disabled:cursor-not-allowed`}
                   required
                 />
                 {fieldErrors.name && (
@@ -186,8 +200,15 @@ export default function CredentialTypeFormModal({
                 rows={2}
                 placeholder="Brief description or purpose of this credential document..."
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
+                onChange={(e) => {
+                  if (loading) return;
+                  setDescription(e.target.value);
+                }}
+                disabled={loading}
+                readOnly={loading}
+                tabIndex={loading ? -1 : undefined}
+                aria-disabled={loading ? 'true' : undefined}
+                className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none disabled:bg-slate-100 disabled:cursor-not-allowed"
               />
             </div>
 
@@ -207,10 +228,17 @@ export default function CredentialTypeFormModal({
                     min="0"
                     placeholder="150.00"
                     value={price}
-                    onChange={(e) => setPrice(e.target.value)}
+                    onChange={(e) => {
+                      if (loading) return;
+                      setPrice(e.target.value);
+                    }}
+                    disabled={loading}
+                    readOnly={loading}
+                    tabIndex={loading ? -1 : undefined}
+                    aria-disabled={loading ? 'true' : undefined}
                     className={`w-full pl-7 pr-3 py-2 text-sm bg-white border ${
                       fieldErrors.price ? 'border-rose-400 focus:ring-rose-200' : 'border-slate-200'
-                    } rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-semibold transition-all`}
+                    } rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-semibold transition-all disabled:bg-slate-100 disabled:cursor-not-allowed`}
                     required
                   />
                 </div>
@@ -228,12 +256,19 @@ export default function CredentialTypeFormModal({
                   min="1"
                   placeholder="3"
                   value={processingDays}
-                  onChange={(e) => setProcessingDays(e.target.value)}
+                  onChange={(e) => {
+                    if (loading) return;
+                    setProcessingDays(e.target.value);
+                  }}
+                  disabled={loading}
+                  readOnly={loading}
+                  tabIndex={loading ? -1 : undefined}
+                  aria-disabled={loading ? 'true' : undefined}
                   className={`w-full px-3 py-2 text-sm bg-white border ${
                     fieldErrors.processing_days
                       ? 'border-rose-400 focus:ring-rose-200'
                       : 'border-slate-200'
-                  } rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all`}
+                  } rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all disabled:bg-slate-100 disabled:cursor-not-allowed`}
                   required
                 />
                 {fieldErrors.processing_days && (
@@ -254,7 +289,14 @@ export default function CredentialTypeFormModal({
                 <input
                   type="checkbox"
                   checked={isActive}
-                  onChange={(e) => setIsActive(e.target.checked)}
+                  onChange={(e) => {
+                    if (loading) return;
+                    setIsActive(e.target.checked);
+                  }}
+                  disabled={loading}
+                  readOnly={loading}
+                  tabIndex={loading ? -1 : undefined}
+                  aria-disabled={loading ? 'true' : undefined}
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0B0B36]" />
