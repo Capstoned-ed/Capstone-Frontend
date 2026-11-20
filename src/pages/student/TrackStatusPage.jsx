@@ -10,6 +10,7 @@ import requestsApi, {
   getArchivedRequestsMap,
   isRequestArchived,
   setRequestArchived,
+  sanitizeRemarks,
 } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
@@ -45,7 +46,7 @@ function getStatusPillClass(status) {
     case REQUEST_STATUS.FOR_VERIFICATION:
       return 'for-verification';
     case REQUEST_STATUS.PAYMENT_VERIFIED:
-      return 'for-processing';
+      return 'processing';
     case REQUEST_STATUS.PROCESSING:
       return 'processing';
     case REQUEST_STATUS.READY_FOR_RELEASE:
@@ -252,9 +253,24 @@ export default function TrackStatusPage() {
   // Split student requests into Active vs History
   // Automatically move Claimed / Released, Cancelled, and Rejected requests directly to History!
   const isHistoryOrTerminalRequest = (r) => {
+    const rawStatus = String(r?.rawStatus || r?.status || '').trim().toUpperCase();
     const norm = normalizeToBackendStatus(r?.status);
+
+    // Active (non-terminal) statuses must remain in Active Requests (including RELEASED / READY_FOR_RELEASE)
     if (
-      norm === REQUEST_STATUS.RELEASED ||
+      rawStatus === 'RELEASED' ||
+      rawStatus === 'READY_FOR_RELEASE' ||
+      rawStatus === 'FOR_RELEASE' ||
+      rawStatus === 'RELEASING' ||
+      norm === REQUEST_STATUS.READY_FOR_RELEASE ||
+      norm === REQUEST_STATUS.RELEASED
+    ) {
+      return isClaimedStatus(r) || isRequestArchived(r, archivedMap);
+    }
+
+    if (
+      rawStatus === 'CLAIMED' ||
+      rawStatus === 'COMPLETED' ||
       norm === REQUEST_STATUS.CANCELLED ||
       norm === REQUEST_STATUS.REJECTED ||
       norm === REQUEST_STATUS.REQUIREMENTS_REJECTED
@@ -399,8 +415,8 @@ export default function TrackStatusPage() {
       case REQUEST_STATUS.READY_FOR_RELEASE:
         return 4;
       case REQUEST_STATUS.PROCESSING:
-        return 3;
       case REQUEST_STATUS.PAYMENT_VERIFIED:
+        return 3;
       case REQUEST_STATUS.FOR_VERIFICATION:
         return 2;
       case REQUEST_STATUS.PAYMENT_PENDING:
@@ -788,12 +804,13 @@ export default function TrackStatusPage() {
               </div>
               <p className="track-on-hold-desc">
                 {(() => {
-                  const remarks = (matchedRequest?.notes || matchedRequest?.remarks || '').trim();
-                  const isInitialStudentPurpose = remarks.startsWith('[') && (remarks.includes(']') || remarks === `[${matchedRequest.document_type}] ${matchedRequest.purpose}`);
-                  const hasActualStaffNote = remarks && !isInitialStudentPurpose;
+                  const raw = (matchedRequest?.notes || matchedRequest?.remarks || '').trim();
+                  const cleanRemark = sanitizeRemarks(raw);
+                  const isInitialStudentPurpose = cleanRemark.startsWith('[') && (cleanRemark.includes(']') || cleanRemark === `[${matchedRequest.document_type}] ${matchedRequest.purpose}`);
+                  const hasActualStaffNote = cleanRemark && !isInitialStudentPurpose;
 
                   return hasActualStaffNote
-                    ? `Registrar Note: ${remarks}`
+                    ? `Registrar Note: ${cleanRemark}`
                     : 'Your document request requires additional verification or clearance document before proceeding. Please contact or visit the Registrar Office.';
                 })()}
               </p>
@@ -816,9 +833,10 @@ export default function TrackStatusPage() {
               </div>
               <p className="track-on-hold-desc text-rose-800">
                 {(() => {
-                  const remarks = (matchedRequest?.notes || matchedRequest?.remarks || '').trim();
-                  return remarks
-                    ? `Registrar Remark: ${remarks}`
+                  const raw = (matchedRequest?.notes || matchedRequest?.remarks || '').trim();
+                  const cleanRemark = sanitizeRemarks(raw);
+                  return cleanRemark
+                    ? `Registrar Remark: ${cleanRemark}`
                     : 'Your credential request has been declined or rejected by the Registrar Office.';
                 })()}
               </p>

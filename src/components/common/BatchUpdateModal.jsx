@@ -5,7 +5,7 @@ const STATUS_OPTIONS = [
   { value: '', label: '-- No change (Keep current status) --' },
   { value: 'Pending', label: 'Pending' },
   { value: 'Pending Payment', label: 'Pending Payment' },
-  { value: 'For Processing', label: 'For Processing' },
+  { value: 'For Verification', label: 'For Verification' },
   { value: 'Processing', label: 'Processing' },
   { value: 'For release', label: 'For release' },
   { value: 'Claimed', label: 'Claimed' },

@@ -18,6 +18,7 @@ import requestsApi, {
   getArchivedRequestsMap,
   setRequestArchived,
   isRequestArchived,
+  formatCleanPurpose,
 } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
@@ -216,11 +217,7 @@ export default function StaffDashboard() {
             clearanceMap.get(userObj?.username) ||
             null;
           const rawPurpose = r.purpose || r.remarks || '';
-          const cleanPurpose = String(rawPurpose)
-            .replace(/\[.*?\]/g, '')
-            .replace(/\|+/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
+          const cleanPurpose = formatCleanPurpose(rawPurpose);
 
           return {
             id: trackingNo,
@@ -706,13 +703,12 @@ export default function StaffDashboard() {
       case REQUEST_STATUS.FOR_VERIFICATION:
         return <span className="status-pill for-verification bg-indigo-100 text-indigo-900 border border-indigo-200">For Verification</span>;
       case REQUEST_STATUS.PAYMENT_VERIFIED:
-        return <span className="status-pill for-processing">For Processing</span>;
       case REQUEST_STATUS.PROCESSING:
         return <span className="status-pill processing">Processing</span>;
       case REQUEST_STATUS.READY_FOR_RELEASE:
         return <span className="status-pill for-release">For release</span>;
       case REQUEST_STATUS.RELEASED:
-        return <span className="status-pill claimed">Claimed</span>;
+        return <span className="status-pill for-release">Released</span>;
       case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
         return <span className="status-pill on-hold">On Hold</span>;
       case REQUEST_STATUS.REQUIREMENTS_REJECTED:

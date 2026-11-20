@@ -1387,13 +1387,38 @@ export function getArchivedRequestsMap() {
 export function isRequestArchived(req, archivedMap = null) {
   if (!req) return false;
   if (req.is_archived || req.archived_to_history) return true;
+
+  const rawStatus = String(req.rawStatus || req.status || '').trim().toUpperCase();
   const statusNorm = normalizeToBackendStatus(req.status);
+
+  // Terminal statuses that belong strictly in History
   if (
-    statusNorm === REQUEST_STATUS.RELEASED ||
+    rawStatus === 'CLAIMED' ||
+    rawStatus === 'COMPLETED' ||
+    statusNorm === REQUEST_STATUS.REJECTED ||
+    statusNorm === REQUEST_STATUS.REQUIREMENTS_REJECTED ||
     statusNorm === REQUEST_STATUS.CANCELLED
   ) {
     return true;
   }
+
+  // Active (non-terminal) statuses must remain in Active Requests (even if RELEASED or READY_FOR_RELEASE)
+  if (
+    rawStatus === 'RELEASED' ||
+    rawStatus === 'READY_FOR_RELEASE' ||
+    rawStatus === 'FOR_RELEASE' ||
+    rawStatus === 'RELEASING' ||
+    statusNorm === REQUEST_STATUS.READY_FOR_RELEASE ||
+    statusNorm === REQUEST_STATUS.RELEASED
+  ) {
+    // Only archived if explicitly flagged in archivedMap
+    const map = archivedMap || getArchivedRequestsMap();
+    const keys = [req.id, req.rawId, req.tracking_number, req.trackingId]
+      .filter((k) => k !== undefined && k !== null && String(k).trim() !== '')
+      .map((k) => String(k).trim());
+    return keys.some((k) => Boolean(map[k]));
+  }
+
   const map = archivedMap || getArchivedRequestsMap();
   const keys = [req.id, req.rawId, req.tracking_number, req.trackingId]
     .filter((k) => k !== undefined && k !== null && String(k).trim() !== '')
@@ -1511,6 +1536,88 @@ export function preserveDocTagInRemarks(requestOrRemarks, newRemarks = '') {
 
   const parts = [docTag, rawNew, ...metadataTags].filter(Boolean);
   return parts.join(' ').trim();
+}
+
+/**
+ * Strips all internal metadata tags ([Copies: ...], [Total: ...], [Items: [...]],
+ * [Assigned to: ...], [Status: ...]) and trailing/leading delimiter artifacts
+ * from remarks or notes strings so user-facing interfaces ONLY display the clean,
+ * human-readable message.
+ *
+ * Example:
+ * Input: "Request requirements incomplete or rejected. [Copies: 3 | TOR: 2, HD: 1] [Total:330.00] [Items: [{"credential_type_id":1,...}]]"
+ * Output: "Request requirements incomplete or rejected."
+ */
+export function sanitizeRemarks(rawRemarks) {
+  if (!rawRemarks) return '';
+  let str = String(rawRemarks);
+
+  // 1. Strip [Items: ... ] using bracket balancing to handle arbitrarily nested JSON arrays/objects
+  let itemsIndex = str.search(/\[Items:\s*/i);
+  while (itemsIndex !== -1) {
+    let depth = 0;
+    let endIndex = -1;
+    for (let i = itemsIndex; i < str.length; i++) {
+      if (str[i] === '[') depth++;
+      else if (str[i] === ']') {
+        depth--;
+        if (depth === 0) {
+          endIndex = i;
+          break;
+        }
+      }
+    }
+    if (endIndex !== -1) {
+      str = str.slice(0, itemsIndex) + str.slice(endIndex + 1);
+    } else {
+      const nextBracket = str.indexOf(']', itemsIndex);
+      if (nextBracket !== -1) {
+        str = str.slice(0, itemsIndex) + str.slice(nextBracket + 1);
+      } else {
+        str = str.slice(0, itemsIndex);
+      }
+    }
+    itemsIndex = str.search(/\[Items:\s*/i);
+  }
+
+  // 2. Strip standard metadata tags: [Copies: ...], [Total: ...], [Assigned to: ...], [Status: ...]
+  str = str.replace(/\[Copies:[^\]]*\]/gi, '');
+  str = str.replace(/\[Total:[^\]]*\]/gi, '');
+  str = str.replace(/\[Assigned(?:\s+to)?:\s*[^\]]*\]/gi, '');
+  str = str.replace(/\[Status:[^\]]*\]/gi, '');
+
+  // 3. Strip any generic [Key: Value] metadata brackets
+  str = str.replace(/\[[A-Za-z0-9_\s]+:\s*[^\]]*\]/g, '');
+
+  // 4. Clean up loose delimiter artifacts, e.g. " | " or double delimiters
+  str = str
+    .split('|')
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => {
+      const stripped = chunk.replace(/^\[.*?\]$/, '').trim();
+      return stripped.length > 0;
+    })
+    .join(' | ')
+    .trim();
+
+  // 5. Normalize spaces and strip leading/trailing separators
+  str = str.replace(/\s+/g, ' ').replace(/^[\s|,-]+|[\s|,-]+$/g, '').trim();
+  return str;
+}
+
+/**
+ * Strips all internal metadata and document tags for a clean purpose string.
+ */
+export function formatCleanPurpose(text) {
+  if (!text) return 'For Personal File / Employment';
+  const sanitized = sanitizeRemarks(text);
+  const cleaned = sanitized
+    .replace(/^\[[^\]]+\]\s*/, '')
+    .replace(/\[.*?\]/g, '')
+    .replace(/\|+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || 'For Personal File / Employment';
 }
 
 const DOC_CODE_RULES = [

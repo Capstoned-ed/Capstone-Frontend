@@ -12,6 +12,8 @@ import requestsApi, {
   extractDocumentItems,
   extractTotalAmount,
   extractRequestedCopies,
+  formatCleanPurpose,
+  sanitizeRemarks,
 } from '../../api/requests';
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import settingsApi from '../../api/settings';
@@ -29,17 +31,6 @@ import ClaimStubModal from '../common/ClaimStubModal';
 import CustomSelectDropdown from '../common/CustomSelectDropdown';
 import CompactDatePicker from '../common/CompactDatePicker';
 
-function formatCleanPurpose(text) {
-  if (!text) return 'For Personal File / Employment';
-  const cleaned = String(text)
-    .replace(/\[Items:\[[\s\S]*?\]\]/gi, '')
-    .replace(/\[.*?\]/g, '')
-    .replace(/\|+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return cleaned || 'For Personal File / Employment';
-}
-
 function resolveModalTargetBackendStatus(label) {
   if (!label) return '';
   const clean = String(label).trim();
@@ -53,7 +44,11 @@ function resolveModalTargetBackendStatus(label) {
   if (upper === 'RELEASED / COMPLETED' || upper === 'RELEASED') {
     return REQUEST_STATUS.RELEASED;
   }
-  if (upper === 'RETURNED TO STAFF / FOR PROCESSING') {
+  if (
+    upper === 'RETURNED TO STAFF / FOR PROCESSING' ||
+    upper === 'RETURNED TO STAFF / PROCESSING' ||
+    upper === 'RETURNED TO STAFF'
+  ) {
     return REQUEST_STATUS.PAYMENT_VERIFIED;
   }
   return BACKEND_STATUS_MAP[clean] || normalizeToBackendStatus(clean);
@@ -137,17 +132,40 @@ export default function ProcessRequestModal({
   const [showClaimStubModal, setShowClaimStubModal] = useState(false);
   const [isOrderConfirmed, setIsOrderConfirmed] = useState(() => {
     const s = String(requestItem?.status || '').toUpperCase();
+    const p = normalizeToBackendStatus(requestItem?.status);
     return Boolean(
       requestItem?.is_confirmed ||
       requestItem?.confirmed_for_payment ||
-      s === 'FOR PAYMENT' ||
-      s === 'FOR_PAYMENT' ||
-      s === 'PAYMENT_PENDING' ||
-      s === 'PENDING PAYMENT' ||
-      s === 'FOR PROCESSING' ||
-      s === 'PROCESSING' ||
-      s === 'RELEASING' ||
-      s === 'CLAIMED'
+      [
+        REQUEST_STATUS.PAYMENT_PENDING,
+        REQUEST_STATUS.FOR_VERIFICATION,
+        REQUEST_STATUS.PAYMENT_VERIFIED,
+        REQUEST_STATUS.PROCESSING,
+        REQUEST_STATUS.READY_FOR_RELEASE,
+        REQUEST_STATUS.RELEASED,
+        REQUEST_STATUS.REJECTED,
+        REQUEST_STATUS.REQUIREMENTS_REJECTED,
+        REQUEST_STATUS.CANCELLED,
+      ].includes(p) ||
+      [
+        'FOR PAYMENT',
+        'FOR_PAYMENT',
+        'PAYMENT_PENDING',
+        'PENDING PAYMENT',
+        'FOR VERIFICATION',
+        'FOR_VERIFICATION',
+        'PAYMENT_VERIFIED',
+        'FOR PROCESSING',
+        'FOR_PROCESSING',
+        'PROCESSING',
+        'READY_FOR_RELEASE',
+        'FOR RELEASE',
+        'RELEASED',
+        'RELEASING',
+        'CLAIMED',
+        'REJECTED',
+        'REQUIREMENTS_REJECTED',
+      ].includes(s)
     );
   });
 
@@ -369,9 +387,30 @@ export default function ProcessRequestModal({
   const persistedBackendStatus = normalizeToBackendStatus(persistedStatus || requestItem?.status);
   const isPersistedReadyForRelease = persistedBackendStatus === REQUEST_STATUS.READY_FOR_RELEASE;
   const isPersistedReleased = persistedBackendStatus === REQUEST_STATUS.RELEASED;
+  const isPersistedClaimed = isClaimedStatus(persistedBackendStatus) || isClaimedStatus(requestItem?.status);
   const isPersistedRejected = persistedBackendStatus === REQUEST_STATUS.REJECTED;
+  const isPersistedRequirementsRejected = persistedBackendStatus === REQUEST_STATUS.REQUIREMENTS_REJECTED;
   const isPersistedCancelled = persistedBackendStatus === REQUEST_STATUS.CANCELLED;
-  const isPersistedTerminal = isPersistedReleased || isPersistedRejected || isPersistedCancelled;
+  const isPersistedTerminal = isPersistedClaimed || isPersistedRejected || isPersistedRequirementsRejected || isPersistedCancelled;
+
+  const isBeyondPending = [
+    REQUEST_STATUS.PAYMENT_PENDING,
+    REQUEST_STATUS.FOR_VERIFICATION,
+    REQUEST_STATUS.PAYMENT_VERIFIED,
+    REQUEST_STATUS.PROCESSING,
+    REQUEST_STATUS.READY_FOR_RELEASE,
+    REQUEST_STATUS.RELEASED,
+    REQUEST_STATUS.REJECTED,
+    REQUEST_STATUS.REQUIREMENTS_REJECTED,
+    REQUEST_STATUS.CANCELLED,
+  ].includes(persistedBackendStatus) || (
+    persistedBackendStatus !== REQUEST_STATUS.PENDING &&
+    persistedBackendStatus !== REQUEST_STATUS.REQUIREMENTS_VERIFICATION
+  );
+
+  const isAssessmentLocked = Boolean(
+    isBeyondPending || isOrderConfirmed || isPersistedTerminal || isAdmin
+  );
 
   const isAlreadyPastPayment = [
     REQUEST_STATUS.PAYMENT_VERIFIED,
@@ -379,6 +418,15 @@ export default function ProcessRequestModal({
     REQUEST_STATUS.READY_FOR_RELEASE,
     REQUEST_STATUS.RELEASED,
   ].includes(persistedBackendStatus);
+
+  const isPaymentVerifiedOrBeyond =
+    isAlreadyPastPayment ||
+    paymentStatus === 'VERIFIED' ||
+    Boolean(requestItem?.payment_status === 'VERIFIED');
+
+  const isPaymentLocked = Boolean(
+    isPaymentVerifiedOrBeyond || isPersistedTerminal || isAdmin
+  );
 
   const isClearanceVerified = Boolean(
     clearanceStatus === 'VERIFIED' ||
@@ -446,6 +494,7 @@ export default function ProcessRequestModal({
 
   const normalizeStatus = (val) => {
     if (val === 'For Payment' || val === 'FOR PAYMENT' || val === 'FOR_PAYMENT') return 'Pending Payment';
+    if (val === 'For Processing' || val === 'FOR PROCESSING' || val === 'FOR_PROCESSING') return 'Processing';
     return val;
   };
 
@@ -574,7 +623,7 @@ export default function ProcessRequestModal({
         case REQUEST_STATUS.FOR_VERIFICATION:
           nextTransitions = [
             'Approved / Ready for Release',
-            'Returned to Staff / For Processing',
+            'Returned to Staff / Processing',
             'Rejected',
           ];
           break;
@@ -583,14 +632,14 @@ export default function ProcessRequestModal({
           nextTransitions = [
             'Approved / Ready for Release',
             'Released / Completed',
-            'Returned to Staff / For Processing',
+            'Returned to Staff / Processing',
             'Rejected',
           ];
           break;
         case REQUEST_STATUS.READY_FOR_RELEASE:
           nextTransitions = [
             'Released / Completed',
-            'Returned to Staff / For Processing',
+            'Returned to Staff / Processing',
             'Rejected',
           ];
           break;
@@ -610,10 +659,10 @@ export default function ProcessRequestModal({
             nextTransitions = ['On Hold', 'Rejected'];
             break;
           case REQUEST_STATUS.PAYMENT_PENDING:
-            nextTransitions = ['For Verification', 'For Processing', 'Rejected'];
+            nextTransitions = ['For Verification', 'Processing', 'Rejected'];
             break;
           case REQUEST_STATUS.FOR_VERIFICATION:
-            nextTransitions = ['For Processing', 'Rejected'];
+            nextTransitions = ['Processing', 'Rejected'];
             break;
           case REQUEST_STATUS.PAYMENT_VERIFIED:
             nextTransitions = autoApproveEnabled
@@ -738,18 +787,41 @@ export default function ProcessRequestModal({
     }
 
     const s = String(requestItem.status || '').toUpperCase();
+    const p = normalizeToBackendStatus(requestItem.status);
     setIsOrderConfirmed(
       Boolean(
         requestItem.is_confirmed ||
         requestItem.confirmed_for_payment ||
-        s === 'FOR PAYMENT' ||
-        s === 'FOR_PAYMENT' ||
-        s === 'PAYMENT_PENDING' ||
-        s === 'PENDING PAYMENT' ||
-        s === 'FOR PROCESSING' ||
-        s === 'PROCESSING' ||
-        s === 'RELEASING' ||
-        s === 'CLAIMED'
+        [
+          REQUEST_STATUS.PAYMENT_PENDING,
+          REQUEST_STATUS.FOR_VERIFICATION,
+          REQUEST_STATUS.PAYMENT_VERIFIED,
+          REQUEST_STATUS.PROCESSING,
+          REQUEST_STATUS.READY_FOR_RELEASE,
+          REQUEST_STATUS.RELEASED,
+          REQUEST_STATUS.REJECTED,
+          REQUEST_STATUS.REQUIREMENTS_REJECTED,
+          REQUEST_STATUS.CANCELLED,
+        ].includes(p) ||
+        [
+          'FOR PAYMENT',
+          'FOR_PAYMENT',
+          'PAYMENT_PENDING',
+          'PENDING PAYMENT',
+          'FOR VERIFICATION',
+          'FOR_VERIFICATION',
+          'PAYMENT_VERIFIED',
+          'FOR PROCESSING',
+          'FOR_PROCESSING',
+          'PROCESSING',
+          'READY_FOR_RELEASE',
+          'FOR RELEASE',
+          'RELEASED',
+          'RELEASING',
+          'CLAIMED',
+          'REJECTED',
+          'REQUIREMENTS_REJECTED',
+        ].includes(s)
       )
     );
 
@@ -917,6 +989,10 @@ export default function ProcessRequestModal({
       toast.warning('View Only (Admin): Admins cannot confirm payment orders.');
       return;
     }
+    if (isAssessmentLocked) {
+      toast.warning('Payment assessment is already locked for this request.');
+      return;
+    }
     if (confirmingAssessment) return;
     if (!isClearanceVerified) {
       toast.warning('Please verify the student clearance first before confirming the request.');
@@ -1079,6 +1155,10 @@ export default function ProcessRequestModal({
       toast.warning('View Only (Admin): Admins cannot reject requests.');
       return;
     }
+    if (isAssessmentLocked) {
+      toast.warning('Payment assessment is already locked for this request.');
+      return;
+    }
     const targetId = requestItem.id || requestItem.rawId;
     const trackingCode = requestItem.tracking_number || requestItem.trackingId || requestItem.id;
     const reason = notes.trim() || 'Request requirements incomplete or rejected.';
@@ -1168,6 +1248,14 @@ export default function ProcessRequestModal({
       toast.warning('View Only (Admin): Admins cannot verify payment.');
       return;
     }
+    if (isPaymentLocked && actionToSet !== 'VERIFIED') {
+      toast.warning('Payment verification is locked for this request.');
+      return;
+    }
+    if (isPersistedTerminal) {
+      toast.warning('Cannot modify payment for a completed or terminal request.');
+      return;
+    }
     if (verifyingPayment) return;
     const targetId = requestItem.id || requestItem.rawId;
     const trackingCode = requestItem.tracking_number || requestItem.id;
@@ -1228,7 +1316,7 @@ export default function ProcessRequestModal({
       );
 
       setPaymentStatus(isVerified ? 'VERIFIED' : 'REJECTED');
-      const updatedStatus = isVerified ? 'For Processing' : 'Pending Payment';
+      const updatedStatus = isVerified ? 'Processing' : 'Pending Payment';
       setPersistedStatus(isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING');
       setStatusDirectly(updatedStatus);
 
@@ -1327,7 +1415,7 @@ export default function ProcessRequestModal({
       if (isVerified) {
         saveStoredNotification({
           event_type: 'PAYMENT_VERIFIED',
-          message: `Your payment (OR: ${finalOrNumber}) for request ${trackingCode} has been verified by the Registrar. Your request status is now For Processing.`,
+          message: `Your payment (OR: ${finalOrNumber}) for request ${trackingCode} has been verified by the Registrar. Your request status is now Processing.`,
           related_object_type: 'CredentialRequest',
           related_object_id: trackingCode,
           target_role: 'student',
@@ -1336,7 +1424,7 @@ export default function ProcessRequestModal({
           target_username: requestItem.student_name || null,
           target_student_id: requestItem.student_id || null,
         });
-        toast.success('Payment order confirmed');
+        toast.success('Payment confirmed! Status updated to "Processing".');
         onClose();
       } else {
         toast.warning('Payment proof rejected. Request remains For Payment.');
@@ -1843,6 +1931,19 @@ export default function ProcessRequestModal({
                     {formatCleanPurpose(requestItem.purpose || requestItem.remarks)}
                   </div>
                 </div>
+
+                {(isPersistedRejected || isPersistedRequirementsRejected || Boolean(requestItem?.remarks && sanitizeRemarks(requestItem.remarks))) && (
+                  <div className="mt-3">
+                    <span className="staff-field-label">
+                      {isPersistedRejected || isPersistedRequirementsRejected ? 'Rejection Reason / Remarks' : 'Remarks / Notes'}
+                    </span>
+                    <div className={`staff-field-box text-xs ${
+                      isPersistedRejected || isPersistedRequirementsRejected ? 'bg-rose-50 text-rose-800 border-rose-200' : ''
+                    }`}>
+                      {sanitizeRemarks(requestItem.remarks) || (isPersistedRejected ? 'Request requirements incomplete or rejected.' : '—')}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Box 2: Student Clearance */}
@@ -2084,18 +2185,18 @@ export default function ProcessRequestModal({
                       <input
                         type="text"
                         value={assessedAmount}
-                        disabled={isAdmin || isOrderConfirmed || isPersistedTerminal}
-                        readOnly={isAdmin || isOrderConfirmed || isPersistedTerminal}
-                        tabIndex={isAdmin || isOrderConfirmed || isPersistedTerminal ? -1 : undefined}
-                        aria-disabled={isAdmin || isOrderConfirmed || isPersistedTerminal ? 'true' : undefined}
+                        disabled={isAssessmentLocked}
+                        readOnly={isAssessmentLocked}
+                        tabIndex={isAssessmentLocked ? -1 : undefined}
+                        aria-disabled={isAssessmentLocked ? 'true' : undefined}
                         onChange={(e) => {
-                          if (isAdmin || isOrderConfirmed || isPersistedTerminal) return;
+                          if (isAssessmentLocked) return;
                           const clean = e.target.value.replace(/[^0-9.]/g, '');
                           setAssessedAmount(clean);
                         }}
                         placeholder="100.00"
                         className={`w-full pl-8 pr-3 py-2 text-sm font-bold text-indigo-950 border rounded-lg focus:outline-none ${
-                          isAdmin || isOrderConfirmed || isPersistedTerminal
+                          isAssessmentLocked
                             ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed select-text'
                             : 'border-indigo-200 focus:border-indigo-600 bg-white'
                         }`}
@@ -2106,15 +2207,15 @@ export default function ProcessRequestModal({
                     <label className="block font-bold text-slate-700 mb-1">Release Date *</label>
                     <CompactDatePicker
                       value={dateOfRelease}
-                      disabled={isAdmin || isOrderConfirmed || isPersistedTerminal}
-                      readOnly={isAdmin || isOrderConfirmed || isPersistedTerminal}
+                      disabled={isAssessmentLocked}
+                      readOnly={isAssessmentLocked}
                       onChange={(val) => {
-                        if (isAdmin || isOrderConfirmed || isPersistedTerminal) return;
+                        if (isAssessmentLocked) return;
                         setDateOfRelease(val);
                         setTurnaroundHint('');
                       }}
                       className={`px-3 py-2 text-xs border rounded-lg focus:outline-none ${
-                        isAdmin || isOrderConfirmed || isPersistedTerminal
+                        isAssessmentLocked
                           ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed'
                           : 'border-slate-300 focus:border-indigo-600 bg-white'
                       }`}
@@ -2128,16 +2229,16 @@ export default function ProcessRequestModal({
                     <input
                       type="text"
                       value={verifiedByName}
-                      disabled={isAdmin || isOrderConfirmed || isPersistedTerminal}
-                      readOnly={isAdmin || isOrderConfirmed || isPersistedTerminal}
-                      tabIndex={isAdmin || isOrderConfirmed || isPersistedTerminal ? -1 : undefined}
-                      aria-disabled={isAdmin || isOrderConfirmed || isPersistedTerminal ? 'true' : undefined}
+                      disabled={isAssessmentLocked}
+                      readOnly={isAssessmentLocked}
+                      tabIndex={isAssessmentLocked ? -1 : undefined}
+                      aria-disabled={isAssessmentLocked ? 'true' : undefined}
                       onChange={(e) => {
-                        if (isAdmin || isOrderConfirmed || isPersistedTerminal) return;
+                        if (isAssessmentLocked) return;
                         setVerifiedByName(e.target.value);
                       }}
                       className={`w-full px-3 py-2 text-xs border rounded-lg focus:outline-none ${
-                        isAdmin || isOrderConfirmed || isPersistedTerminal
+                        isAssessmentLocked
                           ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed'
                           : 'border-slate-300 focus:border-indigo-600 bg-white'
                       }`}
@@ -2242,30 +2343,30 @@ export default function ProcessRequestModal({
                         </svg>
                         <span>Preview Form</span>
                       </button>
-                      {isPersistedRejected ? (
+                      {isPersistedRejected || isPersistedRequirementsRejected ? (
                         <div className="flex-1 sm:flex-initial min-w-0 justify-center px-2 sm:px-3.5 py-1.5 sm:py-2 bg-rose-50 border border-rose-300 text-rose-800 font-bold text-[11px] sm:text-xs rounded-xl flex items-center gap-1 sm:gap-1.5 shadow-2xs whitespace-nowrap">
                           <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-rose-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                           </svg>
                           <span>Request Rejected</span>
                         </div>
-                      ) : isOrderConfirmed ? (
+                      ) : isAssessmentLocked ? (
                         <div className="flex-1 sm:flex-initial min-w-0 justify-center px-2 sm:px-3.5 py-1.5 sm:py-2 bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-[11px] sm:text-xs rounded-xl flex items-center gap-1 sm:gap-1.5 shadow-2xs whitespace-nowrap">
                           <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                           </svg>
-                          <span>Request Confirmed</span>
+                          <span>Order of Payment Issued</span>
                         </div>
                       ) : (
                         <button
                           type="button"
-                          disabled={isPersistedTerminal || isAdmin}
-                          aria-disabled={isPersistedTerminal || isAdmin ? 'true' : undefined}
-                          tabIndex={isPersistedTerminal || isAdmin ? -1 : undefined}
+                          disabled={isAssessmentLocked}
+                          aria-disabled={isAssessmentLocked ? 'true' : undefined}
+                          tabIndex={isAssessmentLocked ? -1 : undefined}
                           onClick={handleRejectRequest}
                           className={`flex-1 sm:flex-initial min-w-0 justify-center px-2 sm:px-3.5 py-1.5 sm:py-2 font-bold text-[11px] sm:text-xs rounded-xl shadow-2xs transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap ${
-                            isPersistedTerminal || isAdmin
-                              ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none'
+                            isAssessmentLocked
+                              ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none pointer-events-none opacity-50'
                               : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 cursor-pointer'
                           }`}
                           title={isAdmin ? 'View Only (Admin): Admins cannot reject requests' : 'Reject this request'}
@@ -2277,17 +2378,17 @@ export default function ProcessRequestModal({
                         </button>
                       )}
                     </div>
-                    {!isPersistedRejected && !isOrderConfirmed && (
+                    {!isPersistedRejected && !isPersistedRequirementsRejected && !isAssessmentLocked && (
                       <button
                         type="button"
-                        disabled={!isClearanceVerified || isPersistedTerminal || confirmingAssessment || isWaitingForRegistrarApproval || isAdmin}
-                        aria-disabled={!isClearanceVerified || isPersistedTerminal || confirmingAssessment || isWaitingForRegistrarApproval || isAdmin ? 'true' : undefined}
-                        tabIndex={!isClearanceVerified || isPersistedTerminal || confirmingAssessment || isWaitingForRegistrarApproval || isAdmin ? -1 : undefined}
+                        disabled={!isClearanceVerified || confirmingAssessment || isWaitingForRegistrarApproval || isAssessmentLocked}
+                        aria-disabled={!isClearanceVerified || confirmingAssessment || isWaitingForRegistrarApproval || isAssessmentLocked ? 'true' : undefined}
+                        tabIndex={!isClearanceVerified || confirmingAssessment || isWaitingForRegistrarApproval || isAssessmentLocked ? -1 : undefined}
                         onClick={handleConfirmAssessmentAndIssuePayment}
                         className={`w-full sm:w-auto justify-center px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-                          isClearanceVerified && !isPersistedTerminal && !confirmingAssessment && !isWaitingForRegistrarApproval && !isAdmin
+                          isClearanceVerified && !confirmingAssessment && !isWaitingForRegistrarApproval && !isAssessmentLocked
                             ? 'bg-indigo-900 hover:bg-indigo-950 text-white shadow-md cursor-pointer'
-                            : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
+                            : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none pointer-events-none opacity-50'
                         }`}
                         title={
                           isAdmin
@@ -2448,13 +2549,13 @@ export default function ProcessRequestModal({
                       placeholder="O.R. Number *"
                       value={walkinOrNumber}
                       onChange={(e) => {
-                        if (isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal) return;
+                        if (isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal || isPaymentLocked) return;
                         setWalkinOrNumber(e.target.value);
                       }}
-                      disabled={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal}
-                      readOnly={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal}
-                      tabIndex={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal ? -1 : undefined}
-                      aria-disabled={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal ? 'true' : undefined}
+                      disabled={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal || isPaymentLocked}
+                      readOnly={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal || isPaymentLocked}
+                      tabIndex={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal || isPaymentLocked ? -1 : undefined}
+                      aria-disabled={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal || isPaymentLocked ? 'true' : undefined}
                       className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-600 font-mono font-bold"
                     />
                   </div>
@@ -2466,25 +2567,19 @@ export default function ProcessRequestModal({
                         </svg>
                         <span>Payment Confirmed</span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleVerifyPayment('PENDING')}
-                        disabled={isAdmin || isPersistedTerminal}
-                        className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-colors border ${
-                          isAdmin || isPersistedTerminal
-                            ? 'text-slate-300 border-transparent cursor-not-allowed'
-                            : 'text-slate-500 hover:text-rose-600 hover:bg-rose-50 cursor-pointer border-transparent hover:border-rose-200'
-                        }`}
-                        title={
-                          isAdmin
-                            ? 'View Only (Admin)'
-                            : isPersistedTerminal
-                            ? 'Locked: Request completed'
-                            : 'Change or re-verify payment'
-                        }
-                      >
-                        Undo
-                      </button>
+                      {!isPaymentLocked && (
+                        <button
+                          type="button"
+                          onClick={() => handleVerifyPayment('PENDING')}
+                          disabled={isAdmin || isPersistedTerminal || isPaymentLocked}
+                          aria-disabled={isAdmin || isPersistedTerminal || isPaymentLocked ? 'true' : undefined}
+                          tabIndex={isAdmin || isPersistedTerminal || isPaymentLocked ? -1 : undefined}
+                          className="px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-colors border text-slate-500 hover:text-rose-600 hover:bg-rose-50 cursor-pointer border-transparent hover:border-rose-200"
+                          title="Change or re-verify payment"
+                        >
+                          Undo
+                        </button>
+                      )}
                     </div>
                   ) : paymentStatus === 'REJECTED' ? (
                     <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
@@ -2496,16 +2591,20 @@ export default function ProcessRequestModal({
                       </div>
                       <button
                         type="button"
-                        disabled={!canConfirmPayment || isAdmin || isPersistedTerminal}
+                        disabled={!canConfirmPayment || isAdmin || isPersistedTerminal || isPaymentLocked}
+                        aria-disabled={!canConfirmPayment || isAdmin || isPersistedTerminal || isPaymentLocked ? 'true' : undefined}
+                        tabIndex={!canConfirmPayment || isAdmin || isPersistedTerminal || isPaymentLocked ? -1 : undefined}
                         onClick={() => handleVerifyPayment('VERIFIED')}
                         className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                          canConfirmPayment && !isAdmin && !isPersistedTerminal
+                          canConfirmPayment && !isAdmin && !isPersistedTerminal && !isPaymentLocked
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs'
                             : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
                         }`}
                         title={
                           isAdmin
                             ? 'View Only (Admin)'
+                            : isPaymentLocked
+                            ? 'Payment is locked'
                             : !hasReceiptUploaded && !hasOrNumber
                             ? 'Cannot confirm payment: Please enter the O.R. Number or upload receipt'
                             : 'Confirm and verify payment'
@@ -2519,16 +2618,20 @@ export default function ProcessRequestModal({
                       <button
                         type="button"
                         data-testid="confirm-payment-order-btn"
-                        disabled={!canConfirmPayment || verifyingPayment || isAdmin || isPersistedTerminal}
+                        disabled={!canConfirmPayment || verifyingPayment || isAdmin || isPersistedTerminal || isPaymentLocked}
+                        aria-disabled={!canConfirmPayment || verifyingPayment || isAdmin || isPersistedTerminal || isPaymentLocked ? 'true' : undefined}
+                        tabIndex={!canConfirmPayment || verifyingPayment || isAdmin || isPersistedTerminal || isPaymentLocked ? -1 : undefined}
                         onClick={() => handleVerifyPayment('VERIFIED')}
                         className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                          canConfirmPayment && !verifyingPayment && !isAdmin && !isPersistedTerminal
+                          canConfirmPayment && !verifyingPayment && !isAdmin && !isPersistedTerminal && !isPaymentLocked
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs'
                             : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
                         }`}
                         title={
                           isAdmin
                             ? 'View Only (Admin): Admins cannot confirm payment orders'
+                            : isPaymentLocked
+                            ? 'Payment verification locked'
                             : !hasReceiptUploaded && !hasOrNumber
                             ? 'Cannot confirm payment: Please enter the O.R. Number or upload receipt'
                             : 'Confirm payment order and move to processing'
@@ -2548,16 +2651,20 @@ export default function ProcessRequestModal({
 
                       <button
                         type="button"
-                        disabled={(!hasReceiptUploaded && !paymentProof) || verifyingPayment || isAdmin || isPersistedTerminal}
+                        disabled={(!hasReceiptUploaded && !paymentProof) || verifyingPayment || isAdmin || isPersistedTerminal || isPaymentLocked}
+                        aria-disabled={(!hasReceiptUploaded && !paymentProof) || verifyingPayment || isAdmin || isPersistedTerminal || isPaymentLocked ? 'true' : undefined}
+                        tabIndex={(!hasReceiptUploaded && !paymentProof) || verifyingPayment || isAdmin || isPersistedTerminal || isPaymentLocked ? -1 : undefined}
                         onClick={() => handleVerifyPayment('REJECTED')}
                         className={`px-3 py-2 text-xs font-bold rounded-lg transition-all ${
-                          (hasReceiptUploaded || paymentProof) && !verifyingPayment && !isAdmin && !isPersistedTerminal
+                          (hasReceiptUploaded || paymentProof) && !verifyingPayment && !isAdmin && !isPersistedTerminal && !isPaymentLocked
                             ? 'cursor-pointer bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300'
                             : 'cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-200'
                         }`}
                         title={
                           isAdmin
                             ? 'View Only (Admin): Admins cannot reject payments'
+                            : isPaymentLocked
+                            ? 'Payment is locked'
                             : !hasReceiptUploaded && !paymentProof
                             ? 'No payment submission to reject'
                             : 'Reject payment proof'
