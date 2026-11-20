@@ -175,7 +175,7 @@ export default function useDashboardData() {
         const statusCounts = {
           'Pending': 0,
           'For Payment': 0,
-          'For Processing': 0,
+          'For Verification': 0,
           'Processing': 0,
           'For release': 0,
           'Claimed': 0,
@@ -199,13 +199,19 @@ export default function useDashboardData() {
           ) {
             statusCounts['For Payment']++;
           } else if (
+            s === 'FOR_VERIFICATION' ||
+            s === 'FOR VERIFICATION'
+          ) {
+            statusCounts['For Verification']++;
+          } else if (
             s === 'FOR PROCESSING' ||
             s === 'FOR_PROCESSING' ||
             s === 'PAYMENT_VERIFIED' ||
-            s === 'PAYMENT VERIFIED'
+            s === 'PAYMENT VERIFIED' ||
+            s === 'PROCESSING' ||
+            s === 'DOCUMENT_PREPARATION' ||
+            s === 'DOCUMENT PREPARATION'
           ) {
-            statusCounts['For Processing']++;
-          } else if (s === 'PROCESSING' || s === 'DOCUMENT_PREPARATION' || s === 'DOCUMENT PREPARATION') {
             statusCounts['Processing']++;
           } else if (
             s === 'READY_FOR_RELEASE' ||

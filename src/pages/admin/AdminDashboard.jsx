@@ -207,7 +207,6 @@ export default function AdminDashboard() {
                         <tr className="staff-table-head-row">
                           <th className="staff-table-th left">Staff Members</th>
                           <th className="staff-table-th center">Completed</th>
-                          <th className="staff-table-th center">For Processing</th>
                           <th className="staff-table-th center">Processing</th>
                           <th className="staff-table-th center">Pending</th>
                         </tr>
@@ -222,10 +221,7 @@ export default function AdminDashboard() {
                               {staff.completed}
                             </td>
                             <td className="staff-table-pending">
-                              {staff.forProcessing ?? 0}
-                            </td>
-                            <td className="staff-table-pending">
-                              {staff.processing ?? 0}
+                              {(staff.processing ?? 0) + (staff.forProcessing ?? 0)}
                             </td>
                             <td className="staff-table-pending">
                               {staff.pending}

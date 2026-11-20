@@ -40,10 +40,11 @@ const formatStatus = (statusStr) => {
   const upper = s.toUpperCase();
   if (upper === 'PENDING') return 'Pending';
   if (upper === 'FOR_PAYMENT' || upper === 'PENDING PAYMENT') return 'Pending Payment';
-  if (upper === 'FOR_PROCESSING') return 'For Processing';
+  if (upper === 'FOR_PROCESSING' || upper === 'PAYMENT_VERIFIED') return 'Processing';
   if (upper === 'PROCESSING') return 'Processing';
   if (upper === 'READY_FOR_RELEASE' || upper === 'RELEASING') return 'Releasing';
-  if (upper === 'RELEASED' || upper === 'CLAIMED') return 'Claimed';
+  if (upper === 'RELEASED') return 'Released';
+  if (upper === 'CLAIMED' || upper === 'COMPLETED') return 'Claimed';
   if (upper === 'ON_HOLD' || upper === 'ON HOLD') return 'On Hold';
   if (upper === 'REJECTED') return 'Rejected';
   return s;

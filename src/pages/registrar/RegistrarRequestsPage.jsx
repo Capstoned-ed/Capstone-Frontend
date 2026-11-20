@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, getStaffAssignmentTimestamps, recordStaffAssignmentTimestamp, getRequestActivityTimestamps, recordRequestActivityTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived, preserveDocTagInRemarks } from '../../api/requests';
+import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, getStaffAssignmentTimestamps, recordStaffAssignmentTimestamp, getRequestActivityTimestamps, recordRequestActivityTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived, preserveDocTagInRemarks, formatCleanPurpose } from '../../api/requests';
 import { saveStoredNotification } from '../../api/notifications';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
@@ -753,7 +753,7 @@ export default function RegistrarRequestsPage() {
           amount,
           assessed_amount: matchedStored?.assessed_amount || r.assessed_amount || amount,
           verified_by_name: matchedStored?.verified_by_name || r.verified_by_name || null,
-          purpose: r.purpose || r.remarks || 'Official Academic Credential Request',
+          purpose: formatCleanPurpose(r.purpose || r.remarks),
           remarks: matchedStored?.remarks || r.remarks || '',
           batchId,
           clearance_preview: effectiveClearancePreview,
@@ -1174,7 +1174,7 @@ export default function RegistrarRequestsPage() {
     const getPriorityRank = (r) => {
       const s = String(r.batch_status || r.status || '').toUpperCase();
       const raw = String(r.rawStatus || '').toUpperCase();
-      const isForProc = s === 'FOR PROCESSING' || raw === 'FOR PROCESSING' || raw === 'FOR_PROCESSING' || raw === 'PAYMENT_VERIFIED';
+      const isForProc = s === 'PROCESSING' || raw === 'PROCESSING' || raw === 'PAYMENT_VERIFIED' || s === 'FOR PROCESSING' || raw === 'FOR_PROCESSING';
       const isInProgress = s === 'PROCESSING' || s === 'FOR RELEASE' || s === 'READY FOR RELEASE' || s === 'RELEASING' || raw === 'PROCESSING' || raw === 'READY_FOR_RELEASE';
       if (isForProc && !r.assigned_staff) return 0; // Needs assignment right now
       if (isForProc) return 1;
@@ -1370,7 +1370,6 @@ export default function RegistrarRequestsPage() {
       case 'For Processing':
       case 'FOR_PROCESSING':
       case 'PAYMENT_VERIFIED':
-        return <span className="status-pill for-processing">For Processing</span>;
       case 'Processing':
       case 'PROCESSING':
         return <span className="status-pill processing">Processing</span>;
@@ -1380,8 +1379,13 @@ export default function RegistrarRequestsPage() {
       case 'RELEASING':
       case 'READY_FOR_RELEASE':
         return <span className="status-pill for-release">For release</span>;
-      case 'Claimed':
+      case 'Released':
       case 'RELEASED':
+        return <span className="status-pill for-release">Released</span>;
+      case 'Claimed':
+      case 'CLAIMED':
+      case 'Completed':
+      case 'COMPLETED':
         return <span className="status-pill claimed">Claimed</span>;
       case 'On Hold':
       case 'on Hold':
@@ -2168,12 +2172,39 @@ export default function RegistrarRequestsPage() {
                           </div>
                         </td>
                         <td>
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                            </svg>
-                            <span>Completed</span>
-                          </span>
+                          {(() => {
+                            const norm = normalizeToBackendStatus(item.batch_status || item.status);
+                            const isRej = norm === REQUEST_STATUS.REJECTED || norm === REQUEST_STATUS.REQUIREMENTS_REJECTED;
+                            const isCanc = norm === REQUEST_STATUS.CANCELLED;
+                            if (isRej) {
+                              return (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                  <svg className="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                  <span>Rejected</span>
+                                </span>
+                              );
+                            }
+                            if (isCanc) {
+                              return (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                  <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                  <span>Cancelled</span>
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                </svg>
+                                <span>Completed</span>
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="text-right whitespace-nowrap">
                           <div className="inline-flex items-center justify-end gap-2 flex-nowrap whitespace-nowrap">

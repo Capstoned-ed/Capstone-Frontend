@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import requestsApi from '../../api/requests';
+import requestsApi, { formatCleanPurpose } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
 import USTPRequestFormDocument from '../../components/student/USTPRequestFormDocument';
@@ -296,7 +296,7 @@ export default function DownloadRequestFormPage() {
   const copies = requestData?.copies || '1 copy';
   const rawAmount = requestData?.assessed_amount || requestData?.amount || '₱100.00';
   const amount = typeof rawAmount === 'number' ? `₱${rawAmount.toFixed(2)}` : String(rawAmount).startsWith('₱') || String(rawAmount).startsWith('P') ? String(rawAmount) : `₱${rawAmount}`;
-  const purpose = requestData?.purpose || requestData?.remarks || '';
+  const purpose = formatCleanPurpose(requestData?.purpose || requestData?.remarks || '');
   const requestDate = requestData?.request_date || (requestData?.created_at ? requestData.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
   const birthDate = requestData?.birth_date || '2002-05-15';
   const contactNo = requestData?.contact_no || '09123456789';

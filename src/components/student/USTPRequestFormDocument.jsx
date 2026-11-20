@@ -1,4 +1,5 @@
 import React, { forwardRef, useMemo } from 'react';
+import { formatCleanPurpose } from '../../api/requests';
 import ustpLogo from '../../assets/USTP Logo against Light Background 1.png';
 import '../../styles/student/DownloadRequestFormPage.css';
 
@@ -216,7 +217,7 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
       : String(rawAmount).startsWith('₱') || String(rawAmount).startsWith('P')
       ? String(rawAmount)
       : `₱${rawAmount}`;
-  const purpose = requestData?.purpose || requestData?.remarks || '';
+  const purpose = formatCleanPurpose(requestData?.purpose || requestData?.remarks || '');
   const requestDate =
     requestData?.request_date ||
     (requestData?.created_at ? requestData.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
