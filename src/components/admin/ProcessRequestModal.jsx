@@ -25,6 +25,7 @@ import {
   formatStatusDisplay,
   STATUS_CONFIG,
   BACKEND_STATUS_MAP,
+  isClaimedStatus,
 } from '../../constants/workflowStatuses';
 import PrintRequestFormModal from '../student/PrintRequestFormModal';
 import ClaimStubModal from '../common/ClaimStubModal';
