@@ -1611,7 +1611,8 @@ export function sanitizeRemarks(rawRemarks) {
  */
 export function formatCleanPurpose(text) {
   if (!text) return 'For Personal File / Employment';
-  const sanitized = sanitizeRemarks(text);
+  const withoutStaffNote = String(text).replace(/\|\s*Note:[\s\S]*$/i, '').trim();
+  const sanitized = sanitizeRemarks(withoutStaffNote);
   const cleaned = sanitized
     .replace(/^\[[^\]]+\]\s*/, '')
     .replace(/\[.*?\]/g, '')
@@ -1619,6 +1620,59 @@ export function formatCleanPurpose(text) {
     .replace(/\s+/g, ' ')
     .trim();
   return cleaned || 'For Personal File / Employment';
+}
+
+/**
+ * Merges a staff processing note into remarks using `| Note: ...` without
+ * overwriting the student's original purpose or internal metadata tags.
+ */
+export function mergeStaffNoteIntoRemarks(requestOrRemarks, staffNote = '') {
+  const existingRemarks =
+    typeof requestOrRemarks === 'string'
+      ? requestOrRemarks
+      : String(requestOrRemarks?.remarks || requestOrRemarks?.purpose || '');
+
+  const cleanBase = sanitizeRemarks(
+    existingRemarks.replace(/\|\s*Note:[\s\S]*$/i, '')
+  )
+    .replace(/^\[[^\]]+\]\s*/, '')
+    .trim();
+
+  const trimmedNote = String(staffNote || '').trim();
+  const combined = trimmedNote
+    ? cleanBase
+      ? `${cleanBase} | Note: ${trimmedNote}`
+      : `| Note: ${trimmedNote}`
+    : cleanBase;
+
+  return preserveDocTagInRemarks(requestOrRemarks, combined);
+}
+
+/**
+ * Extracts human-readable staff/registrar remark from a request object,
+ * strictly ignoring the student's initial purpose and document type tags.
+ */
+export function extractStaffRemark(req) {
+  if (!req || typeof req !== 'object') return '';
+
+  const directNote = String(req.staff_notes || req.notes || '').trim();
+  if (directNote) {
+    const cleanedDirect = sanitizeRemarks(directNote);
+    if (cleanedDirect && cleanedDirect !== formatCleanPurpose(req.purpose || '')) {
+      return cleanedDirect;
+    }
+  }
+
+  const rawRemarks = String(req.remarks || '').trim();
+  if (!rawRemarks) return '';
+
+  const noteMatch = rawRemarks.match(/\|\s*Note:\s*(.+)$/i);
+  if (noteMatch && noteMatch[1]) {
+    const cleaned = sanitizeRemarks(noteMatch[1]);
+    if (cleaned) return cleaned;
+  }
+
+  return '';
 }
 
 const DOC_CODE_RULES = [
