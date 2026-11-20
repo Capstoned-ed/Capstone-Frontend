@@ -25,7 +25,7 @@ import '../../styles/student/TrackStatusPage.css';
 const DEFAULT_TIMELINE_STEPS = [
   { id: 'pending', name: 'Pending', label: 'Review & Clearance Verification' },
   { id: 'pending_payment', name: 'For Payment', label: 'Pay at Cashier & Submit OR' },
-  { id: 'for_processing', name: 'For Processing', label: 'Payment Verified by Staff' },
+  { id: 'for_verification', name: 'For Verification', label: 'Staff is verifying your submitted Official Receipt.' },
   { id: 'processing', name: 'Processing', label: 'Document Preparation & Printing' },
   { id: 'releasing', name: 'Releasing', label: 'Ready for Claiming' },
 ];
@@ -42,6 +42,8 @@ function getStatusPillClass(status) {
       return 'rejected';
     case REQUEST_STATUS.PAYMENT_PENDING:
       return 'payment-pending';
+    case REQUEST_STATUS.FOR_VERIFICATION:
+      return 'for-verification';
     case REQUEST_STATUS.PAYMENT_VERIFIED:
       return 'for-processing';
     case REQUEST_STATUS.PROCESSING:
@@ -399,6 +401,7 @@ export default function TrackStatusPage() {
       case REQUEST_STATUS.PROCESSING:
         return 3;
       case REQUEST_STATUS.PAYMENT_VERIFIED:
+      case REQUEST_STATUS.FOR_VERIFICATION:
         return 2;
       case REQUEST_STATUS.PAYMENT_PENDING:
         return 1;
@@ -976,16 +979,22 @@ export default function TrackStatusPage() {
                       stepDesc = 'Awaiting clearance verification and payment assessment by Staff.';
                     }
                   } else if (index === 2) {
-                    // Step 2: For Processing (Payment Verified by Staff)
+                    // Step 2: For Verification (Staff is verifying your submitted Official Receipt.)
+                    const currentNorm = normalizeToBackendStatus(matchedRequest.status);
                     if (currentStepIndex > 2) {
                       dateText = 'Verified';
                       stepDesc = 'Official Receipt verified by Staff. Document preparation queued.';
                     } else if (isCurrent) {
-                      dateText = 'Payment Verified';
-                      stepDesc = 'Staff verified Official Receipt. Request queued for document processing.';
+                      if (currentNorm === REQUEST_STATUS.FOR_VERIFICATION) {
+                        dateText = 'Verifying';
+                        stepDesc = 'Staff is verifying your submitted Official Receipt.';
+                      } else {
+                        dateText = 'Payment Verified';
+                        stepDesc = 'Staff verified Official Receipt. Request queued for document processing.';
+                      }
                     } else {
                       dateText = 'Awaiting Payment';
-                      stepDesc = 'Staff verification of Official Receipt is strictly required.';
+                      stepDesc = 'Staff is verifying your submitted Official Receipt once submitted.';
                     }
                   } else if (index === 3) {
                     // Step 3: Processing (Document Preparation & Printing)
