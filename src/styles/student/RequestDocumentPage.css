@@ -708,10 +708,16 @@
   background-color: #e0e7ff;
   border: 1.5px solid #c7d2fe;
   border-radius: 1rem;
-  padding: 1rem 0.875rem;
-  margin-bottom: 1.5rem;
-  max-width: 100%;
+  padding: 1rem 1rem;
+  margin: 0 auto 1.5rem auto;
+  width: 100%;
+  max-width: 34rem;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .complete-tracking-label {
@@ -723,23 +729,25 @@
 }
 
 .complete-tracking-code {
-  font-size: clamp(0.8rem, 3.8vw, 1.875rem);
+  font-size: clamp(0.85rem, 3.6vw, 1.375rem);
   font-weight: 900;
   color: #0b0b36;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.025em;
   margin-top: 0.25rem;
   white-space: nowrap;
+  text-align: center;
+  max-width: 100%;
 }
 
 @media (min-width: 640px) {
   .complete-tracking-box {
-    padding: 1.25rem 3rem;
-    margin-bottom: 2rem;
+    padding: 1.25rem 2rem;
+    margin: 0 auto 2rem auto;
   }
 
   .complete-tracking-code {
-    font-size: 1.875rem;
-    letter-spacing: 0.05em;
+    font-size: 1.375rem;
+    letter-spacing: 0.04em;
   }
 }
 

@@ -11,6 +11,7 @@ import requestsApi, {
   isRequestArchived,
   setRequestArchived,
   sanitizeRemarks,
+  extractStaffRemark,
 } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
@@ -804,13 +805,9 @@ export default function TrackStatusPage() {
               </div>
               <p className="track-on-hold-desc">
                 {(() => {
-                  const raw = (matchedRequest?.notes || matchedRequest?.remarks || '').trim();
-                  const cleanRemark = sanitizeRemarks(raw);
-                  const isInitialStudentPurpose = cleanRemark.startsWith('[') && (cleanRemark.includes(']') || cleanRemark === `[${matchedRequest.document_type}] ${matchedRequest.purpose}`);
-                  const hasActualStaffNote = cleanRemark && !isInitialStudentPurpose;
-
-                  return hasActualStaffNote
-                    ? `Registrar Note: ${cleanRemark}`
+                  const staffRemark = extractStaffRemark(matchedRequest);
+                  return staffRemark
+                    ? `Registrar Note: ${staffRemark}`
                     : 'Your document request requires additional verification or clearance document before proceeding. Please contact or visit the Registrar Office.';
                 })()}
               </p>
@@ -833,10 +830,15 @@ export default function TrackStatusPage() {
               </div>
               <p className="track-on-hold-desc text-rose-800">
                 {(() => {
-                  const raw = (matchedRequest?.notes || matchedRequest?.remarks || '').trim();
-                  const cleanRemark = sanitizeRemarks(raw);
-                  return cleanRemark
-                    ? `Registrar Remark: ${cleanRemark}`
+                  const staffRemark = extractStaffRemark(matchedRequest);
+                  const fallbackRemark = !staffRemark
+                    ? sanitizeRemarks(matchedRequest?.remarks || '')
+                    : '';
+                  const cleanFallback =
+                    fallbackRemark && !fallbackRemark.startsWith('[') ? fallbackRemark : '';
+                  const finalRemark = staffRemark || cleanFallback;
+                  return finalRemark
+                    ? `Registrar Remark: ${finalRemark}`
                     : 'Your credential request has been declined or rejected by the Registrar Office.';
                 })()}
               </p>
@@ -863,6 +865,39 @@ export default function TrackStatusPage() {
             </div>
           </div>
         )}
+
+        {/* Conditional Staff / Registrar Remark Banner */}
+        {matchedRequest &&
+          !isOnHold &&
+          normalizeToBackendStatus(matchedRequest.status) !== REQUEST_STATUS.REJECTED &&
+          normalizeToBackendStatus(matchedRequest.status) !== REQUEST_STATUS.REQUIREMENTS_REJECTED &&
+          normalizeToBackendStatus(matchedRequest.status) !== REQUEST_STATUS.CANCELLED &&
+          (() => {
+            const staffRemark = extractStaffRemark(matchedRequest);
+            if (!staffRemark) return null;
+            return (
+              <div
+                className="track-on-hold-banner border-indigo-200 bg-indigo-50/90"
+                role="status"
+                data-testid="track-staff-remark-banner"
+              >
+                <div className="track-on-hold-icon-box bg-indigo-100 text-indigo-800">
+                  <svg className="w-5 h-5 text-indigo-800" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h6m-6 8l-4-4V5a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H9l-2 3z" />
+                  </svg>
+                </div>
+                <div className="track-on-hold-content">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="track-on-hold-badge bg-indigo-100 text-indigo-900 border-indigo-200">STAFF NOTE</span>
+                    <h4 className="track-on-hold-title text-indigo-950">Registrar / Staff Remarks</h4>
+                  </div>
+                  <p className="track-on-hold-desc text-slate-700">
+                    {staffRemark}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
 
         {/* Case 1: Matched Request Display - Tracking Status Only */}
         {matchedRequest ? (
