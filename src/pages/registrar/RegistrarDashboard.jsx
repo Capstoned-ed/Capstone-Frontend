@@ -16,6 +16,7 @@ import requestsApi, {
   getArchivedRequestsMap,
   isRequestArchived,
   logProcessedAction,
+  formatCleanPurpose,
 } from '../../api/requests';
 import usersApi from '../../api/users';
 import settingsApi from '../../api/settings';
@@ -384,7 +385,7 @@ export default function RegistrarDashboard() {
               amount: r.amount || credType?.fee || '100.00',
               assessed_amount: matchedStored?.assessed_amount || r.assessed_amount || r.amount || '100.00',
               verified_by_name: matchedStored?.verified_by_name || r.verified_by_name || null,
-              purpose: r.purpose || r.remarks || 'Official Academic Credential Request',
+              purpose: formatCleanPurpose(r.purpose || r.remarks),
               remarks: matchedStored?.remarks || r.remarks || '',
               clearance_preview: effectiveClearancePreview,
               clearance_id: r.clearance_id || userClearance?.id || null,

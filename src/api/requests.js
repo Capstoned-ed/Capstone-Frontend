@@ -1513,6 +1513,61 @@ export function preserveDocTagInRemarks(requestOrRemarks, newRemarks = '') {
   return parts.join(' ').trim();
 }
 
+/**
+ * Strips all internal metadata tags ([Copies: ...], [Total: ...], [Items: [...]],
+ * [Assigned to: ...], [Status: ...]) and trailing/leading delimiter artifacts
+ * from remarks or notes strings so user-facing interfaces ONLY display the clean,
+ * human-readable message.
+ *
+ * Example:
+ * Input: "Request requirements incomplete or rejected. [Copies: 3 | TOR: 2, HD: 1] [Total:330.00] [Items: [{"credential_type_id":1,...}]]"
+ * Output: "Request requirements incomplete or rejected."
+ */
+export function sanitizeRemarks(rawRemarks) {
+  if (!rawRemarks) return '';
+  let str = String(rawRemarks);
+
+  // 1. Strip [Items:[...]] or [Items: [...]] JSON payload (handles nested brackets)
+  str = str.replace(/\[Items:\s*\[[\s\S]*?\]\]/gi, '');
+  str = str.replace(/\[Items:[^\]]*\]/gi, '');
+
+  // 2. Strip [Copies: ...], [Total: ...], [Assigned to: ...], [Status: ...]
+  str = str.replace(/\[Copies:[^\]]*\]/gi, '');
+  str = str.replace(/\[Total:[^\]]*\]/gi, '');
+  str = str.replace(/\[Assigned(?:\s+to)?:\s*[^\]]*\]/gi, '');
+  str = str.replace(/\[Status:[^\]]*\]/gi, '');
+
+  // 3. Clean up loose delimiter artifacts, e.g. " | " or double delimiters
+  str = str
+    .split('|')
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => {
+      const stripped = chunk.replace(/^\[.*?\]$/, '').trim();
+      return stripped.length > 0;
+    })
+    .join(' | ')
+    .trim();
+
+  // 4. Normalize spaces
+  str = str.replace(/\s+/g, ' ').trim();
+  return str;
+}
+
+/**
+ * Strips all internal metadata and document tags for a clean purpose string.
+ */
+export function formatCleanPurpose(text) {
+  if (!text) return 'For Personal File / Employment';
+  const sanitized = sanitizeRemarks(text);
+  const cleaned = sanitized
+    .replace(/^\[[^\]]+\]\s*/, '')
+    .replace(/\[.*?\]/g, '')
+    .replace(/\|+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || 'For Personal File / Employment';
+}
+
 const DOC_CODE_RULES = [
   { match: (s) => /transcript|tor/i.test(s), code: '1', dbCode: 'TOR' },
   { match: (s) => /honorable|dismissal|\bhd\b/i.test(s), code: '2', dbCode: 'HD' },

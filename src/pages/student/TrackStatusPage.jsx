@@ -10,6 +10,7 @@ import requestsApi, {
   getArchivedRequestsMap,
   isRequestArchived,
   setRequestArchived,
+  sanitizeRemarks,
 } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
@@ -788,12 +789,13 @@ export default function TrackStatusPage() {
               </div>
               <p className="track-on-hold-desc">
                 {(() => {
-                  const remarks = (matchedRequest?.notes || matchedRequest?.remarks || '').trim();
-                  const isInitialStudentPurpose = remarks.startsWith('[') && (remarks.includes(']') || remarks === `[${matchedRequest.document_type}] ${matchedRequest.purpose}`);
-                  const hasActualStaffNote = remarks && !isInitialStudentPurpose;
+                  const raw = (matchedRequest?.notes || matchedRequest?.remarks || '').trim();
+                  const cleanRemark = sanitizeRemarks(raw);
+                  const isInitialStudentPurpose = cleanRemark.startsWith('[') && (cleanRemark.includes(']') || cleanRemark === `[${matchedRequest.document_type}] ${matchedRequest.purpose}`);
+                  const hasActualStaffNote = cleanRemark && !isInitialStudentPurpose;
 
                   return hasActualStaffNote
-                    ? `Registrar Note: ${remarks}`
+                    ? `Registrar Note: ${cleanRemark}`
                     : 'Your document request requires additional verification or clearance document before proceeding. Please contact or visit the Registrar Office.';
                 })()}
               </p>
@@ -816,9 +818,10 @@ export default function TrackStatusPage() {
               </div>
               <p className="track-on-hold-desc text-rose-800">
                 {(() => {
-                  const remarks = (matchedRequest?.notes || matchedRequest?.remarks || '').trim();
-                  return remarks
-                    ? `Registrar Remark: ${remarks}`
+                  const raw = (matchedRequest?.notes || matchedRequest?.remarks || '').trim();
+                  const cleanRemark = sanitizeRemarks(raw);
+                  return cleanRemark
+                    ? `Registrar Remark: ${cleanRemark}`
                     : 'Your credential request has been declined or rejected by the Registrar Office.';
                 })()}
               </p>

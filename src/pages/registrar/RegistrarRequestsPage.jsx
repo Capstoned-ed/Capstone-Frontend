@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, getStaffAssignmentTimestamps, recordStaffAssignmentTimestamp, getRequestActivityTimestamps, recordRequestActivityTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived, preserveDocTagInRemarks } from '../../api/requests';
+import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, getStaffAssignmentTimestamps, recordStaffAssignmentTimestamp, getRequestActivityTimestamps, recordRequestActivityTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived, preserveDocTagInRemarks, formatCleanPurpose } from '../../api/requests';
 import { saveStoredNotification } from '../../api/notifications';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
@@ -753,7 +753,7 @@ export default function RegistrarRequestsPage() {
           amount,
           assessed_amount: matchedStored?.assessed_amount || r.assessed_amount || amount,
           verified_by_name: matchedStored?.verified_by_name || r.verified_by_name || null,
-          purpose: r.purpose || r.remarks || 'Official Academic Credential Request',
+          purpose: formatCleanPurpose(r.purpose || r.remarks),
           remarks: matchedStored?.remarks || r.remarks || '',
           batchId,
           clearance_preview: effectiveClearancePreview,
