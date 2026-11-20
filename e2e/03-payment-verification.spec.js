@@ -4,7 +4,6 @@ import {
   loginAs,
   getAuthToken,
   createDummyPngBuffer,
-  setRegistrarAutoApprove,
 } from './helpers/authAndSeed.js';
 
 test.describe('Suite 03: Payment Proof Submission, Duplicate O.R. Handling & FOR_VERIFICATION', () => {

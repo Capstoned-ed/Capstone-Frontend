@@ -1626,7 +1626,13 @@ export default function RequestDocumentPage() {
                             type="checkbox"
                             checked={isSelected}
                             disabled={!isActive}
-                            onChange={handleToggleEvaluation}
+                            readOnly={!isActive}
+                            tabIndex={!isActive ? -1 : undefined}
+                            aria-disabled={!isActive ? 'true' : undefined}
+                            onChange={() => {
+                              if (!isActive) return;
+                              handleToggleEvaluation();
+                            }}
                             className="ustp-checkbox-input"
                           />
                           <span className="flex items-center gap-1.5 flex-wrap">
@@ -1653,7 +1659,13 @@ export default function RequestDocumentPage() {
                             type="checkbox"
                             checked={isSelected}
                             disabled={!isActive}
-                            onChange={handleToggleHonorableDismissal}
+                            readOnly={!isActive}
+                            tabIndex={!isActive ? -1 : undefined}
+                            aria-disabled={!isActive ? 'true' : undefined}
+                            onChange={() => {
+                              if (!isActive) return;
+                              handleToggleHonorableDismissal();
+                            }}
                             className="ustp-checkbox-input"
                           />
                           <span className="flex items-center gap-1.5 flex-wrap">
@@ -1680,7 +1692,13 @@ export default function RequestDocumentPage() {
                             type="checkbox"
                             checked={isSelected}
                             disabled={!isActive}
-                            onChange={handleToggleTranscript}
+                            readOnly={!isActive}
+                            tabIndex={!isActive ? -1 : undefined}
+                            aria-disabled={!isActive ? 'true' : undefined}
+                            onChange={() => {
+                              if (!isActive) return;
+                              handleToggleTranscript();
+                            }}
                             className="ustp-checkbox-input"
                           />
                           <span className="flex items-center gap-1.5 flex-wrap">
@@ -1707,7 +1725,13 @@ export default function RequestDocumentPage() {
                             type="checkbox"
                             checked={isSelected}
                             disabled={!isActive}
-                            onChange={handleToggleAuthentication}
+                            readOnly={!isActive}
+                            tabIndex={!isActive ? -1 : undefined}
+                            aria-disabled={!isActive ? 'true' : undefined}
+                            onChange={() => {
+                              if (!isActive) return;
+                              handleToggleAuthentication();
+                            }}
                             className="ustp-checkbox-input"
                           />
                           <span className="flex items-center gap-1.5 flex-wrap">
@@ -1768,7 +1792,13 @@ export default function RequestDocumentPage() {
                               type="checkbox"
                               checked={isSelected}
                               disabled={!isActive}
-                              onChange={() => handleToggleDocument(ctype.name)}
+                              readOnly={!isActive}
+                              tabIndex={!isActive ? -1 : undefined}
+                              aria-disabled={!isActive ? 'true' : undefined}
+                              onChange={() => {
+                                if (!isActive) return;
+                                handleToggleDocument(ctype.name);
+                              }}
                               className="ustp-checkbox-input"
                             />
                             <span className="ustp-dynamic-cred-name flex items-center gap-1.5 flex-wrap">
@@ -1813,7 +1843,13 @@ export default function RequestDocumentPage() {
                               type="checkbox"
                               checked={isSubSelected}
                               disabled={!isActive}
-                              onChange={() => handleToggleCertSub(cert.label)}
+                              readOnly={!isActive}
+                              tabIndex={!isActive ? -1 : undefined}
+                              aria-disabled={!isActive ? 'true' : undefined}
+                              onChange={() => {
+                                if (!isActive) return;
+                                handleToggleCertSub(cert.label);
+                              }}
                               className="ustp-checkbox-input"
                             />
                             <span className="flex items-center gap-1 flex-wrap">
@@ -2100,7 +2136,11 @@ export default function RequestDocumentPage() {
                                     value={itemCopies}
                                     min={1}
                                     max={10}
+                                    disabled
                                     readOnly
+                                    tabIndex={-1}
+                                    aria-disabled="true"
+                                    onChange={() => {}}
                                     className="select-none pointer-events-none"
                                   />
                                   <button
@@ -2175,7 +2215,11 @@ export default function RequestDocumentPage() {
                               value={getCopiesForDoc(currentDocDetails.title)}
                               min={1}
                               max={10}
+                              disabled
                               readOnly
+                              tabIndex={-1}
+                              aria-disabled="true"
+                              onChange={() => {}}
                               className="select-none pointer-events-none"
                             />
                             <button
@@ -2325,8 +2369,12 @@ export default function RequestDocumentPage() {
                       <input
                         type="text"
                         value={userCategory === 'alumnus' ? 'Alumnus (High School/Undergraduate/Graduate)' : 'Student (Undergraduate/Graduate)'}
+                        disabled
                         readOnly
-                        className="review-pill-input readonly"
+                        tabIndex={-1}
+                        aria-disabled="true"
+                        onChange={() => {}}
+                        className="review-pill-input readonly bg-slate-100 text-slate-500 cursor-not-allowed select-text font-medium"
                       />
                     </div>
 
@@ -2337,8 +2385,12 @@ export default function RequestDocumentPage() {
                       <input
                         type="text"
                         value={dateOfGraduation || lastSemAttendance || '2nd Sem, AY 2025-2026'}
+                        disabled
                         readOnly
-                        className="review-pill-input readonly"
+                        tabIndex={-1}
+                        aria-disabled="true"
+                        onChange={() => {}}
+                        className="review-pill-input readonly bg-slate-100 text-slate-500 cursor-not-allowed select-text font-medium"
                       />
                     </div>
                   </div>

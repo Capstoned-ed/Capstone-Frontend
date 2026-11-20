@@ -456,6 +456,10 @@ export default function ProcessRequestModal({
   };
 
   const handleManualStatusChange = (val) => {
+    if (isAdmin) {
+      toast.warning('View Only (Admin): Admins have read-only access to request processing.');
+      return;
+    }
     if (!canOverrideStatus) {
       if (isPersistedTerminal && !isAdmin) {
         toast.warning('Cannot change status: This request is already completed or closed.');
@@ -476,6 +480,10 @@ export default function ProcessRequestModal({
   const [approvingRequest, setApprovingRequest] = useState(false);
 
   const handleApproveRequest = async () => {
+    if (isAdmin) {
+      toast.warning('View Only (Admin): Admins cannot approve requests.');
+      return;
+    }
     if (approvingRequest) return;
     const targetRawId = requestItem.rawId || requestItem.id;
     setApprovingRequest(true);
@@ -806,6 +814,10 @@ export default function ProcessRequestModal({
   }, [requestItem]);
 
   const handleVerifyClearance = async (statusToSet) => {
+    if (isAdmin) {
+      toast.warning('View Only (Admin): Admins have read-only access to clearance verification.');
+      return;
+    }
     const previousStatus = clearanceStatus;
     setReviewingClearance(true);
     setClearanceStatus(statusToSet);
@@ -901,6 +913,10 @@ export default function ProcessRequestModal({
   };
 
   const handleConfirmAssessmentAndIssuePayment = async () => {
+    if (isAdmin) {
+      toast.warning('View Only (Admin): Admins cannot confirm payment orders.');
+      return;
+    }
     if (confirmingAssessment) return;
     if (!isClearanceVerified) {
       toast.warning('Please verify the student clearance first before confirming the request.');
@@ -1059,6 +1075,10 @@ export default function ProcessRequestModal({
   };
 
   const handleRejectRequest = async () => {
+    if (isAdmin) {
+      toast.warning('View Only (Admin): Admins cannot reject requests.');
+      return;
+    }
     const targetId = requestItem.id || requestItem.rawId;
     const trackingCode = requestItem.tracking_number || requestItem.trackingId || requestItem.id;
     const reason = notes.trim() || 'Request requirements incomplete or rejected.';
@@ -1144,6 +1164,10 @@ export default function ProcessRequestModal({
   };
 
   const handleVerifyPayment = async (actionToSet = 'VERIFIED') => {
+    if (isAdmin) {
+      toast.warning('View Only (Admin): Admins cannot verify payment.');
+      return;
+    }
     if (verifyingPayment) return;
     const targetId = requestItem.id || requestItem.rawId;
     const trackingCode = requestItem.tracking_number || requestItem.id;
@@ -1396,6 +1420,10 @@ export default function ProcessRequestModal({
 
   const handleUpdate = async (e) => {
     e.preventDefault();
+    if (isAdmin) {
+      toast.warning('View Only (Admin): Admins have read-only access to request processing.');
+      return;
+    }
     if (!canSubmitUpdate) {
       if (isWaitingForRegistrarApproval) {
         toast.warning('Waiting for Registrar Approval before Staff can update this request.');
@@ -2056,12 +2084,21 @@ export default function ProcessRequestModal({
                       <input
                         type="text"
                         value={assessedAmount}
+                        disabled={isAdmin || isOrderConfirmed || isPersistedTerminal}
+                        readOnly={isAdmin || isOrderConfirmed || isPersistedTerminal}
+                        tabIndex={isAdmin || isOrderConfirmed || isPersistedTerminal ? -1 : undefined}
+                        aria-disabled={isAdmin || isOrderConfirmed || isPersistedTerminal ? 'true' : undefined}
                         onChange={(e) => {
+                          if (isAdmin || isOrderConfirmed || isPersistedTerminal) return;
                           const clean = e.target.value.replace(/[^0-9.]/g, '');
                           setAssessedAmount(clean);
                         }}
                         placeholder="100.00"
-                        className="w-full pl-8 pr-3 py-2 text-sm font-bold text-indigo-950 border border-indigo-200 rounded-lg focus:outline-none focus:border-indigo-600 bg-white"
+                        className={`w-full pl-8 pr-3 py-2 text-sm font-bold text-indigo-950 border rounded-lg focus:outline-none ${
+                          isAdmin || isOrderConfirmed || isPersistedTerminal
+                            ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed select-text'
+                            : 'border-indigo-200 focus:border-indigo-600 bg-white'
+                        }`}
                       />
                     </div>
                   </div>
@@ -2069,11 +2106,18 @@ export default function ProcessRequestModal({
                     <label className="block font-bold text-slate-700 mb-1">Release Date *</label>
                     <CompactDatePicker
                       value={dateOfRelease}
+                      disabled={isAdmin || isOrderConfirmed || isPersistedTerminal}
+                      readOnly={isAdmin || isOrderConfirmed || isPersistedTerminal}
                       onChange={(val) => {
+                        if (isAdmin || isOrderConfirmed || isPersistedTerminal) return;
                         setDateOfRelease(val);
                         setTurnaroundHint('');
                       }}
-                      className="px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-600 bg-white"
+                      className={`px-3 py-2 text-xs border rounded-lg focus:outline-none ${
+                        isAdmin || isOrderConfirmed || isPersistedTerminal
+                          ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed'
+                          : 'border-slate-300 focus:border-indigo-600 bg-white'
+                      }`}
                     />
                     {turnaroundHint && (
                       <p className="text-[10px] text-slate-500 mt-1">{turnaroundHint}</p>
@@ -2084,8 +2128,19 @@ export default function ProcessRequestModal({
                     <input
                       type="text"
                       value={verifiedByName}
-                      onChange={(e) => setVerifiedByName(e.target.value)}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-600 bg-white"
+                      disabled={isAdmin || isOrderConfirmed || isPersistedTerminal}
+                      readOnly={isAdmin || isOrderConfirmed || isPersistedTerminal}
+                      tabIndex={isAdmin || isOrderConfirmed || isPersistedTerminal ? -1 : undefined}
+                      aria-disabled={isAdmin || isOrderConfirmed || isPersistedTerminal ? 'true' : undefined}
+                      onChange={(e) => {
+                        if (isAdmin || isOrderConfirmed || isPersistedTerminal) return;
+                        setVerifiedByName(e.target.value);
+                      }}
+                      className={`w-full px-3 py-2 text-xs border rounded-lg focus:outline-none ${
+                        isAdmin || isOrderConfirmed || isPersistedTerminal
+                          ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed'
+                          : 'border-slate-300 focus:border-indigo-600 bg-white'
+                      }`}
                     />
                   </div>
                   <div>
@@ -2116,10 +2171,20 @@ export default function ProcessRequestModal({
                           <button
                             type="button"
                             data-testid="approve-request-btn"
-                            disabled={approvingRequest || isPersistedTerminal}
+                            disabled={approvingRequest || isPersistedTerminal || isAdmin}
+                            aria-disabled={approvingRequest || isPersistedTerminal || isAdmin ? 'true' : undefined}
+                            tabIndex={approvingRequest || isPersistedTerminal || isAdmin ? -1 : undefined}
                             onClick={handleApproveRequest}
-                            className="px-3 py-2 bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs rounded-lg shadow-sm transition-all cursor-pointer whitespace-nowrap"
-                            title="Approve this credential request"
+                            className={`px-3 py-2 font-bold text-xs rounded-lg shadow-sm transition-all whitespace-nowrap ${
+                              isAdmin || approvingRequest || isPersistedTerminal
+                                ? 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
+                                : 'bg-indigo-900 hover:bg-indigo-950 text-white cursor-pointer'
+                            }`}
+                            title={
+                              isAdmin
+                                ? 'View Only (Admin): Admins cannot approve requests'
+                                : 'Approve this credential request'
+                            }
                           >
                             {approvingRequest ? 'Approving...' : 'Approve Request'}
                           </button>
@@ -2194,10 +2259,16 @@ export default function ProcessRequestModal({
                       ) : (
                         <button
                           type="button"
-                          disabled={isPersistedTerminal}
+                          disabled={isPersistedTerminal || isAdmin}
+                          aria-disabled={isPersistedTerminal || isAdmin ? 'true' : undefined}
+                          tabIndex={isPersistedTerminal || isAdmin ? -1 : undefined}
                           onClick={handleRejectRequest}
-                          className="flex-1 sm:flex-initial min-w-0 justify-center px-2 sm:px-3.5 py-1.5 sm:py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-[11px] sm:text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 whitespace-nowrap"
-                          title="Reject this request"
+                          className={`flex-1 sm:flex-initial min-w-0 justify-center px-2 sm:px-3.5 py-1.5 sm:py-2 font-bold text-[11px] sm:text-xs rounded-xl shadow-2xs transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap ${
+                            isPersistedTerminal || isAdmin
+                              ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none'
+                              : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 cursor-pointer'
+                          }`}
+                          title={isAdmin ? 'View Only (Admin): Admins cannot reject requests' : 'Reject this request'}
                         >
                           <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-rose-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -2209,15 +2280,19 @@ export default function ProcessRequestModal({
                     {!isPersistedRejected && !isOrderConfirmed && (
                       <button
                         type="button"
-                        disabled={!isClearanceVerified || isPersistedTerminal || confirmingAssessment || isWaitingForRegistrarApproval}
+                        disabled={!isClearanceVerified || isPersistedTerminal || confirmingAssessment || isWaitingForRegistrarApproval || isAdmin}
+                        aria-disabled={!isClearanceVerified || isPersistedTerminal || confirmingAssessment || isWaitingForRegistrarApproval || isAdmin ? 'true' : undefined}
+                        tabIndex={!isClearanceVerified || isPersistedTerminal || confirmingAssessment || isWaitingForRegistrarApproval || isAdmin ? -1 : undefined}
                         onClick={handleConfirmAssessmentAndIssuePayment}
                         className={`w-full sm:w-auto justify-center px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-                          isClearanceVerified && !isPersistedTerminal && !confirmingAssessment && !isWaitingForRegistrarApproval
+                          isClearanceVerified && !isPersistedTerminal && !confirmingAssessment && !isWaitingForRegistrarApproval && !isAdmin
                             ? 'bg-indigo-900 hover:bg-indigo-950 text-white shadow-md cursor-pointer'
                             : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
                         }`}
                         title={
-                          !isClearanceVerified
+                          isAdmin
+                            ? 'View Only (Admin): Admins cannot confirm payment orders'
+                            : !isClearanceVerified
                             ? 'Please verify student clearance first before confirming the request.'
                             : isWaitingForRegistrarApproval
                             ? 'Waiting for Registrar Approval: Auto-Approve is OFF. A Registrar must approve first.'
@@ -2372,7 +2447,14 @@ export default function ProcessRequestModal({
                       type="text"
                       placeholder="O.R. Number *"
                       value={walkinOrNumber}
-                      onChange={(e) => setWalkinOrNumber(e.target.value)}
+                      onChange={(e) => {
+                        if (isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal) return;
+                        setWalkinOrNumber(e.target.value);
+                      }}
+                      disabled={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal}
+                      readOnly={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal}
+                      tabIndex={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal ? -1 : undefined}
+                      aria-disabled={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal ? 'true' : undefined}
                       className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-600 font-mono font-bold"
                     />
                   </div>
@@ -2387,8 +2469,19 @@ export default function ProcessRequestModal({
                       <button
                         type="button"
                         onClick={() => handleVerifyPayment('PENDING')}
-                        className="px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-rose-200"
-                        title="Change or re-verify payment"
+                        disabled={isAdmin || isPersistedTerminal}
+                        className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-colors border ${
+                          isAdmin || isPersistedTerminal
+                            ? 'text-slate-300 border-transparent cursor-not-allowed'
+                            : 'text-slate-500 hover:text-rose-600 hover:bg-rose-50 cursor-pointer border-transparent hover:border-rose-200'
+                        }`}
+                        title={
+                          isAdmin
+                            ? 'View Only (Admin)'
+                            : isPersistedTerminal
+                            ? 'Locked: Request completed'
+                            : 'Change or re-verify payment'
+                        }
                       >
                         Undo
                       </button>
@@ -2403,15 +2496,17 @@ export default function ProcessRequestModal({
                       </div>
                       <button
                         type="button"
-                        disabled={!canConfirmPayment}
+                        disabled={!canConfirmPayment || isAdmin || isPersistedTerminal}
                         onClick={() => handleVerifyPayment('VERIFIED')}
                         className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                          canConfirmPayment
+                          canConfirmPayment && !isAdmin && !isPersistedTerminal
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs'
                             : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
                         }`}
                         title={
-                          !hasReceiptUploaded && !hasOrNumber
+                          isAdmin
+                            ? 'View Only (Admin)'
+                            : !hasReceiptUploaded && !hasOrNumber
                             ? 'Cannot confirm payment: Please enter the O.R. Number or upload receipt'
                             : 'Confirm and verify payment'
                         }
@@ -2424,10 +2519,10 @@ export default function ProcessRequestModal({
                       <button
                         type="button"
                         data-testid="confirm-payment-order-btn"
-                        disabled={!canConfirmPayment || verifyingPayment || isAdmin}
+                        disabled={!canConfirmPayment || verifyingPayment || isAdmin || isPersistedTerminal}
                         onClick={() => handleVerifyPayment('VERIFIED')}
                         className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                          canConfirmPayment && !verifyingPayment && !isAdmin
+                          canConfirmPayment && !verifyingPayment && !isAdmin && !isPersistedTerminal
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs'
                             : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
                         }`}
@@ -2453,14 +2548,20 @@ export default function ProcessRequestModal({
 
                       <button
                         type="button"
-                        disabled={(!hasReceiptUploaded && !paymentProof) || verifyingPayment}
+                        disabled={(!hasReceiptUploaded && !paymentProof) || verifyingPayment || isAdmin || isPersistedTerminal}
                         onClick={() => handleVerifyPayment('REJECTED')}
                         className={`px-3 py-2 text-xs font-bold rounded-lg transition-all ${
-                          (hasReceiptUploaded || paymentProof) && !verifyingPayment
+                          (hasReceiptUploaded || paymentProof) && !verifyingPayment && !isAdmin && !isPersistedTerminal
                             ? 'cursor-pointer bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300'
                             : 'cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-200'
                         }`}
-                        title={!hasReceiptUploaded && !paymentProof ? 'No payment submission to reject' : 'Reject payment proof'}
+                        title={
+                          isAdmin
+                            ? 'View Only (Admin): Admins cannot reject payments'
+                            : !hasReceiptUploaded && !paymentProof
+                            ? 'No payment submission to reject'
+                            : 'Reject payment proof'
+                        }
                       >
                         <span>Reject</span>
                       </button>
@@ -2513,8 +2614,19 @@ export default function ProcessRequestModal({
                     type="text"
                     placeholder="Staff remarks / notes (optional)..."
                     value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="staff-notes-input"
+                    onChange={(e) => {
+                      if (!canOverrideStatus) return;
+                      setNotes(e.target.value);
+                    }}
+                    disabled={!canOverrideStatus}
+                    readOnly={!canOverrideStatus}
+                    tabIndex={!canOverrideStatus ? -1 : undefined}
+                    aria-disabled={!canOverrideStatus ? 'true' : undefined}
+                    className={`staff-notes-input ${
+                      !canOverrideStatus
+                        ? 'opacity-60 bg-slate-100 cursor-not-allowed border-slate-300 text-slate-500'
+                        : ''
+                    }`}
                   />
                 </div>
                 {!canOverrideStatus && (
