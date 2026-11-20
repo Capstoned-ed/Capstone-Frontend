@@ -150,7 +150,7 @@ export default function RequestDocumentPage() {
       const resolvedBirthDate = user?.birth_date || user?.birthdate || p?.birth_date || p?.birthdate;
       const resolvedContact = user?.contact_number || p?.contact_number;
       if (resolvedBirthDate) setBirthDate(resolvedBirthDate);
-      if (resolvedContact) setContactNo(resolvedContact);
+      if (resolvedContact && resolvedContact.trim()) setContactNo(resolvedContact.trim());
     } catch {}
   }, [user]);
   const [dateOfGraduation, setDateOfGraduation] = useState('');
@@ -1302,15 +1302,12 @@ export default function RequestDocumentPage() {
                   <input
                     type="text"
                     value={fullName}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setFullName(val);
-                      const parts = splitFullName(val);
-                      setFirstName(parts.first);
-                      setLastName(parts.last);
-                    }}
-                    required
-                    className="ustp-underline-field ustp-flex-1"
+                    disabled={true}
+                    readOnly={true}
+                    tabIndex={-1}
+                    aria-disabled="true"
+                    onChange={() => {}}
+                    className="ustp-underline-field ustp-flex-1 pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600 rounded px-2 py-0.5"
                   />
                 </div>
                 <div className="ustp-field-wrap">
@@ -1318,9 +1315,12 @@ export default function RequestDocumentPage() {
                   <input
                     type="text"
                     value={course}
-                    onChange={(e) => setCourse(e.target.value)}
-                    required
-                    className="ustp-underline-field ustp-flex-1"
+                    disabled={true}
+                    readOnly={true}
+                    tabIndex={-1}
+                    aria-disabled="true"
+                    onChange={() => {}}
+                    className="ustp-underline-field ustp-flex-1 pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600 rounded px-2 py-0.5"
                   />
                 </div>
                 <div className="ustp-field-wrap">
@@ -1328,9 +1328,12 @@ export default function RequestDocumentPage() {
                   <input
                     type="date"
                     value={dateOfRequest}
-                    onChange={(e) => setDateOfRequest(e.target.value)}
-                    required
-                    className="ustp-underline-field ustp-flex-1"
+                    disabled={true}
+                    readOnly={true}
+                    tabIndex={-1}
+                    aria-disabled="true"
+                    onChange={() => {}}
+                    className="ustp-underline-field ustp-flex-1 pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600 rounded px-2 py-0.5"
                   />
                 </div>
               </div>
@@ -1342,8 +1345,12 @@ export default function RequestDocumentPage() {
                   <input
                     type="date"
                     value={birthDate}
-                    onChange={(e) => setBirthDate(e.target.value)}
-                    className="ustp-underline-field ustp-flex-1"
+                    disabled={true}
+                    readOnly={true}
+                    tabIndex={-1}
+                    aria-disabled="true"
+                    onChange={() => {}}
+                    className="ustp-underline-field ustp-flex-1 pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600 rounded px-2 py-0.5"
                   />
                 </div>
                 <div className="ustp-category-radios">
@@ -1386,15 +1393,13 @@ export default function RequestDocumentPage() {
                         type="text"
                         inputMode="numeric"
                         value={contactNo}
-                        onChange={handleContactNoChange}
-                        aria-invalid={Boolean(contactNoError)}
-                        className={`ustp-underline-field ustp-contact-input ${
-                          contactNoError ? '!border-red-500 !text-red-700 bg-red-50/40' : ''
-                        }`}
+                        disabled={true}
+                        readOnly={true}
+                        tabIndex={-1}
+                        aria-disabled="true"
+                        onChange={() => {}}
+                        className="ustp-underline-field ustp-contact-input pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600 rounded px-2 py-0.5"
                       />
-                      {contactNoError && (
-                        <p className="text-[10px] leading-tight text-red-600 mt-0.5 font-medium">{contactNoError}</p>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -2272,12 +2277,12 @@ export default function RequestDocumentPage() {
                       <input
                         type="text"
                         value={firstName}
-                        onChange={(e) => {
-                          const nextFirst = e.target.value;
-                          setFirstName(nextFirst);
-                          setFullName([nextFirst.trim(), lastName.trim()].filter(Boolean).join(' '));
-                        }}
-                        className="review-pill-input"
+                        disabled={true}
+                        readOnly={true}
+                        tabIndex={-1}
+                        aria-disabled="true"
+                        onChange={() => {}}
+                        className="review-pill-input pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600"
                       />
                     </div>
 
@@ -2286,12 +2291,12 @@ export default function RequestDocumentPage() {
                       <input
                         type="text"
                         value={lastName}
-                        onChange={(e) => {
-                          const nextLast = e.target.value;
-                          setLastName(nextLast);
-                          setFullName([firstName.trim(), nextLast.trim()].filter(Boolean).join(' '));
-                        }}
-                        className="review-pill-input"
+                        disabled={true}
+                        readOnly={true}
+                        tabIndex={-1}
+                        aria-disabled="true"
+                        onChange={() => {}}
+                        className="review-pill-input pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600"
                       />
                     </div>
 
@@ -2300,9 +2305,13 @@ export default function RequestDocumentPage() {
                       <input
                         type="text"
                         value={yearLevel}
-                        onChange={(e) => setYearLevel(e.target.value)}
+                        disabled={true}
+                        readOnly={true}
+                        tabIndex={-1}
+                        aria-disabled="true"
+                        onChange={() => {}}
                         placeholder="e.g. 4th Year"
-                        className="review-pill-input"
+                        className="review-pill-input pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600"
                       />
                     </div>
 
@@ -2311,8 +2320,12 @@ export default function RequestDocumentPage() {
                       <input
                         type="text"
                         value={studentId}
-                        onChange={(e) => setStudentId(e.target.value)}
-                        className="review-pill-input"
+                        disabled={true}
+                        readOnly={true}
+                        tabIndex={-1}
+                        aria-disabled="true"
+                        onChange={() => {}}
+                        className="review-pill-input pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600"
                       />
                     </div>
 
@@ -2321,8 +2334,12 @@ export default function RequestDocumentPage() {
                       <input
                         type="email"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="review-pill-input"
+                        disabled={true}
+                        readOnly={true}
+                        tabIndex={-1}
+                        aria-disabled="true"
+                        onChange={() => {}}
+                        className="review-pill-input pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600"
                       />
                     </div>
 
@@ -2331,8 +2348,12 @@ export default function RequestDocumentPage() {
                       <input
                         type="text"
                         value={course}
-                        onChange={(e) => setCourse(e.target.value)}
-                        className="review-pill-input"
+                        disabled={true}
+                        readOnly={true}
+                        tabIndex={-1}
+                        aria-disabled="true"
+                        onChange={() => {}}
+                        className="review-pill-input pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600"
                       />
                     </div>
 
@@ -2343,15 +2364,13 @@ export default function RequestDocumentPage() {
                         type="text"
                         inputMode="numeric"
                         value={contactNo}
-                        onChange={handleContactNoChange}
-                        aria-invalid={Boolean(contactNoError)}
-                        className={`review-pill-input ${
-                          contactNoError ? '!border-red-500 !ring-1 !ring-red-500 bg-red-50/40' : ''
-                        }`}
+                        disabled={true}
+                        readOnly={true}
+                        tabIndex={-1}
+                        aria-disabled="true"
+                        onChange={() => {}}
+                        className="review-pill-input pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600"
                       />
-                      {contactNoError && (
-                        <p className="text-[11px] leading-tight text-red-600 mt-0.5 font-medium">{contactNoError}</p>
-                      )}
                     </div>
 
                     <div>
@@ -2359,8 +2378,12 @@ export default function RequestDocumentPage() {
                       <input
                         type="date"
                         value={birthDate}
-                        onChange={(e) => setBirthDate(e.target.value)}
-                        className="review-pill-input"
+                        disabled={true}
+                        readOnly={true}
+                        tabIndex={-1}
+                        aria-disabled="true"
+                        onChange={() => {}}
+                        className="review-pill-input pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600"
                       />
                     </div>
 
@@ -2369,12 +2392,12 @@ export default function RequestDocumentPage() {
                       <input
                         type="text"
                         value={userCategory === 'alumnus' ? 'Alumnus (High School/Undergraduate/Graduate)' : 'Student (Undergraduate/Graduate)'}
-                        disabled
-                        readOnly
+                        disabled={true}
+                        readOnly={true}
                         tabIndex={-1}
                         aria-disabled="true"
                         onChange={() => {}}
-                        className="review-pill-input readonly bg-slate-100 text-slate-500 cursor-not-allowed select-text font-medium"
+                        className="review-pill-input pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600 select-text font-medium"
                       />
                     </div>
 
@@ -2385,12 +2408,12 @@ export default function RequestDocumentPage() {
                       <input
                         type="text"
                         value={dateOfGraduation || lastSemAttendance || '2nd Sem, AY 2025-2026'}
-                        disabled
-                        readOnly
+                        disabled={true}
+                        readOnly={true}
                         tabIndex={-1}
                         aria-disabled="true"
                         onChange={() => {}}
-                        className="review-pill-input readonly bg-slate-100 text-slate-500 cursor-not-allowed select-text font-medium"
+                        className="review-pill-input pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600 select-text font-medium"
                       />
                     </div>
                   </div>
@@ -2408,10 +2431,14 @@ export default function RequestDocumentPage() {
                     <input
                       type="text"
                       value={purposeInput}
-                      onChange={(e) => setPurposeInput(e.target.value)}
+                      disabled={true}
+                      readOnly={true}
+                      tabIndex={-1}
+                      aria-disabled="true"
+                      onChange={() => {}}
                       required
                       placeholder="e.g. For Personal Files, Employment, Board Exam..."
-                      className="review-pill-input"
+                      className="review-pill-input pointer-events-none select-none bg-slate-100 cursor-not-allowed text-slate-600"
                     />
                   </div>
                 </div>

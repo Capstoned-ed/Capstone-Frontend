@@ -182,6 +182,19 @@
   font-weight: 600;
 }
 
+.ustp-underline-field:disabled,
+.ustp-underline-field[readonly] {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  -webkit-text-fill-color: #475569 !important;
+  opacity: 1 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  border-bottom: 1px solid #cbd5e1 !important;
+}
+
 .ustp-dashed-divider {
   border-top: 1.5px dashed #475569;
   margin: 0.5rem 0;
@@ -429,6 +442,19 @@
   font-weight: 500;
   width: 100%;
   outline: none;
+}
+
+.review-pill-input:disabled,
+.review-pill-input[readonly] {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  -webkit-text-fill-color: #475569 !important;
+  opacity: 1 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  border-color: #cbd5e1 !important;
 }
 
 .review-pill-input:focus {
