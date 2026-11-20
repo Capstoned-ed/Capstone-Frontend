@@ -56,13 +56,12 @@ function getStatusBadge(status) {
     case REQUEST_STATUS.FOR_VERIFICATION:
       return <span className="status-badge for-verification bg-indigo-100 text-indigo-900 border border-indigo-200">For Verification</span>;
     case REQUEST_STATUS.PAYMENT_VERIFIED:
-      return <span className="status-badge for-processing">For Processing</span>;
     case REQUEST_STATUS.PROCESSING:
       return <span className="status-badge processing">Processing</span>;
     case REQUEST_STATUS.READY_FOR_RELEASE:
       return <span className="status-badge releasing">Releasing</span>;
     case REQUEST_STATUS.RELEASED:
-      return <span className="status-badge claimed">Claimed</span>;
+      return <span className="status-badge for-release bg-sky-100 text-sky-900 border border-sky-200">Released</span>;
     case REQUEST_STATUS.REJECTED:
       return <span className="status-badge bg-rose-100 text-rose-700 border border-rose-200">Rejected</span>;
     case REQUEST_STATUS.CANCELLED:
@@ -943,7 +942,6 @@ export default function StaffRequestsPage() {
       case 'For Processing':
       case 'FOR_PROCESSING':
       case 'PAYMENT_VERIFIED':
-        return <span className="status-pill for-processing">For Processing</span>;
       case 'Processing':
       case 'PROCESSING':
         return <span className="status-pill processing">Processing</span>;
@@ -953,8 +951,13 @@ export default function StaffRequestsPage() {
       case 'RELEASING':
       case 'READY_FOR_RELEASE':
         return <span className="status-pill for-release">For release</span>;
-      case 'Claimed':
+      case 'Released':
       case 'RELEASED':
+        return <span className="status-pill for-release">Released</span>;
+      case 'Claimed':
+      case 'CLAIMED':
+      case 'Completed':
+      case 'COMPLETED':
         return <span className="status-pill claimed">Claimed</span>;
       case 'On Hold':
       case 'on Hold':

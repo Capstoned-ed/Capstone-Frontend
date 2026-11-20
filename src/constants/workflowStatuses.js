@@ -170,10 +170,10 @@ export const STATUS_CONFIG = Object.freeze({
     badgeColor: 'bg-indigo-100 text-indigo-900 border-indigo-200',
   },
   [REQUEST_STATUS.PAYMENT_VERIFIED]: {
-    label: 'For Processing',
+    label: 'Processing',
     detailLabel: 'Payment Verified',
-    badgeClass: 'for-processing',
-    badgeColor: 'bg-blue-100 text-blue-900 border-blue-200',
+    badgeClass: 'processing',
+    badgeColor: 'bg-sky-100 text-sky-900 border-sky-200',
   },
   [REQUEST_STATUS.PROCESSING]: {
     label: 'Processing',
@@ -222,10 +222,12 @@ export function formatStatusDisplay(rawStatus, options = {}) {
 }
 
 /**
- * Checks if a request is in claimed / released status.
+ * Checks if a request is in claimed / completed status.
  */
 export function isClaimedStatus(status) {
-  return normalizeToBackendStatus(status) === REQUEST_STATUS.RELEASED;
+  if (!status) return false;
+  const s = String(typeof status === 'object' ? (status.status || status.rawStatus) : status).trim().toUpperCase();
+  return s === 'CLAIMED' || s === 'COMPLETED' || s.includes('CLAIM');
 }
 
 /**
@@ -235,7 +237,6 @@ export const REQUEST_STATUSES = Object.freeze([
   'Pending',
   'Pending Payment',
   'For Verification',
-  'For Processing',
   'Processing',
   'Releasing',
   'Claimed',

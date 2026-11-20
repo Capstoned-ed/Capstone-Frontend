@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import { getStoredPaymentProof } from '../../api/payments';
-import { formatCleanPurpose } from '../../api/requests';
+import { formatCleanPurpose, sanitizeRemarks } from '../../api/requests';
 import useToast from '../../hooks/useToast';
 import PrintRequestFormModal from '../student/PrintRequestFormModal';
 import CustomSelectDropdown from '../common/CustomSelectDropdown';
@@ -77,10 +77,11 @@ export default function StaffProcessModal({
     const s = String(val).trim();
     if (s === 'For Payment' || s === 'FOR PAYMENT' || s === 'FOR_PAYMENT') return 'Pending Payment';
     if (s === 'FOR_VERIFICATION' || s === 'FOR VERIFICATION') return 'For Verification';
+    if (s === 'For Processing' || s === 'FOR PROCESSING' || s === 'FOR_PROCESSING') return 'Processing';
     return val;
   };
   const [localStatus, setLocalStatus] = useState(() =>
-    normalizeStatus(newStatus || selectedRequest?.status || 'For Processing')
+    normalizeStatus(newStatus || selectedRequest?.status || 'Processing')
   );
 
   useEffect(() => {
@@ -91,7 +92,7 @@ export default function StaffProcessModal({
 
   const isTerminal = useMemo(() => {
     const raw = String(selectedRequest?.status || '').toUpperCase();
-    return ['CLAIMED', 'COMPLETED', 'REJECTED', 'CANCELLED', 'RELEASED'].includes(raw);
+    return ['CLAIMED', 'COMPLETED', 'REJECTED', 'REQUIREMENTS_REJECTED', 'CANCELLED'].includes(raw);
   }, [selectedRequest?.status]);
 
   const handleManualStatusChange = (val) => {
@@ -105,7 +106,6 @@ export default function StaffProcessModal({
   const statusOptions = useMemo(() => {
     const defaultStatuses = [
       'For Verification',
-      'For Processing',
       'Processing',
       'Releasing',
       'Claimed',
@@ -114,10 +114,10 @@ export default function StaffProcessModal({
       Array.isArray(requestStatuses) && requestStatuses.length > 0
         ? [...requestStatuses]
         : defaultStatuses
-    ).filter((st) => st !== 'Pending Payment');
+    ).filter((st) => st !== 'Pending Payment' && st !== 'For Processing');
 
     const currentVal = normalizeStatus(localStatus || newStatus);
-    if (currentVal && !base.includes(currentVal)) {
+    if (currentVal && !base.includes(currentVal) && currentVal !== 'For Processing') {
       base.unshift(currentVal);
     }
 
@@ -345,6 +345,17 @@ export default function StaffProcessModal({
                     {formatCleanPurpose(selectedRequest.purpose || selectedRequest.remarks)}
                   </div>
                 </div>
+
+                {(isTerminal || isClearanceRejected || Boolean(selectedRequest?.remarks && sanitizeRemarks(selectedRequest.remarks))) && (
+                  <div className="mt-3">
+                    <span className="staff-field-label">Remarks / Notes</span>
+                    <div className={`staff-field-box text-xs ${
+                      isTerminal || isClearanceRejected ? 'bg-rose-50 text-rose-800 border-rose-200' : ''
+                    }`}>
+                      {sanitizeRemarks(selectedRequest.remarks) || (isTerminal ? 'Request closed or rejected.' : '—')}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Box 2: Registrar Review Status & Attachments (View-Only for Staff) */}
@@ -484,7 +495,7 @@ export default function StaffProcessModal({
                       Request Status
                     </label>
                     <CustomSelectDropdown
-                      value={localStatus || newStatus || 'For Processing'}
+                      value={localStatus || newStatus || 'Processing'}
                       onChange={handleManualStatusChange}
                       disabled={updating || isTerminal}
                       buttonClassName={`staff-select-input ${
