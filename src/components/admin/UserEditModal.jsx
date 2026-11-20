@@ -50,6 +50,8 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    if (loading) return;
+    if (isSelf && (name === 'is_active' || name === 'role')) return;
     const nextVal = type === 'checkbox' ? checked : value;
     setFormData((prev) => ({
       ...prev,
@@ -293,7 +295,12 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
           <CompactDatePicker
             value={formData.birth_date}
             max={new Date().toISOString().split('T')[0]}
-            onChange={(val) => setFormData((prev) => ({ ...prev, birth_date: val }))}
+            disabled={loading}
+            readOnly={loading}
+            onChange={(val) => {
+              if (loading) return;
+              setFormData((prev) => ({ ...prev, birth_date: val }));
+            }}
             className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
           />
         </div>
@@ -303,9 +310,12 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
             Select Role Assignment <span className="text-rose-500">*</span>
           </label>
           <CustomSelectDropdown
-            disabled={isSelf}
+            disabled={isSelf || loading}
             value={formData.role}
-            onChange={(val) => setFormData((prev) => ({ ...prev, role: val }))}
+            onChange={(val) => {
+              if (isSelf || loading) return;
+              setFormData((prev) => ({ ...prev, role: val }));
+            }}
             buttonClassName={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${isSelf ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
             options={[
               { value: ROLES.REGISTRAR, label: 'Registrar' },
@@ -325,14 +335,20 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
 
       {/* Active Status Checkbox */}
       <div className="pt-2">
-        <label className="flex items-center gap-3 cursor-pointer">
+        <label className={`flex items-center gap-3 ${isSelf || loading ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
           <input
             type="checkbox"
             name="is_active"
-            disabled={isSelf}
+            disabled={isSelf || loading}
+            readOnly={isSelf || loading}
+            tabIndex={isSelf || loading ? -1 : undefined}
+            aria-disabled={isSelf || loading ? 'true' : undefined}
             checked={formData.is_active}
-            onChange={handleChange}
-            className={`w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 ${isSelf ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+            onChange={(e) => {
+              if (isSelf || loading) return;
+              handleChange(e);
+            }}
+            className={`w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 ${isSelf || loading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
           />
           <span className="text-xs font-semibold text-slate-700 select-none">
             Account Status is Active (Permit login access)

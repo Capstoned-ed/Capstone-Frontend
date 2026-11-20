@@ -47,6 +47,8 @@ export default function CompactDatePicker({
   max,
   placeholder = 'mm/dd/yyyy',
   className = '',
+  disabled = false,
+  readOnly = false,
 }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState('days'); // 'days' | 'months' | 'years'
@@ -119,12 +121,22 @@ export default function CompactDatePicker({
 
   const displayValue = formatDisplayDate(value);
 
+  const isLocked = Boolean(disabled || readOnly);
+
   return (
     <div ref={containerRef} className="relative w-full">
       <button
         type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className={`w-full flex items-center justify-between gap-2 text-left cursor-pointer ${className}`}
+        disabled={isLocked}
+        readOnly={readOnly}
+        tabIndex={isLocked ? -1 : undefined}
+        aria-disabled={isLocked ? 'true' : undefined}
+        onClick={() => {
+          if (!isLocked) setOpen((prev) => !prev);
+        }}
+        className={`w-full flex items-center justify-between gap-2 text-left ${
+          isLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+        } ${className}`}
       >
         <span className={displayValue ? 'text-slate-800' : 'text-slate-400'}>
           {displayValue || placeholder}

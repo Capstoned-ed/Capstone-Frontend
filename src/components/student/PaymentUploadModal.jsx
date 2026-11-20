@@ -231,8 +231,14 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
           <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
             <button
               type="button"
-              onClick={() => setPaymentOption('ONLINE')}
-              className={`py-2 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
+              disabled={submitting}
+              onClick={() => {
+                if (submitting) return;
+                setPaymentOption('ONLINE');
+              }}
+              className={`py-2 px-3 text-xs font-bold rounded-lg transition-all text-center ${
+                submitting ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+              } ${
                 paymentOption === 'ONLINE'
                   ? 'bg-white text-indigo-950 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -242,8 +248,14 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
             </button>
             <button
               type="button"
-              onClick={() => setPaymentOption('PERSONAL')}
-              className={`py-2 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
+              disabled={submitting}
+              onClick={() => {
+                if (submitting) return;
+                setPaymentOption('PERSONAL');
+              }}
+              className={`py-2 px-3 text-xs font-bold rounded-lg transition-all text-center ${
+                submitting ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+              } ${
                 paymentOption === 'PERSONAL'
                   ? 'bg-white text-indigo-950 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -265,8 +277,15 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
                   required
                   placeholder="e.g. OR-2026-004128"
                   value={orNumberInput}
-                  onChange={(e) => setOrNumberInput(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:border-[#0B0B36] font-mono shadow-2xs"
+                  onChange={(e) => {
+                    if (submitting) return;
+                    setOrNumberInput(e.target.value);
+                  }}
+                  disabled={submitting}
+                  readOnly={submitting}
+                  tabIndex={submitting ? -1 : undefined}
+                  aria-disabled={submitting ? 'true' : undefined}
+                  className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:border-[#0B0B36] font-mono shadow-2xs disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -278,8 +297,15 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
                   type="file"
                   accept="image/*,application/pdf"
                   required={!receiptPreview}
-                  onChange={handleFileChange}
-                  className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#0B0B36] file:text-white hover:file:bg-[#1E1E6B] cursor-pointer"
+                  disabled={submitting}
+                  readOnly={submitting}
+                  tabIndex={submitting ? -1 : undefined}
+                  aria-disabled={submitting ? 'true' : undefined}
+                  onChange={(e) => {
+                    if (submitting) return;
+                    handleFileChange(e);
+                  }}
+                  className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#0B0B36] file:text-white hover:file:bg-[#1E1E6B] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -305,7 +331,8 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                  disabled={submitting}
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
@@ -342,8 +369,15 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
                   type="text"
                   placeholder="e.g. OR-2026-004128"
                   value={orNumberInput}
-                  onChange={(e) => setOrNumberInput(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:border-[#0B0B36] font-mono shadow-2xs"
+                  onChange={(e) => {
+                    if (submitting) return;
+                    setOrNumberInput(e.target.value);
+                  }}
+                  disabled={submitting}
+                  readOnly={submitting}
+                  tabIndex={submitting ? -1 : undefined}
+                  aria-disabled={submitting ? 'true' : undefined}
+                  className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:border-[#0B0B36] font-mono shadow-2xs disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -354,8 +388,15 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
                 <input
                   type="file"
                   accept="image/*,application/pdf"
-                  onChange={handleFileChange}
-                  className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#0B0B36] file:text-white hover:file:bg-[#1E1E6B] cursor-pointer"
+                  disabled={submitting}
+                  readOnly={submitting}
+                  tabIndex={submitting ? -1 : undefined}
+                  aria-disabled={submitting ? 'true' : undefined}
+                  onChange={(e) => {
+                    if (submitting) return;
+                    handleFileChange(e);
+                  }}
+                  className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#0B0B36] file:text-white hover:file:bg-[#1E1E6B] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -378,7 +419,8 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                  disabled={submitting}
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
