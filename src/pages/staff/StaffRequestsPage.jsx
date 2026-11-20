@@ -19,6 +19,7 @@ import requestsApi, {
   ASSIGNMENTS_KEY,
   ASSIGNMENT_TIMESTAMPS_KEY,
   preserveDocTagInRemarks,
+  formatCleanPurpose,
 } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
@@ -436,7 +437,7 @@ export default function StaffRequestsPage() {
           amount,
           assessed_amount: matchedStored?.assessed_amount || r.assessed_amount || amount,
           verified_by_name: matchedStored?.verified_by_name || r.verified_by_name || null,
-          purpose: r.purpose || r.remarks || 'Official Academic Credential Request',
+          purpose: formatCleanPurpose(r.purpose || r.remarks),
           remarks: matchedStored?.remarks || r.remarks || '',
           clearance_preview: effectiveClearancePreview,
           clearance_id: r.clearance_id || userClearance?.id || null,

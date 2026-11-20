@@ -12,6 +12,8 @@ import requestsApi, {
   extractDocumentItems,
   extractTotalAmount,
   extractRequestedCopies,
+  formatCleanPurpose,
+  sanitizeRemarks,
 } from '../../api/requests';
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import settingsApi from '../../api/settings';
@@ -28,17 +30,6 @@ import PrintRequestFormModal from '../student/PrintRequestFormModal';
 import ClaimStubModal from '../common/ClaimStubModal';
 import CustomSelectDropdown from '../common/CustomSelectDropdown';
 import CompactDatePicker from '../common/CompactDatePicker';
-
-function formatCleanPurpose(text) {
-  if (!text) return 'For Personal File / Employment';
-  const cleaned = String(text)
-    .replace(/\[Items:\[[\s\S]*?\]\]/gi, '')
-    .replace(/\[.*?\]/g, '')
-    .replace(/\|+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return cleaned || 'For Personal File / Employment';
-}
 
 function resolveModalTargetBackendStatus(label) {
   if (!label) return '';

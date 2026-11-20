@@ -18,6 +18,7 @@ import requestsApi, {
   getArchivedRequestsMap,
   setRequestArchived,
   isRequestArchived,
+  formatCleanPurpose,
 } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
@@ -216,11 +217,7 @@ export default function StaffDashboard() {
             clearanceMap.get(userObj?.username) ||
             null;
           const rawPurpose = r.purpose || r.remarks || '';
-          const cleanPurpose = String(rawPurpose)
-            .replace(/\[.*?\]/g, '')
-            .replace(/\|+/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
+          const cleanPurpose = formatCleanPurpose(rawPurpose);
 
           return {
             id: trackingNo,

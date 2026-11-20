@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import { getStoredPaymentProof } from '../../api/payments';
+import { formatCleanPurpose } from '../../api/requests';
 import useToast from '../../hooks/useToast';
 import PrintRequestFormModal from '../student/PrintRequestFormModal';
 import CustomSelectDropdown from '../common/CustomSelectDropdown';
@@ -341,7 +342,7 @@ export default function StaffProcessModal({
                 <div className="mt-3">
                   <span className="staff-field-label">Purpose</span>
                   <div className="staff-field-box text-xs">
-                    {selectedRequest.purpose || selectedRequest.remarks || 'For Personal File / Employment'}
+                    {formatCleanPurpose(selectedRequest.purpose || selectedRequest.remarks)}
                   </div>
                 </div>
               </div>
