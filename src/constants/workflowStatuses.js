@@ -226,8 +226,9 @@ export function formatStatusDisplay(rawStatus, options = {}) {
  */
 export function isClaimedStatus(status) {
   if (!status) return false;
-  const s = String(typeof status === 'object' ? (status.status || status.rawStatus) : status).trim().toUpperCase();
-  return s === 'CLAIMED' || s === 'COMPLETED' || s.includes('CLAIM');
+  const raw = typeof status === 'object' ? (status.batch_status || status.status || status.rawStatus || status.raw_status) : status;
+  const s = String(raw || '').trim().toUpperCase();
+  return ['CLAIMED', 'COMPLETED'].includes(s) || s.includes('CLAIM');
 }
 
 /**
