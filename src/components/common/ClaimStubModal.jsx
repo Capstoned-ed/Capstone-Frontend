@@ -22,6 +22,46 @@ export default function ClaimStubModal({
 
   if (!isOpen || !claimStubDetails) return null;
 
+  const normalizeClaimCourse = (rawCourse, trackNo) => {
+    const shortToBs = {
+      IT: 'BSIT',
+      CS: 'BSCS',
+      TCM: 'BSTCM',
+      DS: 'BSDS',
+      CE: 'BSCE',
+      CPE: 'BSCpE',
+      EE: 'BSEE',
+      GE: 'BSGE',
+      ME: 'BSME',
+      ARCH: 'BS Arch',
+      AM: 'BSAM',
+      AP: 'BSAP',
+      CHEM: 'BSChem',
+      ES: 'BSES',
+      FT: 'BSFT',
+    };
+    const clean = String(rawCourse || '').trim();
+    if (clean && clean !== '—') {
+      const upper = clean.toUpperCase();
+      if (shortToBs[upper]) return shortToBs[upper];
+      return clean;
+    }
+    const tCode = String(trackNo || '').trim();
+    const prefixMatch = tCode.match(/^([A-Za-z][A-Za-z\s-]{0,12}?)-\d{2}-\d{2}-/);
+    if (prefixMatch && prefixMatch[1]) {
+      const p = prefixMatch[1].trim();
+      const pUpper = p.toUpperCase();
+      if (shortToBs[pUpper]) return shortToBs[pUpper];
+      if (!['REQ', 'RQ'].includes(pUpper)) return p;
+    }
+    return '—';
+  };
+
+  const displayCourse = normalizeClaimCourse(
+    claimStubDetails.course,
+    trackingNumber || claimStubDetails.tracking_number || claimStubDetails.id
+  );
+
   const handleDownloadPdf = async () => {
     const element = claimStubRef.current;
     if (!element || downloading) return;
@@ -162,31 +202,40 @@ export default function ClaimStubModal({
             </div>
           </div>
 
-          {/* Row 2: COURSE & O.R. NO. */}
+          {/* Row 2: COURSE & DATE OF RELEASE */}
           <div className="claim-stub-fields-row row-course">
             <div className="claim-stub-field course-field">
               <span className="claim-stub-label">COURSE:</span>
-              <span className="claim-stub-underline">{claimStubDetails.course || '—'}</span>
-            </div>
-            {claimStubDetails.orNumber ? (
-              <div className="claim-stub-field date-field">
-                <span className="claim-stub-label">O.R. NO.:</span>
-                <span className="claim-stub-underline font-mono">{claimStubDetails.orNumber}</span>
-              </div>
-            ) : (
-              <div className="claim-stub-field spacer-field hidden sm:block" />
-            )}
-          </div>
-
-          {/* Row 3: CREDENTIAL REQUESTED & DATE OF RELEASE */}
-          <div className="claim-stub-fields-row row-2">
-            <div className="claim-stub-field cred-field">
-              <span className="claim-stub-label">CREDENTIAL REQUESTED:</span>
-              <span className="claim-stub-underline">{claimStubDetails.credentialRequested || '—'}</span>
+              <span className="claim-stub-underline">{displayCourse}</span>
             </div>
             <div className="claim-stub-field release-field">
               <span className="claim-stub-label">DATE OF RELEASE:</span>
               <span className="claim-stub-underline">{claimStubDetails.dateOfRelease || '—'}</span>
+            </div>
+          </div>
+
+          {/* Row 3: CREDENTIAL REQUESTED */}
+          <div className="claim-stub-fields-row">
+            <div className="claim-stub-field cred-field">
+              <span className="claim-stub-label">CREDENTIAL REQUESTED:</span>
+              <span className="claim-stub-underline">{claimStubDetails.credentialRequested || '—'}</span>
+            </div>
+          </div>
+
+          {/* Bottom Row: Note + Assessed by & O.R. No. */}
+          <div className="mt-4 pt-2 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+            <p className="text-[11px] italic font-semibold text-slate-800 leading-snug max-w-md m-0">
+              Note: This stub should be presented upon claiming records. If lost, a valid Identification (ID) card must be presented.
+            </p>
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-4 shrink-0">
+              <div className="claim-stub-field min-w-[140px]">
+                <span className="claim-stub-label">Assessed by:</span>
+                <span className="claim-stub-underline">{claimStubDetails.assessedBy || '—'}</span>
+              </div>
+              <div className="claim-stub-field min-w-[120px]">
+                <span className="claim-stub-label">O.R. No:</span>
+                <span className="claim-stub-underline font-mono">{claimStubDetails.orNumber || '—'}</span>
+              </div>
             </div>
           </div>
         </div>

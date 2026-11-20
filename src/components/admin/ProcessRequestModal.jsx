@@ -595,6 +595,12 @@ export default function ProcessRequestModal({
       requestItem.receipt_reference_number ||
       (Array.isArray(reqPayments) && reqPayments[0]?.receipt_reference_number) ||
       '';
+    const assessedBy =
+      verifiedByName ||
+      requestItem.verified_by_name ||
+      requestItem.assessed_by_name ||
+      requestItem.assigned_staff ||
+      '';
     return {
       studentName: resolvedStudentName,
       course: requestItem.course || requestItem.program || '—',
@@ -602,9 +608,10 @@ export default function ProcessRequestModal({
       credentialRequested: `${requestItem.document_type || 'Document'} (${requestItem.copies || 1} ${requestItem.copies > 1 ? 'copies' : 'copy'})`,
       dateOfRelease: relDateFormatted,
       orNumber: orNum,
+      assessedBy,
       approvedByName: approvedByName || 'University Registrar',
     };
-  }, [requestItem, dateOfRelease, activeOrNumber, approvedByName]);
+  }, [requestItem, dateOfRelease, activeOrNumber, approvedByName, verifiedByName]);
 
   const statusOptions = useMemo(() => {
     const role = String(user?.role || '').trim().toUpperCase();
@@ -1025,7 +1032,7 @@ export default function ProcessRequestModal({
       if (isBackendId) {
         const opRemarks = preserveDocTagInRemarks(
           requestItem,
-          `Clearance verified by ${verifiedByName}. Assessed amount: ₱${cleanAmount}. Date of release: ${dateOfRelease}.`
+          requestItem.remarks || ''
         );
         try {
           transitionRes = await requestsApi.transition(
@@ -1330,12 +1337,9 @@ export default function ProcessRequestModal({
       const targetRawId = requestItem.rawId || requestItem.id;
       const isBackendId = Boolean(targetRawId) && !String(targetRawId).startsWith('fallback_');
       if (isBackendId) {
-        const payRemarks = preserveDocTagInRemarks(
-          requestItem,
-          isVerified
-            ? `${defaultConfirmNote} (OR: ${finalOrNumber}).`
-            : (notes.trim() || 'Payment proof rejected.')
-        );
+        const payRemarks = !isVerified && notes.trim()
+          ? mergeStaffNoteIntoRemarks(requestItem, notes.trim())
+          : preserveDocTagInRemarks(requestItem, requestItem.remarks || '');
         // Also verify/reject the backend Payment record itself if present
         if (latestPayment?.id && !String(latestPayment.id).startsWith('PAY-')) {
           try {
@@ -1717,10 +1721,9 @@ export default function ProcessRequestModal({
           targetRawId,
           {
             status: 'RELEASED',
-            remarks: preserveDocTagInRemarks(
-              requestItem,
-              notes || 'Document claimed by student at registrar window.'
-            ),
+            remarks: notes.trim()
+              ? mergeStaffNoteIntoRemarks(requestItem, notes.trim())
+              : preserveDocTagInRemarks(requestItem, requestItem.remarks || ''),
           },
           { throwOnError: true }
         );

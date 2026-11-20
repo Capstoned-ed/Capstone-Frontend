@@ -43,7 +43,7 @@ export default function PrintRequestFormModal({
 
       const horizontalPad = window.innerWidth < 640 ? 16 : 48;
       const availableWidth = Math.max(200, container.clientWidth - horizontalPad);
-      const paperWidth = 816; // 8.5in at 96 DPI
+      const paperWidth = 794; // A4 width (210mm) at 96 DPI
       const nextScale = availableWidth < paperWidth ? Math.max(0.28, availableWidth / paperWidth) : 1;
 
       setPreviewScale(nextScale);
@@ -105,18 +105,18 @@ export default function PrintRequestFormModal({
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: 816, // 8.5in at 96 DPI
+        windowWidth: 794, // A4 width (210mm) at 96 DPI
       });
 
       const pdf = new jsPDF({
         orientation: 'portrait',
-        unit: 'in',
-        format: [8.5, 13],
+        unit: 'mm',
+        format: 'a4',
         compress: true,
       });
 
-      const pageWidth = 8.5;
-      const pageHeight = 13.0;
+      const pageWidth = 210;
+      const pageHeight = 297;
       const imgWidth = pageWidth;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       const imgData = canvas.toDataURL('image/jpeg', 0.98);
@@ -224,7 +224,7 @@ export default function PrintRequestFormModal({
             style={
               activeScale < 1
                 ? {
-                    width: `${Math.round(816 * activeScale)}px`,
+                    width: `${Math.round(794 * activeScale)}px`,
                     height: `${Math.round(docHeight * activeScale)}px`,
                     overflow: 'hidden',
                     flexShrink: 0,
@@ -237,7 +237,7 @@ export default function PrintRequestFormModal({
               style={
                 activeScale < 1
                   ? {
-                      width: '816px',
+                      width: '794px',
                       transform: `scale(${activeScale})`,
                       transformOrigin: 'top left',
                     }
