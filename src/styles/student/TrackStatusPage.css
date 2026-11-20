@@ -260,6 +260,12 @@
   border: 1px solid #facc15;
 }
 
+.status-pill.for-verification {
+  background-color: #e0e7ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+}
+
 .status-pill.for-processing {
   background-color: #dbeafe;
   color: #1e40af;

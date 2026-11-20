@@ -73,6 +73,8 @@ function getStatusBadge(status) {
       return <span className="status-pill pending">Pending</span>;
     case REQUEST_STATUS.PAYMENT_PENDING:
       return <span className="status-pill for-payment">Pending Payment</span>;
+    case REQUEST_STATUS.FOR_VERIFICATION:
+      return <span className="status-pill for-verification bg-indigo-100 text-indigo-900 border border-indigo-200">For Verification</span>;
     case REQUEST_STATUS.PAYMENT_VERIFIED:
       return <span className="status-pill for-processing">For Processing</span>;
     case REQUEST_STATUS.PROCESSING:
