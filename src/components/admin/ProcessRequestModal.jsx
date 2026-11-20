@@ -8,12 +8,14 @@ import requestsApi, {
   setRequestArchived,
   recordRequestActivityTimestamp,
   preserveDocTagInRemarks,
+  mergeStaffNoteIntoRemarks,
   getLatestPaymentRecord,
   extractDocumentItems,
   extractTotalAmount,
   extractRequestedCopies,
   formatCleanPurpose,
   sanitizeRemarks,
+  extractStaffRemark,
 } from '../../api/requests';
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import settingsApi from '../../api/settings';
@@ -657,7 +659,7 @@ export default function ProcessRequestModal({
             nextTransitions = ['On Hold', 'Rejected'];
             break;
           case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
-            nextTransitions = ['On Hold', 'Rejected'];
+            nextTransitions = ['Pending', 'Pending Payment', 'Rejected'];
             break;
           case REQUEST_STATUS.PAYMENT_PENDING:
             nextTransitions = ['For Verification', 'Processing', 'Rejected'];
@@ -710,7 +712,7 @@ export default function ProcessRequestModal({
 
     if (!requestItem) return;
 
-    setNotes('');
+    setNotes(extractStaffRemark(requestItem));
     setClearanceStatus(resolveInitialClearanceStatus(requestItem));
     setLocalStatus(requestItem?.status || 'Pending');
     setNewStatus(requestItem?.status || 'Pending');
@@ -1545,7 +1547,9 @@ export default function ProcessRequestModal({
         ) {
           backendStatus = 'PENDING_REGISTRAR_APPROVAL';
         }
-        const transitionRemarks = preserveDocTagInRemarks(requestItem, notes || requestItem.remarks || '');
+        const transitionRemarks = notes.trim()
+          ? mergeStaffNoteIntoRemarks(requestItem, notes.trim())
+          : preserveDocTagInRemarks(requestItem, requestItem.remarks || '');
         let updatedBackend = null;
         try {
           // If Registrar selects "Approved / Ready for Release" on an unapproved request,
@@ -1941,7 +1945,7 @@ export default function ProcessRequestModal({
                     <div className={`staff-field-box text-xs ${
                       isPersistedRejected || isPersistedRequirementsRejected ? 'bg-rose-50 text-rose-800 border-rose-200' : ''
                     }`}>
-                      {sanitizeRemarks(requestItem.remarks) || (isPersistedRejected ? 'Request requirements incomplete or rejected.' : '—')}
+                      {extractStaffRemark(requestItem) || (isPersistedRejected ? 'Request requirements incomplete or rejected.' : '—')}
                     </div>
                   </div>
                 )}
