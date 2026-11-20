@@ -1616,6 +1616,11 @@ export function formatCleanPurpose(text) {
   const cleaned = sanitized
     .replace(/^\[[^\]]+\]\s*/, '')
     .replace(/\[.*?\]/g, '')
+    .replace(/Clearance verified by[^.]*\./gi, '')
+    .replace(/Assessed amount:[^.]*\./gi, '')
+    .replace(/Date of release:[^.]*\./gi, '')
+    .replace(/(?:Official receipt|Payment order|Payment)[^.]*(?:verified|confirmed|rejected)[^.]*\./gi, '')
+    .replace(/Document claimed by student[^.]*\./gi, '')
     .replace(/\|+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();

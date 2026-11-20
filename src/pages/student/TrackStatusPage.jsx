@@ -584,6 +584,12 @@ export default function TrackStatusPage() {
       latestPay?.receipt_reference_number ||
       '';
 
+    const assessedBy =
+      matchedRequest.verified_by_name ||
+      matchedRequest.assessed_by_name ||
+      matchedRequest.assigned_staff ||
+      '';
+
     return {
       studentName,
       course,
@@ -591,6 +597,7 @@ export default function TrackStatusPage() {
       credentialRequested,
       dateOfRelease,
       orNumber,
+      assessedBy,
     };
   }, [matchedRequest, user, matchedCred, estimatedCompletion]);
 

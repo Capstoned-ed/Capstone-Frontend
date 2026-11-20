@@ -132,19 +132,19 @@ export default function DownloadRequestFormPage() {
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: 816, // 8.5in at 96 DPI
+        windowWidth: 794, // A4 width (210mm) at 96 DPI
       });
 
-      // 4. Create single-page PDF on Philippine Long Bond Paper (8.5in x 13in / Folio)
+      // 5. Create single-page A4 PDF (210mm x 297mm)
       const pdf = new jsPDF({
         orientation: 'portrait',
-        unit: 'in',
-        format: [8.5, 13],
+        unit: 'mm',
+        format: 'a4',
         compress: true,
       });
 
-      const pageWidth = 8.5;
-      const pageHeight = 13.0;
+      const pageWidth = 210;
+      const pageHeight = 297;
 
       // Scale proportionally to fit 8.5in width
       const imgWidth = pageWidth;

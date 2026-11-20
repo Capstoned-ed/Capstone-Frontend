@@ -42,6 +42,7 @@ export default function CustomSelectDropdown({
         aria-disabled={disabled ? "true" : undefined}
         tabIndex={disabled ? -1 : undefined}
         title={title}
+        style={{ backgroundImage: 'none' }}
         onClick={() => {
           if (!disabled) setOpen((prev) => !prev);
         }}

@@ -407,9 +407,9 @@ export default function StudentPaymentsPage() {
               <div className="otc-step-item">
                 <div className="otc-step-num">1</div>
                 <div>
-                  <h4 className="otc-step-heading">Download Assessed Form</h4>
+                  <h4 className="otc-step-heading">Print &amp; Have Form Signed</h4>
                   <p className="otc-step-text">
-                    Download and print your official request form showing the fee assessed by Registrar Staff.
+                    Download and print your official assessed form, then <strong>go to the Registrar's Office to have it signed</strong> before paying at the Cashier.
                   </p>
                 </div>
               </div>
@@ -419,7 +419,7 @@ export default function StudentPaymentsPage() {
                 <div>
                   <h4 className="otc-step-heading">Pay at USTP Cashier</h4>
                   <p className="otc-step-text">
-                    Present your printed form at the <strong>USTP Cashier's Office</strong> and pay the assessed amount.
+                    Present your <strong>signed</strong> printed form at the <strong>USTP Cashier's Office</strong> and pay the assessed amount. Keep your Official Receipt (O.R.) safe.
                   </p>
                 </div>
               </div>
@@ -427,12 +427,21 @@ export default function StudentPaymentsPage() {
               <div className="otc-step-item">
                 <div className="otc-step-num">3</div>
                 <div>
-                  <h4 className="otc-step-heading">Attach Receipt Picture</h4>
+                  <h4 className="otc-step-heading">Attach Receipt &amp; Keep for Claiming</h4>
                   <p className="otc-step-text">
-                    Upload a clear photo of your Official Receipt (O.R.) below so Registrar Staff can verify and begin preparing your document.
+                    Upload a clear photo of your Official Receipt (O.R.) below for verification. <strong>Do not lose your receipt</strong> — it must be submitted/presented when claiming your document(s).
                   </p>
                 </div>
               </div>
+            </div>
+            <div className="mt-3.5 p-3 sm:p-3.5 bg-rose-50 border-2 border-rose-300 rounded-xl flex items-start gap-2.5 text-rose-950 shadow-2xs">
+              <svg className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <p className="text-xs sm:text-sm font-semibold leading-snug m-0">
+                <span className="font-extrabold uppercase tracking-wide text-rose-700">Important Reminder:</span>{' '}
+                <strong>Do not lose your Official Receipt (O.R.)</strong> — you must keep and submit/present it together when claiming your requested document(s).
+              </p>
             </div>
           </div>
         )}
@@ -541,7 +550,7 @@ export default function StudentPaymentsPage() {
                         <button
                           type="button"
                           onClick={() => handleCopy(trackingCode)}
-                          className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded cursor-pointer whitespace-nowrap shrink-0"
                           title="Copy tracking code"
                         >
                           {copiedId === trackingCode ? (

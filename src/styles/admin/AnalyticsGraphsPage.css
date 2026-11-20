@@ -279,3 +279,158 @@
 .breakdown-total-row td {
   border-bottom: none;
 }
+
+.breakdown-exporting {
+  box-shadow: none !important;
+  border-color: #cbd5e1 !important;
+}
+
+.breakdown-exporting .breakdown-no-export {
+  display: none !important;
+}
+
+.breakdown-exporting .analytics-table-wrap {
+  overflow: visible !important;
+}
+
+@media print {
+  body.printing-doc-breakdown * {
+    visibility: hidden !important;
+  }
+
+  body.printing-doc-breakdown .breakdown-print-section,
+  body.printing-doc-breakdown .breakdown-print-section * {
+    visibility: visible !important;
+  }
+
+  body.printing-doc-breakdown .breakdown-print-section {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 16px !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    z-index: 99999 !important;
+  }
+
+  body.printing-doc-breakdown .breakdown-no-export {
+    display: none !important;
+  }
+
+  body.printing-doc-breakdown .analytics-table-wrap {
+    overflow: visible !important;
+  }
+
+  body.printing-doc-breakdown .breakdown-table {
+    min-width: 0 !important;
+    width: 100% !important;
+    font-size: 10px !important;
+    border-collapse: collapse !important;
+    border: 1.5px solid #000000 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  body.printing-doc-breakdown .breakdown-table th,
+  body.printing-doc-breakdown .breakdown-table td {
+    border: 1px solid #000000 !important;
+    padding: 5px 4px !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  body.printing-doc-breakdown .breakdown-thead th {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border-bottom: 1.5px solid #000000 !important;
+  }
+
+  body.printing-doc-breakdown .breakdown-period-row th {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    text-align: left !important;
+    padding: 6px 8px !important;
+  }
+
+  body.printing-doc-breakdown .breakdown-total-row td {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border-top: 1.5px solid #000000 !important;
+  }
+}
+
+.breakdown-period-row th {
+  background-color: #f1f5f9;
+  color: #1e293b;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: left;
+  padding: 0.5rem 1rem !important;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.breakdown-table.breakdown-table-exporting {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  border: 1.5px solid #000000;
+  border-radius: 0;
+  background: #ffffff;
+  color: #000000;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.breakdown-table.breakdown-table-exporting th,
+.breakdown-table.breakdown-table-exporting td {
+  border: 1px solid #000000;
+  padding: 1rem 0.5rem;
+  font-size: 0.9rem;
+  background-color: #ffffff;
+  color: #000000;
+}
+
+.breakdown-table.breakdown-table-exporting.breakdown-table-monthly th,
+.breakdown-table.breakdown-table-exporting.breakdown-table-monthly td {
+  padding: 0.9rem 0.3rem;
+  font-size: 0.8rem;
+}
+
+.breakdown-table.breakdown-table-exporting .breakdown-thead th {
+  background-color: #ffffff;
+  color: #000000;
+  font-weight: 700;
+  border-bottom: 1.5px solid #000000;
+}
+
+.breakdown-table.breakdown-table-exporting .breakdown-period-row th {
+  background-color: #ffffff;
+  color: #000000;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: left;
+  padding: 0.55rem 0.75rem !important;
+  border-bottom: 1.5px solid #000000;
+}
+
+.breakdown-table.breakdown-table-exporting .th-doc-type,
+.breakdown-table.breakdown-table-exporting .td-doc-type {
+  padding-left: 0.75rem !important;
+  min-width: 170px;
+}
+
+.breakdown-table.breakdown-table-exporting .breakdown-tbody tr:nth-child(even) {
+  background-color: #ffffff;
+}
+
+.breakdown-table.breakdown-table-exporting .breakdown-total-row,
+.breakdown-table.breakdown-table-exporting .breakdown-total-row td {
+  background-color: #ffffff;
+  color: #000000;
+  font-weight: 800;
+  border-top: 1.5px solid #000000;
+  border-bottom: 1.5px solid #000000;
+}
