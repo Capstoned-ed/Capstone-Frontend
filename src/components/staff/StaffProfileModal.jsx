@@ -644,7 +644,21 @@ export default function StaffProfileModal({ isOpen, onClose }) {
                             hour12: true,
                           }).toLowerCase();
 
-                          const initial = (item.targetName || 'U').charAt(0).toUpperCase();
+                          const rawTarget = String(item.targetName || '');
+                          const isOrphaned =
+                            rawTarget.startsWith('CredentialRequest #') ||
+                            rawTarget.includes('CredentialRequest #') ||
+                            rawTarget === 'Archived / Deleted Request';
+
+                          const studentName = isOrphaned
+                            ? (item.metadata?.student_name || item.details?.student_name || 'Archived / Deleted Request')
+                            : (rawTarget || 'Student');
+
+                          const trackingCode = isOrphaned
+                            ? (item.metadata?.tracking_number || item.details?.tracking_number || (studentName === 'Archived / Deleted Request' ? '—' : (item.trackingNumber || item.targetId || '—')))
+                            : (item.trackingNumber || item.targetId || 'N/A');
+
+                          const initial = (studentName || 'U').charAt(0).toUpperCase();
 
                           return (
                             <tr key={item.id || idx} className="hover:bg-slate-50/80 transition-colors">
@@ -655,7 +669,7 @@ export default function StaffProfileModal({ isOpen, onClose }) {
                                     {initial}
                                   </div>
                                   <span className="font-semibold text-slate-900 text-xs sm:text-sm">
-                                    {item.targetName || 'Student'}
+                                    {studentName}
                                   </span>
                                 </div>
                               </td>
@@ -663,7 +677,7 @@ export default function StaffProfileModal({ isOpen, onClose }) {
                               {/* ID / Tracking */}
                               <td className="py-3 px-4 whitespace-nowrap">
                                 <span className="font-mono text-xs font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-                                  {item.trackingNumber || item.targetId || 'N/A'}
+                                  {trackingCode}
                                 </span>
                               </td>
 

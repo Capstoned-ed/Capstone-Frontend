@@ -63,14 +63,15 @@ function getStatusBadge(status) {
       return <span className="status-pill pending">Pending</span>;
     case REQUEST_STATUS.PAYMENT_PENDING:
       return <span className="status-pill for-payment">Pending Payment</span>;
+    case REQUEST_STATUS.FOR_VERIFICATION:
+      return <span className="status-pill for-verification bg-indigo-100 text-indigo-900 border border-indigo-200">For Verification</span>;
     case REQUEST_STATUS.PAYMENT_VERIFIED:
-      return <span className="status-pill for-processing">For Processing</span>;
     case REQUEST_STATUS.PROCESSING:
       return <span className="status-pill processing">Processing</span>;
     case REQUEST_STATUS.READY_FOR_RELEASE:
       return <span className="status-pill for-release">For release</span>;
     case REQUEST_STATUS.RELEASED:
-      return <span className="status-pill claimed">Claimed</span>;
+      return <span className="status-pill for-release">Released</span>;
     case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
       return <span className="status-pill on-hold">On Hold</span>;
     case REQUEST_STATUS.REQUIREMENTS_REJECTED:
@@ -581,7 +582,6 @@ export default function RegistrarDashboard() {
                         <tr className="staff-table-head-row">
                           <th className="staff-table-th left">Staff Members</th>
                           <th className="staff-table-th center">Completed</th>
-                          <th className="staff-table-th center">For Processing</th>
                           <th className="staff-table-th center">Processing</th>
                           <th className="staff-table-th center">Pending</th>
                         </tr>
@@ -596,10 +596,7 @@ export default function RegistrarDashboard() {
                               {staff.completed}
                             </td>
                             <td className="staff-table-pending">
-                              {staff.forProcessing ?? 0}
-                            </td>
-                            <td className="staff-table-pending">
-                              {staff.processing ?? 0}
+                              {(staff.processing ?? 0) + (staff.forProcessing ?? 0)}
                             </td>
                             <td className="staff-table-pending">
                               {staff.pending}
