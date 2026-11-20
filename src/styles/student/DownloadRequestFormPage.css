@@ -125,14 +125,14 @@
   overflow-x: auto;
 }
 
-/* Real Long Bond Paper dimensions: 8.5in x 13in (216mm x 330mm) */
+/* Real A4 Paper dimensions: 210mm x 297mm */
 .ustp-long-bondpaper {
   background-color: #ffffff;
-  width: 8.5in;
-  max-width: 8.5in;
-  min-height: 11in;
+  width: 210mm;
+  max-width: 210mm;
+  min-height: 297mm;
   height: auto;
-  padding: 0.35in 0.5in;
+  padding: 8mm 12mm;
   margin: 0 auto;
   box-sizing: border-box;
   font-family: Arial, Helvetica, sans-serif;
@@ -150,8 +150,8 @@
   box-shadow: none !important;
   border-radius: 0 !important;
   margin: 0 !important;
-  width: 8.5in !important;
-  max-width: 8.5in !important;
+  width: 210mm !important;
+  max-width: 210mm !important;
   background-color: #ffffff !important;
 }
 
@@ -301,10 +301,11 @@
 
 .ustp-purpose-underline {
   width: 22px;
+  height: 15px;
   min-height: 15px;
   border-bottom: 1.25px solid #000000;
   display: inline-flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   font-weight: 900;
   font-size: 12px;
@@ -333,6 +334,7 @@
   font-weight: 900;
   line-height: 1;
   background-color: #ffffff;
+  box-sizing: border-box;
   flex-shrink: 0;
 }
 
@@ -553,7 +555,7 @@
 
 @media print {
   @page {
-    size: 8.5in 13in portrait;
+    size: A4 portrait;
     margin: 0 !important; 
   }
 
@@ -566,7 +568,7 @@
     background-color: #ffffff !important;
     margin: 0 !important;
     padding: 0 !important;
-    width: 8.5in !important;
+    width: 210mm !important;
     height: auto !important;
     min-height: 0 !important;
     max-height: none !important;
@@ -607,12 +609,12 @@
   }
 
   .ustp-long-bondpaper {
-    width: 8.5in !important;
-    max-width: 8.5in !important;
+    width: 210mm !important;
+    max-width: 210mm !important;
     height: auto !important;
     min-height: 0 !important;
-    max-height: 11.8in !important;
-    padding: 0.3in 0.5in 0.2in 0.5in !important;
+    max-height: 297mm !important;
+    padding: 8mm 12mm !important;
     box-sizing: border-box !important;
     margin: 0 auto !important;
     border: none !important;

@@ -11,6 +11,23 @@ import '../../styles/student/DownloadRequestFormPage.css';
  * 
  * Guarantees that staff and student views are 100% identical in every detail.
  */
+const CheckMark = () => (
+  <svg
+    width="10"
+    height="10"
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="#000000"
+    strokeWidth="2.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={{ display: 'block', margin: '0 auto', flexShrink: 0 }}
+    aria-hidden="true"
+  >
+    <polyline points="2.5 8.5 6.5 12.5 13.5 3.5" />
+  </svg>
+);
+
 const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
   { requestData = {}, user = null },
   ref
@@ -339,11 +356,11 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1.8' }}>
             <span className="ustp-checkbox-label">
-              <span className="ustp-box-check">{userCategory === 'student' ? '✓' : ''}</span>
+              <span className="ustp-box-check">{userCategory === 'student' ? <CheckMark /> : ''}</span>
               <span>Student (Undergrad/Graduate)</span>
             </span>
             <span className="ustp-checkbox-label">
-              <span className="ustp-box-check">{userCategory === 'alumnus' ? '✓' : ''}</span>
+              <span className="ustp-box-check">{userCategory === 'alumnus' ? <CheckMark /> : ''}</span>
               <span>Alumnus (High School/Undergrad/Graduate)</span>
             </span>
           </div>
@@ -411,7 +428,7 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
               <span>YES</span>
             </span>
             <span className="ustp-checkbox-label">
-              <span className="ustp-box-check">✓</span>
+              <span className="ustp-box-check"><CheckMark /></span>
               <span>NO</span>
             </span>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', marginLeft: 'auto' }}>
@@ -429,7 +446,7 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
             <span style={{ fontWeight: '700' }}>Cleared?</span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
               <span className="ustp-checkbox-label">
-                <span className="ustp-box-check">✓</span>
+                <span className="ustp-box-check"><CheckMark /></span>
                 <span>Yes. (If yes, attach the clearance form.)</span>
               </span>
               <span className="ustp-checkbox-label">
@@ -450,28 +467,28 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
             {/* Column 1 */}
             <div className="ustp-doc-col">
               <div className={`ustp-doc-label ${isEvalSelected ? 'selected' : ''}`}>
-                <span className="ustp-box-check">{isEvalSelected ? '✓' : ''}</span>
+                <span className="ustp-box-check">{isEvalSelected ? <CheckMark /> : ''}</span>
                 <span>Evaluation (P50)</span>
               </div>
 
               <div className={`ustp-doc-label ${isHdSelected ? 'selected' : ''}`}>
-                <span className="ustp-box-check">{isHdSelected ? '✓' : ''}</span>
+                <span className="ustp-box-check">{isHdSelected ? <CheckMark /> : ''}</span>
                 <span>Honorable Dismissal (P100)</span>
               </div>
 
               <div className={`ustp-doc-label ${isTorSelected ? 'selected' : ''}`}>
-                <span className="ustp-box-check">{isTorSelected ? '✓' : ''}</span>
+                <span className="ustp-box-check">{isTorSelected ? <CheckMark /> : ''}</span>
                 <span>Transcript of Records (P125/pg)</span>
               </div>
 
               <div className={`ustp-doc-label ${isAuthSelected ? 'selected' : ''}`}>
-                <span className="ustp-box-check">{isAuthSelected ? '✓' : ''}</span>
+                <span className="ustp-box-check">{isAuthSelected ? <CheckMark /> : ''}</span>
                 <span>Authentication (P5/pg)</span>
               </div>
 
               {isOtherDoc ? (
                 <div className="ustp-doc-label selected">
-                  <span className="ustp-box-check">✓</span>
+                  <span className="ustp-box-check"><CheckMark /></span>
                   <span className="ustp-dynamic-cred-name">
                     {documentType} {rawAmount ? `(${amount})` : ''}
                   </span>
@@ -506,7 +523,7 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
                     key={cert.label}
                     className={`ustp-cert-subitem ${cert.checked ? 'selected' : ''}`}
                   >
-                    <span className="ustp-box-check">{cert.checked ? '✓' : ''}</span>
+                    <span className="ustp-box-check">{cert.checked ? <CheckMark /> : ''}</span>
                     <span>{cert.label}</span>
                   </div>
                 ))}
@@ -526,25 +543,25 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               <span className="ustp-checkbox-label">
                 <span className="ustp-purpose-underline">
-                  {isPurpMatch('evaluation') ? '✓' : ''}
+                  {isPurpMatch('evaluation') ? <CheckMark /> : ''}
                 </span>
                 <span>For Evaluation</span>
               </span>
               <span className="ustp-checkbox-label">
                 <span className="ustp-purpose-underline">
-                  {isPurpMatch('scholarship') ? '✓' : ''}
+                  {isPurpMatch('scholarship') ? <CheckMark /> : ''}
                 </span>
                 <span>For Scholarship</span>
               </span>
               <span className="ustp-checkbox-label">
                 <span className="ustp-purpose-underline">
-                  {isPurpMatch('passport') ? '✓' : ''}
+                  {isPurpMatch('passport') ? <CheckMark /> : ''}
                 </span>
                 <span>For Passport</span>
               </span>
               <span className="ustp-checkbox-label">
                 <span className="ustp-purpose-underline">
-                  {isPurpMatch('board') ? '✓' : ''}
+                  {isPurpMatch('board') ? <CheckMark /> : ''}
                 </span>
                 <span>For Board Exam</span>
               </span>
@@ -559,7 +576,7 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
                     !isPurpMatch('personal') &&
                     !isPurpMatch('advanced') &&
                     !isPurpMatch('ranking')
-                      ? '✓'
+                      ? <CheckMark />
                       : ''}
                   </span>
                   <span>Others (Specify)</span>
@@ -583,25 +600,25 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               <span className="ustp-checkbox-label">
                 <span className="ustp-purpose-underline">
-                  {isPurpMatch('employment') ? '✓' : ''}
+                  {isPurpMatch('employment') ? <CheckMark /> : ''}
                 </span>
                 <span>For Employment</span>
               </span>
               <span className="ustp-checkbox-label">
                 <span className="ustp-purpose-underline">
-                  {isPurpMatch('personal') ? '✓' : ''}
+                  {isPurpMatch('personal') ? <CheckMark /> : ''}
                 </span>
                 <span>For Personal File</span>
               </span>
               <span className="ustp-checkbox-label">
                 <span className="ustp-purpose-underline">
-                  {isPurpMatch('advanced') ? '✓' : ''}
+                  {isPurpMatch('advanced') ? <CheckMark /> : ''}
                 </span>
                 <span>For Advanced Studies</span>
               </span>
               <span className="ustp-checkbox-label">
                 <span className="ustp-purpose-underline">
-                  {isPurpMatch('ranking') ? '✓' : ''}
+                  {isPurpMatch('ranking') ? <CheckMark /> : ''}
                 </span>
                 <span>For Ranking</span>
               </span>

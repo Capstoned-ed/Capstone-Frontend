@@ -72,7 +72,7 @@ export const USTP_COURSE_CODE_MAP = USTP_COURSE_GROUPS.reduce((acc, group) => {
   return acc;
 }, {});
 
-export default function CourseSelectDropdown({ value, onChange, required = false, disabled = false, allowClear = true }) {
+export default function CourseSelectDropdown({ value, onChange, required = false, disabled = false, allowClear = true, placeholder = 'Select Course / Program' }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -183,7 +183,7 @@ export default function CourseSelectDropdown({ value, onChange, required = false
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`w-full text-left bg-white border rounded-lg px-3.5 py-2.5 text-sm transition-all flex items-center justify-between gap-2 shadow-xs cursor-pointer ${
+        className={`w-full min-h-[42px] text-left bg-white border rounded-lg px-3.5 py-2 text-sm transition-all flex items-center justify-between gap-2 shadow-xs cursor-pointer ${
           isOpen
             ? 'border-emerald-500 ring-2 ring-emerald-500/20'
             : 'border-slate-200 hover:border-slate-300'
@@ -205,7 +205,7 @@ export default function CourseSelectDropdown({ value, onChange, required = false
             </div>
           ) : (
             <span className="text-slate-400 text-xs sm:text-sm font-normal">
-              Select Course / Program
+              {placeholder}
             </span>
           )}
         </div>
@@ -248,7 +248,7 @@ export default function CourseSelectDropdown({ value, onChange, required = false
       {/* Popover Dropdown Card */}
       {isOpen && (
         <div
-          style={{ maxHeight: `${maxPopoverHeight}px` }}
+          style={{ height: `${maxPopoverHeight}px`, maxHeight: `${maxPopoverHeight}px` }}
           className={`absolute left-0 right-0 z-50 bg-white rounded-xl border border-slate-200/90 shadow-2xl overflow-hidden flex flex-col animate-in fade-in duration-150 ${
             openUpward ? 'bottom-full mb-1.5 slide-in-from-bottom-1' : 'top-full mt-1.5 slide-in-from-top-1'
           }`}
