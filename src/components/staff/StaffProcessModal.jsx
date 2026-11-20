@@ -82,7 +82,13 @@ export default function StaffProcessModal({
     }
   }, [newStatus]);
 
+  const isTerminal = useMemo(() => {
+    const raw = String(selectedRequest?.status || '').toUpperCase();
+    return ['CLAIMED', 'COMPLETED', 'REJECTED', 'CANCELLED', 'RELEASED'].includes(raw);
+  }, [selectedRequest?.status]);
+
   const handleManualStatusChange = (val) => {
+    if (updating || isTerminal) return;
     const cleanVal = normalizeStatus(val);
     setLocalStatus(cleanVal);
     if (setNewStatus) setNewStatus(cleanVal);
@@ -472,7 +478,12 @@ export default function StaffProcessModal({
                     <CustomSelectDropdown
                       value={localStatus || newStatus || 'For Processing'}
                       onChange={handleManualStatusChange}
-                      buttonClassName="staff-select-input"
+                      disabled={updating || isTerminal}
+                      buttonClassName={`staff-select-input ${
+                        updating || isTerminal
+                          ? 'opacity-60 bg-slate-100 cursor-not-allowed border-slate-300 text-slate-500'
+                          : ''
+                      }`}
                       options={statusOptions.map((st) => ({ value: st, label: st }))}
                     />
                   </div>
@@ -485,8 +496,19 @@ export default function StaffProcessModal({
                       type="text"
                       placeholder="Document preparation / release notes (optional)..."
                       value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      className="staff-notes-input"
+                      onChange={(e) => {
+                        if (updating || isTerminal) return;
+                        setNotes(e.target.value);
+                      }}
+                      disabled={updating || isTerminal}
+                      readOnly={updating || isTerminal}
+                      tabIndex={updating || isTerminal ? -1 : undefined}
+                      aria-disabled={updating || isTerminal ? 'true' : undefined}
+                      className={`staff-notes-input ${
+                        updating || isTerminal
+                          ? 'opacity-60 bg-slate-100 cursor-not-allowed border-slate-300 text-slate-500'
+                          : ''
+                      }`}
                     />
                   </div>
                 </div>
@@ -506,8 +528,12 @@ export default function StaffProcessModal({
 
               <button
                 type="submit"
-                disabled={updating}
-                className="staff-btn-update"
+                disabled={updating || isTerminal}
+                className={`staff-btn-update ${
+                  updating || isTerminal
+                    ? 'opacity-40 cursor-not-allowed bg-slate-400 hover:bg-slate-400 text-white'
+                    : ''
+                }`}
               >
                 {updating ? 'Updating...' : 'Update Status'}
               </button>

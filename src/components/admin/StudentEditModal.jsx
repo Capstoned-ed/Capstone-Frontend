@@ -33,6 +33,7 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    if (loading || name === 'student_id') return;
     if (name === 'contact_number') {
       setContactError(value && /\D/.test(value) ? 'Contact Number must contain numbers only.' : '');
     }
@@ -186,9 +187,13 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
                 type="text"
                 name="student_id"
                 value={formData.student_id}
-                onChange={handleChange}
+                disabled
+                readOnly
+                tabIndex={-1}
+                aria-disabled="true"
+                onChange={() => {}}
                 placeholder="Student ID (e.g. 2023123456)"
-                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                className="w-full px-3 py-2 text-xs bg-slate-100 border border-slate-200 rounded-lg text-slate-500 font-mono font-semibold cursor-not-allowed select-text outline-none"
               />
             </div>
             <div>
@@ -215,7 +220,12 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
               <CompactDatePicker
                 value={formData.birth_date}
                 max={new Date().toISOString().split('T')[0]}
-                onChange={(val) => setFormData((prev) => ({ ...prev, birth_date: val }))}
+                disabled={loading}
+                readOnly={loading}
+                onChange={(val) => {
+                  if (loading) return;
+                  setFormData((prev) => ({ ...prev, birth_date: val }));
+                }}
                 className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
               />
             </div>
