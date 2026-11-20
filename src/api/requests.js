@@ -1314,6 +1314,7 @@ export const requestsApi = {
     }
     return response.data;
   },
+  isClaimedStatus,
 };
 
 export default requestsApi;
