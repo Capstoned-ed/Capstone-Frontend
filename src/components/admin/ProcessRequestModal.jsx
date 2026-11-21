@@ -67,6 +67,7 @@ export default function ProcessRequestModal({
   const toast = useToast();
   const [newStatus, setNewStatus] = useState(() => requestItem?.status || 'Pending');
   const [notes, setNotes] = useState('');
+  const [initialStaffNote, setInitialStaffNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [confirmingAssessment, setConfirmingAssessment] = useState(false);
   const [verifyingPayment, setVerifyingPayment] = useState(false);
@@ -480,6 +481,8 @@ export default function ProcessRequestModal({
     resolveModalTargetBackendStatus(localStatus) !== persistedBackendStatus
   );
 
+  const canEditRemarks = Boolean(!isAdmin && !isPersistedTerminal);
+
   const hasUnsavedNotes = Boolean(notes && notes.trim().length > 0);
 
   const isStaffPaymentConfirmationStep = Boolean(
@@ -490,8 +493,7 @@ export default function ProcessRequestModal({
   );
 
   const canSubmitUpdate = Boolean(
-    canOverrideStatus &&
-    (isStatusChanged || hasUnsavedNotes) &&
+    (isStatusChanged ? canOverrideStatus : (canEditRemarks && hasUnsavedNotes)) &&
     !loading
   );
 
@@ -719,7 +721,9 @@ export default function ProcessRequestModal({
 
     if (!requestItem) return;
 
-    setNotes(extractStaffRemark(requestItem));
+    const loadedNote = extractStaffRemark(requestItem);
+    setNotes(loadedNote);
+    setInitialStaffNote(loadedNote);
     setClearanceStatus(resolveInitialClearanceStatus(requestItem));
     setLocalStatus(requestItem?.status || 'Pending');
     setNewStatus(requestItem?.status || 'Pending');
@@ -955,12 +959,34 @@ export default function ProcessRequestModal({
 
     setReviewingClearance(false);
 
+    let clearedRemarkPatch = {};
+    if (statusToSet === 'VERIFIED') {
+      const hadPendingRemark = Boolean(extractStaffRemark(requestItem) || notes.trim());
+      const cleanedRemarks = mergeStaffNoteIntoRemarks(requestItem, '');
+      requestItem.remarks = cleanedRemarks;
+      requestItem.notes = '';
+      requestItem.staff_notes = '';
+      setNotes('');
+      setInitialStaffNote('');
+      clearedRemarkPatch = { remarks: cleanedRemarks, notes: '', staff_notes: '' };
+
+      const targetRawId = requestItem.rawId || requestItem.id;
+      const isBackendId = Boolean(targetRawId) && !String(targetRawId).startsWith('fallback_');
+      if (isBackendId && hadPendingRemark) {
+        await requestsApi.transition(
+          targetRawId,
+          { status: persistedBackendStatus, remarks: cleanedRemarks },
+          { throwOnError: false }
+        );
+      }
+    }
+
     const nowTime = Date.now();
     const nowIso = new Date(nowTime).toISOString();
     recordRequestActivityTimestamp(requestItem, nowTime);
     updateStoredRequest(
       targetId,
-      { clearance_status: statusToSet, updated_at: nowIso },
+      { clearance_status: statusToSet, ...clearedRemarkPatch, updated_at: nowIso },
       { fallbackItem: requestItem, silentNotify: true }
     );
 
@@ -968,6 +994,7 @@ export default function ProcessRequestModal({
       onUpdated({
         ...requestItem,
         clearance_status: statusToSet,
+        ...clearedRemarkPatch,
         updated_at: nowIso,
       });
     }
@@ -1030,10 +1057,7 @@ export default function ProcessRequestModal({
       let transitionRes = null;
 
       if (isBackendId) {
-        const opRemarks = preserveDocTagInRemarks(
-          requestItem,
-          requestItem.remarks || ''
-        );
+        const opRemarks = mergeStaffNoteIntoRemarks(requestItem, '');
         try {
           transitionRes = await requestsApi.transition(
             targetRawId,
@@ -1094,8 +1118,12 @@ export default function ProcessRequestModal({
         is_approved: resolvedIsApproved,
         is_auto_approved: resolvedIsAutoApproved,
         approved_by_name: resolvedApprovedByName,
+        notes: '',
+        staff_notes: '',
         updated_at: nowIso,
       };
+      setNotes('');
+      setInitialStaffNote('');
 
       requestItem.status = persistedNextStatus;
       requestItem.rawStatus = persistedNextStatus;
@@ -1339,7 +1367,7 @@ export default function ProcessRequestModal({
       if (isBackendId) {
         const payRemarks = !isVerified && notes.trim()
           ? mergeStaffNoteIntoRemarks(requestItem, notes.trim())
-          : preserveDocTagInRemarks(requestItem, requestItem.remarks || '');
+          : mergeStaffNoteIntoRemarks(requestItem, '');
         // Also verify/reject the backend Payment record itself if present
         if (latestPayment?.id && !String(latestPayment.id).startsWith('PAY-')) {
           try {
@@ -1378,6 +1406,15 @@ export default function ProcessRequestModal({
         }
       }
 
+      if (isVerified) {
+        const cleanedRemarks = mergeStaffNoteIntoRemarks(requestItem, '');
+        requestItem.remarks = cleanedRemarks;
+        requestItem.notes = '';
+        requestItem.staff_notes = '';
+        setNotes('');
+        setInitialStaffNote('');
+      }
+
       const paymentPatch = {
         status: updatedStatus,
         rawStatus: isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING',
@@ -1387,6 +1424,7 @@ export default function ProcessRequestModal({
         receipt_reference_number: finalOrNumber,
         receipt_image: activeReceiptImage,
         payment_date: new Date().toISOString().split('T')[0],
+        ...(isVerified ? { remarks: requestItem.remarks, notes: '', staff_notes: '' } : {}),
         updated_at: nowIso,
       };
 
@@ -1551,8 +1589,14 @@ export default function ProcessRequestModal({
         ) {
           backendStatus = 'PENDING_REGISTRAR_APPROVAL';
         }
-        const transitionRemarks = notes.trim()
-          ? mergeStaffNoteIntoRemarks(requestItem, notes.trim())
+        const trimmedNotes = notes.trim();
+        const isOldUnchangedNote =
+          isStatusChanged && trimmedNotes === initialStaffNote.trim();
+        const effectiveNoteForTransition = isOldUnchangedNote ? '' : trimmedNotes;
+        const transitionRemarks = isStatusChanged
+          ? mergeStaffNoteIntoRemarks(requestItem, effectiveNoteForTransition)
+          : trimmedNotes
+          ? mergeStaffNoteIntoRemarks(requestItem, trimmedNotes)
           : preserveDocTagInRemarks(requestItem, requestItem.remarks || '');
         let updatedBackend = null;
         try {
@@ -1617,10 +1661,23 @@ export default function ProcessRequestModal({
       const nowIso = new Date(nowTime).toISOString();
       recordRequestActivityTimestamp(requestItem, nowTime);
 
+      const trimmedNotesAfter = notes.trim();
+      const clearedOnStatusChange =
+        isStatusChanged && trimmedNotesAfter === initialStaffNote.trim();
+      const nextStaffNote = clearedOnStatusChange ? '' : trimmedNotesAfter;
+      if (clearedOnStatusChange) {
+        setNotes('');
+        setInitialStaffNote('');
+      } else if (!isStatusChanged && trimmedNotesAfter) {
+        setInitialStaffNote(trimmedNotesAfter);
+      }
+
       const finalPatch = {
         status: finalResolvedStatus,
         rawStatus: finalResolvedRawStatus,
-        remarks: notes.trim() ? notes.trim() : (requestItem.remarks || ''),
+        remarks: requestItem.remarks || '',
+        notes: nextStaffNote,
+        staff_notes: nextStaffNote,
         clearance_status: clearanceStatus,
         assessed_amount: assessedAmount,
         amount: assessedAmount,
@@ -2730,15 +2787,15 @@ export default function ProcessRequestModal({
                     placeholder="Staff remarks / notes (optional)..."
                     value={notes}
                     onChange={(e) => {
-                      if (!canOverrideStatus) return;
+                      if (!canEditRemarks) return;
                       setNotes(e.target.value);
                     }}
-                    disabled={!canOverrideStatus}
-                    readOnly={!canOverrideStatus}
-                    tabIndex={!canOverrideStatus ? -1 : undefined}
-                    aria-disabled={!canOverrideStatus ? 'true' : undefined}
+                    disabled={!canEditRemarks}
+                    readOnly={!canEditRemarks}
+                    tabIndex={!canEditRemarks ? -1 : undefined}
+                    aria-disabled={!canEditRemarks ? 'true' : undefined}
                     className={`staff-notes-input ${
-                      !canOverrideStatus
+                      !canEditRemarks
                         ? 'opacity-60 bg-slate-100 cursor-not-allowed border-slate-300 text-slate-500'
                         : ''
                     }`}
@@ -2846,14 +2903,20 @@ export default function ProcessRequestModal({
                   title={
                     isPersistedTerminal
                       ? 'This request is completed or closed. Further edits are disabled.'
-                      : !canOverrideStatus
+                      : !isStatusChanged && hasUnsavedNotes && canEditRemarks
+                      ? 'Save remarks / notes'
+                      : !canOverrideStatus && isStatusChanged
                       ? 'Manual status override is locked: Verify clearance first'
                       : !isStatusChanged && !hasUnsavedNotes
                       ? 'Change the status or enter remarks/notes to update.'
                       : 'Update request status'
                   }
                 >
-                  {loading ? 'Updating...' : 'Update Status'}
+                  {loading
+                    ? 'Updating...'
+                    : !isStatusChanged && hasUnsavedNotes
+                    ? 'Save Remarks'
+                    : 'Update Status'}
                 </button>
               )}
             </div>
