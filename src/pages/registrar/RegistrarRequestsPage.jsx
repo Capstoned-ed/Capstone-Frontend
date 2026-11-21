@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, getStaffAssignmentTimestamps, recordStaffAssignmentTimestamp, getRequestActivityTimestamps, recordRequestActivityTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived, preserveDocTagInRemarks, formatCleanPurpose } from '../../api/requests';
+import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, getStaffAssignmentTimestamps, recordStaffAssignmentTimestamp, getRequestActivityTimestamps, recordRequestActivityTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived, preserveDocTagInRemarks, mergeReleaseDateIntoRemarks, formatCleanPurpose } from '../../api/requests';
 import { saveStoredNotification } from '../../api/notifications';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
@@ -1171,23 +1171,9 @@ export default function RegistrarRequestsPage() {
   }, [requests, searchQuery, docTypeFilter, statusFilter]);
 
   const activeFilteredRequests = useMemo(() => {
-    const getPriorityRank = (r) => {
-      const s = String(r.batch_status || r.status || '').toUpperCase();
-      const raw = String(r.rawStatus || '').toUpperCase();
-      const isForProc = s === 'PROCESSING' || raw === 'PROCESSING' || raw === 'PAYMENT_VERIFIED' || s === 'FOR PROCESSING' || raw === 'FOR_PROCESSING';
-      const isInProgress = s === 'PROCESSING' || s === 'FOR RELEASE' || s === 'READY FOR RELEASE' || s === 'RELEASING' || raw === 'PROCESSING' || raw === 'READY_FOR_RELEASE';
-      if (isForProc && !r.assigned_staff) return 0; // Needs assignment right now
-      if (isForProc) return 1;
-      if (isInProgress) return 2;
-      return 3; // Pending / Pending Payment / On Hold
-    };
     return filteredRequests
       .filter((r) => !isRequestArchived(r, archivedMap))
-      .sort((a, b) => {
-        const rankDiff = getPriorityRank(a) - getPriorityRank(b);
-        if (rankDiff !== 0) return rankDiff;
-        return sortRequestsNewestFirst(a, b);
-      });
+      .sort(sortRequestsNewestFirst);
   }, [filteredRequests, archivedMap, activityTimestamps, assignmentTimestamps, assignments]);
 
   const totalRequestsPages = Math.max(1, Math.ceil(activeFilteredRequests.length / BATCH_PAGE_SIZE));
@@ -1309,10 +1295,17 @@ export default function RegistrarRequestsPage() {
 
       // Backend API transition if applicable
       if (newStatus && targetId && !String(targetId).startsWith('fallback_')) {
-        requestsApi.transition(targetId, {
-          status: newStatus,
-          remarks: preserveDocTagInRemarks(item, note || 'Batch updated by registrar'),
-        }).catch(() => {});
+        const batchRemarks = releasingDate
+          ? mergeReleaseDateIntoRemarks(item, releasingDate, note || 'Batch updated by registrar')
+          : preserveDocTagInRemarks(item, note || 'Batch updated by registrar');
+        await requestsApi.transition(
+          targetId,
+          {
+            status: newStatus,
+            remarks: batchRemarks,
+          },
+          { throwOnError: false }
+        );
       }
     }
 

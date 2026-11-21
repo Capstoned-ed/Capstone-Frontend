@@ -796,6 +796,56 @@ export function saveStoredRequest(requestItem, user = null) {
  * Handle a request update: records activity timestamp, sends notification for status changes,
  * and broadcasts update event without persisting bulky payloads to localStorage.
  */
+const RELEASE_DATES_KEY = 'regquest_release_dates';
+
+export function extractReleaseDateFromRemarks(remarks) {
+  if (!remarks) return null;
+  const matches = [...String(remarks).matchAll(/Date of release:\s*(\d{4}-\d{2}-\d{2})/gi)];
+  if (matches.length === 0) return null;
+  return matches[matches.length - 1][1] || null;
+}
+
+export function getReleaseDateOverride(req) {
+  if (!req || typeof window === 'undefined') return null;
+  try {
+    const map = JSON.parse(localStorage.getItem(RELEASE_DATES_KEY) || '{}');
+    const keys = [req.rawId, req.id, req.tracking_number, req.trackingId]
+      .filter((v) => v !== undefined && v !== null && String(v).trim() !== '')
+      .map((v) => String(v).trim());
+    for (const k of keys) {
+      if (map[k]) return map[k];
+    }
+  } catch {}
+  return null;
+}
+
+export function saveReleaseDateOverride(ids, releaseDate) {
+  if (!releaseDate || typeof window === 'undefined') return;
+  try {
+    const map = JSON.parse(localStorage.getItem(RELEASE_DATES_KEY) || '{}');
+    const cleanDate = String(releaseDate).trim();
+    const list = Array.isArray(ids) ? ids : [ids];
+    list
+      .filter((v) => v !== undefined && v !== null && String(v).trim() !== '')
+      .forEach((v) => {
+        map[String(v).trim()] = cleanDate;
+      });
+    localStorage.setItem(RELEASE_DATES_KEY, JSON.stringify(map));
+  } catch {}
+}
+
+export function mergeReleaseDateIntoRemarks(requestOrItem, releaseDate, note = '') {
+  const baseRemarks = preserveDocTagInRemarks(requestOrItem, note || '');
+  if (!releaseDate) return baseRemarks;
+  const cleanDate = String(releaseDate).trim();
+  const withoutOldRelease = baseRemarks
+    .replace(/Date of release:\s*\d{4}-\d{2}-\d{2}\.?/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const releaseTag = `Date of release: ${cleanDate}.`;
+  return withoutOldRelease ? `${withoutOldRelease} ${releaseTag}` : releaseTag;
+}
+
 export function updateStoredRequest(idOrTracking, patch, options = {}) {
   try {
     const candidateIds = [
@@ -817,6 +867,11 @@ export function updateStoredRequest(idOrTracking, patch, options = {}) {
     candidateIds.forEach((cid) => {
       recordRequestActivityTimestamp(cid, nowTime);
     });
+
+    const nextReleaseDate = patch?.date_of_release || patch?.release_date;
+    if (nextReleaseDate) {
+      saveReleaseDateOverride(candidateIds, nextReleaseDate);
+    }
 
     const targetMatched = options.fallbackItem || patch || {};
     const previousStatus = targetMatched.status || 'Pending';
@@ -1072,6 +1127,11 @@ function normalizeBackendRequest(b) {
       ? 'PAYMENT_SUBMITTED'
       : latestBackendPayment?.status || b.payment_status || null;
 
+  const parsedReleaseDate = extractReleaseDateFromRemarks(b.remarks || b.notes);
+  const overrideReleaseDate = getReleaseDateOverride(b);
+  const resolvedReleaseDate =
+    overrideReleaseDate || b.date_of_release || b.release_date || parsedReleaseDate || null;
+
   return {
     ...b,
     document_items: resolvedItems,
@@ -1080,6 +1140,8 @@ function normalizeBackendRequest(b) {
     total_copies: resolvedCopies,
     total_amount: formattedTotal,
     assessed_amount: formattedTotal || latestBackendPayment?.amount || b.assessed_amount,
+    date_of_release: resolvedReleaseDate,
+    release_date: resolvedReleaseDate,
     document_type:
       resolvedItems.length > 1
         ? resolvedItems.map((it) => it.name).join(', ')

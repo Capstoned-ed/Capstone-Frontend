@@ -7,6 +7,7 @@ import requestsApi, {
   extractRequestedCopies,
 } from '../../api/requests';
 import paymentsApi, { getStoredPaymentProof } from '../../api/payments';
+import apiClient from '../../api/client';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
@@ -14,6 +15,80 @@ import PaymentUploadModal from '../../components/student/PaymentUploadModal';
 import '../../styles/student/StudentPaymentsPage.css';
 
 const PAYMENT_ARCHIVED_KEY = 'regquest_archived_payments';
+
+function AuthenticatedReceiptPreview({ src, fallbackSrc, cacheKey }) {
+  const [blobUrl, setBlobUrl] = useState(null);
+  const [isPdf, setIsPdf] = useState(false);
+
+  const primarySrc = src || fallbackSrc || null;
+  const isDirectInline = Boolean(
+    primarySrc && (primarySrc.startsWith('data:') || primarySrc.startsWith('blob:'))
+  );
+
+  useEffect(() => {
+    let ignore = false;
+    let objectUrl = null;
+
+    if (!primarySrc || isDirectInline) {
+      setBlobUrl(null);
+      setIsPdf(Boolean(primarySrc && primarySrc.startsWith('data:application/pdf')));
+      return;
+    }
+
+    const fetchUrl = cacheKey
+      ? `${primarySrc}${primarySrc.includes('?') ? '&' : '?'}t=${encodeURIComponent(cacheKey)}`
+      : primarySrc;
+
+    (async () => {
+      try {
+        const res = await apiClient.get(fetchUrl, { responseType: 'blob' });
+        if (!ignore && res?.data) {
+          const contentType = String(res.data.type || res.headers?.['content-type'] || '').toLowerCase();
+          setIsPdf(contentType.includes('pdf'));
+          objectUrl = URL.createObjectURL(res.data);
+          setBlobUrl(objectUrl);
+        }
+      } catch (err) {
+        console.warn('Failed to load authenticated receipt thumbnail:', err);
+        if (!ignore) setBlobUrl(null);
+      }
+    })();
+
+    return () => {
+      ignore = true;
+      if (objectUrl) {
+        try {
+          URL.revokeObjectURL(objectUrl);
+        } catch {}
+      }
+    };
+  }, [primarySrc, isDirectInline, cacheKey]);
+
+  const resolvedUrl = isDirectInline ? primarySrc : blobUrl || fallbackSrc || null;
+  if (!resolvedUrl) {
+    return (
+      <div className="payment-proof-preview flex items-center justify-center bg-slate-100 text-[10px] font-bold text-slate-500">
+        IMG
+      </div>
+    );
+  }
+
+  if (isPdf) {
+    return (
+      <div className="payment-proof-preview flex items-center justify-center bg-rose-50 text-[10px] font-bold text-rose-700 border border-rose-200">
+        PDF
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={resolvedUrl}
+      alt="Cashier Receipt"
+      className="payment-proof-preview"
+    />
+  );
+}
 
 function getArchivedPaymentsMap() {
   try {
@@ -460,7 +535,7 @@ export default function StudentPaymentsPage() {
                 {pendingReviewRequests.length} Request(s) Awaiting Staff Confirmation
               </h4>
               <p className="mt-0.5 text-amber-800 leading-relaxed">
-                Requests currently under review and clearance verification by Registrar Staff or Admin are not yet ready for payment. Once confirmed and assessed (status changes to "For Payment" / "Pending Payment"), they will automatically appear here with the downloadable form and payment attachment options.
+                Still under review by the Registrar. Once assessed, your request will appear here for payment and form download.
               </p>
               <button
                 type="button"
@@ -641,11 +716,11 @@ export default function StudentPaymentsPage() {
                   {hasProofSubmitted && proof && (
                     <div className="payment-proof-banner">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-3 min-w-0">
-                        {proof.receiptImage && (
-                          <img
+                        {(proof.receiptImage || proof.receiptDataUrl) && (
+                          <AuthenticatedReceiptPreview
                             src={proof.receiptImage}
-                            alt="Cashier Receipt"
-                            className="payment-proof-preview"
+                            fallbackSrc={proof.receiptDataUrl}
+                            cacheKey={proof.uploadedAt || proof.submittedAt || proof.id}
                           />
                         )}
                         <div className="min-w-0">

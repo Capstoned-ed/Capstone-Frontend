@@ -54,7 +54,7 @@ export default function StudentFooter() {
                 </button>
               </li>
               <li>
-                <span className="student-footer-link">Safety Quidlines</span>
+                <span className="student-footer-link">Safety Guidelines</span>
               </li>
               <li>
                 <span className="student-footer-link">FAQ</span>
@@ -78,7 +78,7 @@ export default function StudentFooter() {
         {/* Bottom Row: Copyright on Left, Terms & Privacy on Right */}
         <div className="student-footer-bottom">
           <p className="student-footer-copyright">
-            &copy; 2025 Rent-IT. All rights reserved.
+            &copy; 2025 RegQuest. All rights reserved.
           </p>
 
           <div className="student-footer-legal-links">
