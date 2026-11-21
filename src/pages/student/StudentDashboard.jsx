@@ -210,19 +210,20 @@ export default function StudentDashboard() {
       </section>
 
       {/* 2. Available Credentials Section */}
-      <section className="bg-white py-14 sm:py-20">
-        <div className="max-w-6xl mx-auto px-4 sm:px-8">
-          <h2 className="text-xl sm:text-2xl font-black text-[#0B0B36] tracking-tight mb-8 sm:mb-10">
-            Available Credentials
-          </h2>
+      <section className="bg-white py-12 sm:py-16 px-4 sm:px-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-[#F8FAFF] rounded-2xl sm:rounded-3xl border border-blue-200/80 shadow-lg p-6 sm:p-8 lg:p-10">
+            <h2 className="text-xl sm:text-2xl font-black text-[#0B0B36] tracking-tight mb-6 sm:mb-8">
+              Available Credentials
+            </h2>
 
-          {/* Credentials Grid (expands smoothly when See More is clicked) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-7 transition-all duration-300">
+            {/* Credentials Grid (expands smoothly when See More is clicked) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 transition-all duration-300">
             {visibleCredentials.map((card) => (
               <div
                 key={card.id}
                 onClick={() => handleRequestClick(card.docName)}
-                className="bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-lg hover:border-amber-400/90 transition-all duration-200 overflow-hidden flex flex-col justify-between group cursor-pointer hover:-translate-y-1"
+                className="bg-white rounded-2xl border border-blue-200/90 shadow-sm hover:shadow-lg hover:border-blue-500 transition-all duration-200 p-5 flex flex-col justify-between group cursor-pointer hover:-translate-y-0.5"
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
@@ -232,22 +233,20 @@ export default function StudentDashboard() {
                   }
                 }}
               >
-                {/* Card Top Pastel Banner with Centered Translucent Icon Box */}
-                <div className={`${card.bannerBg} h-32 sm:h-36 flex items-center justify-center transition-colors`}>
-                  <div className="w-24 h-18 rounded-xl bg-white/50 backdrop-blur-xs flex items-center justify-center shadow-xs border border-white/50 transition-transform group-hover:scale-105 duration-200">
-                    {card.icon}
-                  </div>
-                </div>
-
                 {/* Card Body */}
-                <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between">
-                  <div>
-                    <h3 className="text-sm sm:text-base font-bold text-slate-900 mb-1 group-hover:text-[#1F1F9B] transition-colors">
-                      {card.title}
-                    </h3>
-                    <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">
-                      {card.description}
-                    </p>
+                <div className="flex-1 flex flex-col justify-between">
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE] border border-blue-200/70 flex items-center justify-center shrink-0 [&>svg]:w-6 [&>svg]:h-6 [&>svg]:text-[#1D4ED8] group-hover:from-[#1D4ED8] group-hover:to-[#0B0B36] group-hover:border-transparent group-hover:[&>svg]:text-white transition-all duration-200">
+                      {card.icon}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#1D4ED8] transition-colors leading-snug">
+                        {card.title}
+                      </h3>
+                      <p className="text-xs text-slate-500 leading-relaxed line-clamp-2 mt-1">
+                        {card.description}
+                      </p>
+                    </div>
                   </div>
 
                   {/* Card Bottom Row: Fee & Request Button */}
@@ -290,6 +289,7 @@ export default function StudentDashboard() {
                 {isExpanded ? '↑' : '→'}
               </span>
             </button>
+          </div>
           </div>
         </div>
       </section>
