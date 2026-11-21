@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import paymentsApi, { getStoredPaymentProof } from '../../api/payments';
+import apiClient from '../../api/client';
 import { saveStoredNotification } from '../../api/notifications';
 import requestsApi, { getStaffAssignments, extractTotalAmount, resolveRequestDocType } from '../../api/requests';
 import useToast from '../../hooks/useToast';
@@ -14,7 +15,11 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
   const [orNumberInput, setOrNumberInput] = useState('');
   const [receiptFile, setReceiptFile] = useState(null);
   const [receiptPreview, setReceiptPreview] = useState(null);
+  const [existingReceiptSource, setExistingReceiptSource] = useState(null);
+  const [existingReceiptCacheKey, setExistingReceiptCacheKey] = useState(null);
+  const [existingReceiptBlobUrl, setExistingReceiptBlobUrl] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Prepopulate if proof was already submitted for THIS specific request
   useEffect(() => {
@@ -44,18 +49,71 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
         ]);
       }
 
+      setReceiptFile(null);
       if (existing) {
+        const existingImg = existing.receiptImage || existing.receiptDataUrl || null;
         setOrNumberInput(existing.receiptReferenceNumber || '');
-        setReceiptPreview(existing.receiptImage || null);
+        setExistingReceiptSource(existingImg);
+        setExistingReceiptCacheKey(existing.uploadedAt || existing.submittedAt || Date.now());
+        setReceiptPreview(
+          existingImg && (existingImg.startsWith('data:') || existingImg.startsWith('blob:'))
+            ? existingImg
+            : existing.receiptDataUrl || null
+        );
         setPaymentOption(existing.submissionType || defaultOption || 'ONLINE');
       } else {
         setOrNumberInput('');
-        setReceiptFile(null);
+        setExistingReceiptSource(null);
+        setExistingReceiptCacheKey(null);
         setReceiptPreview(null);
         setPaymentOption(defaultOption || 'ONLINE');
       }
     }
   }, [request, isOpen, defaultOption]);
+
+  // Fetch protected backend receipt image via authenticated apiClient when re-uploading
+  useEffect(() => {
+    let ignore = false;
+    let objectUrl = null;
+
+    if (
+      !isOpen ||
+      !existingReceiptSource ||
+      existingReceiptSource.startsWith('data:') ||
+      existingReceiptSource.startsWith('blob:')
+    ) {
+      setExistingReceiptBlobUrl(null);
+      return;
+    }
+
+    const fetchUrl = existingReceiptCacheKey
+      ? `${existingReceiptSource}${existingReceiptSource.includes('?') ? '&' : '?'}t=${encodeURIComponent(existingReceiptCacheKey)}`
+      : existingReceiptSource;
+
+    (async () => {
+      try {
+        const res = await apiClient.get(fetchUrl, { responseType: 'blob' });
+        if (!ignore && res?.data) {
+          objectUrl = URL.createObjectURL(res.data);
+          setExistingReceiptBlobUrl(objectUrl);
+        }
+      } catch (err) {
+        console.warn('Failed to load existing receipt preview in modal:', err);
+        if (!ignore) setExistingReceiptBlobUrl(null);
+      }
+    })();
+
+    return () => {
+      ignore = true;
+      if (objectUrl) {
+        try {
+          URL.revokeObjectURL(objectUrl);
+        } catch {}
+      }
+    };
+  }, [isOpen, existingReceiptSource, existingReceiptCacheKey]);
+
+  const effectivePreview = receiptPreview || existingReceiptBlobUrl;
 
   if (!isOpen || !request) return null;
 
@@ -90,7 +148,7 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
         toast.warning('Please enter the Official Receipt (O.R.) Number.');
         return;
       }
-      if (!receiptFile && !receiptPreview) {
+      if (!receiptFile && !effectivePreview) {
         toast.warning('Please upload a picture of your Official Receipt.');
         return;
       }
@@ -269,9 +327,10 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
                   Upload Picture of Cashier Official Receipt <span className="text-rose-500">*</span>
                 </label>
                 <input
+                  ref={fileInputRef}
                   type="file"
                   accept="image/*,application/pdf"
-                  required={!receiptPreview}
+                  required={!effectivePreview}
                   disabled={submitting}
                   readOnly={submitting}
                   tabIndex={submitting ? -1 : undefined}
@@ -280,25 +339,39 @@ export default function PaymentUploadModal({ isOpen, onClose, request, onSuccess
                     if (submitting) return;
                     handleFileChange(e);
                   }}
-                  className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#0B0B36] file:text-white hover:file:bg-[#1E1E6B] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={
+                    effectivePreview
+                      ? 'hidden'
+                      : 'w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#0B0B36] file:text-white hover:file:bg-[#1E1E6B] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
+                  }
                 />
               </div>
 
-              {receiptPreview && (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-3">
-                  <img
-                    src={receiptPreview}
-                    alt="Receipt Preview"
-                    className="w-16 h-16 object-cover rounded-lg border border-slate-300 shadow-2xs"
-                  />
-                  <div>
-                    <span className="text-xs text-emerald-700 font-bold block">
-                      ✓ Receipt photo ready to upload
-                    </span>
-                    <span className="text-[11px] text-slate-500">
-                      Ensure the O.R. number and amount are legible.
-                    </span>
+              {effectivePreview && (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <img
+                      src={effectivePreview}
+                      alt="Receipt Preview"
+                      className="w-16 h-16 object-cover rounded-lg border border-slate-300 shadow-2xs shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <span className="text-xs text-emerald-700 font-bold block">
+                        ✓ Receipt photo ready to upload
+                      </span>
+                      <span className="text-[11px] text-slate-500 block">
+                        Ensure the O.R. number and amount are legible.
+                      </span>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3.5 py-2 rounded-xl bg-[#0B0B36] hover:bg-[#1E1E6B] text-white text-xs font-bold transition-colors cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Change Photo
+                  </button>
                 </div>
               )}
 

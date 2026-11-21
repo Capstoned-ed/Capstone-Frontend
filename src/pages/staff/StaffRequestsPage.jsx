@@ -19,6 +19,7 @@ import requestsApi, {
   ASSIGNMENTS_KEY,
   ASSIGNMENT_TIMESTAMPS_KEY,
   preserveDocTagInRemarks,
+  mergeReleaseDateIntoRemarks,
   mergeStaffNoteIntoRemarks,
   formatCleanPurpose,
   extractStaffRemark,
@@ -824,10 +825,17 @@ export default function StaffRequestsPage() {
       // Backend API transition if applicable
       if (statusToSet && targetId && !String(targetId).startsWith('fallback_')) {
         const backendStatus = BACKEND_STATUS_MAP[statusToSet] || statusToSet;
-        requestsApi.transition(targetId, {
-          status: backendStatus,
-          remarks: preserveDocTagInRemarks(item, note || 'Batch updated by staff'),
-        }).catch(() => { });
+        const batchRemarks = releasingDate
+          ? mergeReleaseDateIntoRemarks(item, releasingDate, note || 'Batch updated by staff')
+          : preserveDocTagInRemarks(item, note || 'Batch updated by staff');
+        await requestsApi.transition(
+          targetId,
+          {
+            status: backendStatus,
+            remarks: batchRemarks,
+          },
+          { throwOnError: false }
+        );
       }
     }
 

@@ -19,6 +19,7 @@ import requestsApi, {
   setRequestArchived,
   isRequestArchived,
   formatCleanPurpose,
+  extractStaffRemark,
 } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
@@ -232,7 +233,8 @@ export default function StaffDashboard() {
             created_at: r.created_at,
             request_date: reqDate,
             release_date: relDate,
-            notes: r.notes || r.remarks || '',
+            notes: r.notes || r.staff_notes || extractStaffRemark(r.remarks) || '',
+            staff_notes: r.staff_notes || r.notes || extractStaffRemark(r.remarks) || '',
             clearance_preview: r.clearance_preview || clrObj?.file || null,
             clearance_id: r.clearance_id || clrObj?.id || null,
             clearance_status: r.clearance_status || clrObj?.status || (r.clearance_preview || clrObj ? 'PENDING' : null),
