@@ -236,40 +236,71 @@ export default function Sidebar({ isCollapsed, onToggle, onNavigate }) {
           }`}
       >
         <div>
-          {isCollapsed ? (
-            <div className="pt-7 pb-5 flex flex-col items-center gap-3">
-              <NavLink to={navLinks[0]?.to || '/'} className="flex items-center justify-center transition-transform hover:scale-105">
+          <div
+            className={`transition-all duration-300 ease-in-out ${
+              isCollapsed ? 'pt-7 pb-5 px-2' : 'pt-8 pb-3 px-4'
+            }`}
+          >
+            <div
+              className={`flex items-center transition-all duration-300 ease-in-out ${
+                isCollapsed ? 'justify-center' : 'justify-between'
+              }`}
+            >
+              <NavLink
+                to={navLinks[0]?.to || '/'}
+                onClick={() => onNavigate?.()}
+                className={`relative flex items-center h-12 overflow-hidden transition-all duration-300 ease-in-out hover:opacity-90 ${
+                  isCollapsed ? 'w-12 justify-center' : 'w-[168px]'
+                }`}
+              >
                 <img
                   src={logoShrunk}
                   alt="RegQuest Logo"
-                  className="h-12 w-12 object-contain drop-shadow"
+                  className={`h-12 w-12 object-contain drop-shadow transition-all duration-300 ease-in-out ${
+                    isCollapsed
+                      ? 'opacity-100 scale-100'
+                      : 'opacity-0 scale-90 pointer-events-none absolute left-0'
+                  }`}
                 />
-              </NavLink>
-              <button
-                type="button"
-                onClick={onToggle}
-                title="Expand Sidebar"
-                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-                  <rect x="3" y="4" width="18" height="16" rx="2" />
-                  <line x1="9" y1="4" x2="9" y2="20" />
-                </svg>
-              </button>
-            </div>
-          ) : (
-            <div className="pt-8 pb-3 flex items-center justify-between px-4">
-              <NavLink to={navLinks[0]?.to || '/'} onClick={() => onNavigate?.()} className="flex items-center h-14 overflow-hidden transition-opacity hover:opacity-90">
                 <img
                   src={logoExpanded}
                   alt="RegQuest Logo"
-                  className="w-[185px] h-[185px] -my-14 -ml-2 object-contain shrink-0"
+                  className={`w-[148px] h-[148px] -my-11 ml-2 object-contain shrink-0 transition-all duration-300 ease-in-out ${
+                    isCollapsed
+                      ? 'opacity-0 scale-95 pointer-events-none absolute left-0'
+                      : 'opacity-100 scale-100'
+                  }`}
                 />
               </NavLink>
               <button
                 type="button"
                 onClick={onToggle}
                 title="Collapse Sidebar"
+                aria-hidden={isCollapsed}
+                tabIndex={isCollapsed ? -1 : 0}
+                className={`rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-all duration-300 ease-in-out shrink-0 ${
+                  isCollapsed
+                    ? 'w-0 p-0 opacity-0 pointer-events-none overflow-hidden'
+                    : 'p-1.5 opacity-100'
+                }`}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <line x1="9" y1="4" x2="9" y2="20" />
+                </svg>
+              </button>
+            </div>
+            <div
+              className={`flex justify-center overflow-hidden transition-all duration-300 ease-in-out ${
+                isCollapsed ? 'max-h-12 opacity-100 mt-3' : 'max-h-0 opacity-0 mt-0 pointer-events-none'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={onToggle}
+                title="Expand Sidebar"
+                aria-hidden={!isCollapsed}
+                tabIndex={isCollapsed ? 0 : -1}
                 className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
@@ -278,7 +309,7 @@ export default function Sidebar({ isCollapsed, onToggle, onNavigate }) {
                 </svg>
               </button>
             </div>
-          )}
+          </div>
 
           <nav className={`mt-4 space-y-4 ${isCollapsed ? 'px-2' : 'px-4'}`}>
             {navLinks.map((item) => (
