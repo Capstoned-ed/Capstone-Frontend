@@ -114,27 +114,15 @@
 }
 
 .staff-dash-metric-card {
-  @apply bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3 sm:p-5 min-w-0 hover:shadow-md transition-shadow;
+  @apply bg-white rounded-2xl border border-slate-200/90 border-l-4 border-l-[#1E3A8A] shadow-sm p-3 sm:p-5 min-w-0 hover:shadow-md transition-shadow;
 }
 
-.staff-dash-metric-card.pending {
-  @apply border-l-4 border-l-orange-400;
-}
-
-.staff-dash-metric-card.processing {
-  @apply border-l-4 border-l-blue-500;
-}
-
-.staff-dash-metric-card.on-hold {
-  @apply border-l-4 border-l-rose-500;
-}
-
-.staff-dash-metric-card.for-release {
-  @apply border-l-4 border-l-emerald-500;
-}
-
+.staff-dash-metric-card.pending,
+.staff-dash-metric-card.processing,
+.staff-dash-metric-card.on-hold,
+.staff-dash-metric-card.for-release,
 .staff-dash-metric-card.completed {
-  @apply border-l-4 border-l-teal-600;
+  @apply border-l-4 border-l-[#1E3A8A];
 }
 
 .staff-dash-metric-top {

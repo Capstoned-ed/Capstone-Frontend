@@ -675,8 +675,8 @@ export default function UserManagementPage() {
       value: totalUsers,
       pillClass: 'user-stat-pill-slate',
       icon: (
-        <svg className="user-stat-icon text-slate-600" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+        <svg className="user-stat-icon text-[#1E3A8A]" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5z" />
         </svg>
       ),
     },
@@ -685,7 +685,7 @@ export default function UserManagementPage() {
       value: registrars,
       pillClass: 'user-stat-pill-indigo',
       icon: (
-        <svg className="user-stat-icon text-[#6366F1]" fill="currentColor" viewBox="0 0 24 24">
+        <svg className="user-stat-icon text-[#1E3A8A]" fill="currentColor" viewBox="0 0 24 24">
           <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
         </svg>
       ),
@@ -695,7 +695,7 @@ export default function UserManagementPage() {
       value: staffMembers,
       pillClass: 'user-stat-pill-green',
       icon: (
-        <svg className="user-stat-icon text-[#22C55E]" fill="currentColor" viewBox="0 0 24 24">
+        <svg className="user-stat-icon text-[#1E3A8A]" fill="currentColor" viewBox="0 0 24 24">
           <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
         </svg>
       ),
@@ -705,7 +705,7 @@ export default function UserManagementPage() {
       value: administrators,
       pillClass: 'user-stat-pill-blue',
       icon: (
-        <svg className="user-stat-icon text-[#3B82F6]" fill="currentColor" viewBox="0 0 24 24">
+        <svg className="user-stat-icon text-[#1E3A8A]" fill="currentColor" viewBox="0 0 24 24">
           <path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3z" />
         </svg>
       ),
@@ -715,7 +715,7 @@ export default function UserManagementPage() {
       value: students,
       pillClass: 'user-stat-pill-orange',
       icon: (
-        <svg className="user-stat-icon text-[#F97316]" fill="currentColor" viewBox="0 0 24 24">
+        <svg className="user-stat-icon text-[#1E3A8A]" fill="currentColor" viewBox="0 0 24 24">
           <path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zm0 13.5L5.5 13 4 13.82 12 18l8-4.18-1.5-.82L12 16.5z" />
         </svg>
       ),
@@ -1166,6 +1166,7 @@ export default function UserManagementPage() {
       <StudentTableCard
         users={users}
         onStudentUpdated={handleUserUpdated}
+        onStudentDeactivated={handleUserDeactivated}
       />
     </div>
   );

@@ -15,6 +15,8 @@ import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
 import ProcessCalendarCard, { isForProcessingStatus } from '../../components/calendar/ProcessCalendarCard';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
+import ExpandableDocList, { DocumentItemsList } from '../../components/common/ExpandableDocList';
+import ExpandableRequestId from '../../components/common/ExpandableRequestId';
 import {
   REQUEST_STATUS,
   normalizeToBackendStatus,
@@ -510,15 +512,17 @@ export default function ProcessingCalendarPage() {
                     <tbody>
                       {displayedRequests.map((req) => (
                         <tr key={req.id || req.tracking_number}>
-                          <td className="scheduled-req-id font-mono font-bold text-slate-800">
-                            {req.tracking_number || req.id}
+                          <td className="scheduled-req-id">
+                            <ExpandableRequestId id={req.tracking_number || req.id} />
                           </td>
                           <td>
                             <div className="font-bold text-slate-900">{req.student_name}</div>
                             <div className="text-xs text-slate-500">{req.student_id}</div>
                           </td>
                           <td>
-                            <div className="font-bold text-indigo-950">{req.document_type}</div>
+                            <div className="font-bold text-indigo-950">
+                              <ExpandableDocList text={req.document_type} maxItems={2} />
+                            </div>
                             <div className="text-xs text-slate-500">{req.copies} {req.copies === 1 ? 'copy' : 'copies'}</div>
                           </td>
                           <td>{getStatusBadge(req.status)}</td>
@@ -645,10 +649,12 @@ export default function ProcessingCalendarPage() {
                   <div className="font-semibold text-indigo-950 mt-0.5">
                     {(() => {
                       const items = extractDocumentItems(selectedRequest);
-                      if (items.length > 1) {
-                        return items.map((it) => `${it.name} (${it.copies})`).join(', ');
-                      }
-                      return selectedRequest.document_type || items[0]?.name || 'N/A';
+                      return (
+                        <DocumentItemsList
+                          items={items}
+                          fallback={selectedRequest.document_type || items[0]?.name || 'N/A'}
+                        />
+                      );
                     })()}
                   </div>
                 </div>

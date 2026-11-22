@@ -818,7 +818,7 @@ export default function StaffDashboard() {
               <span className="staff-dash-metric-label">
                 {user?.role === 'staff' ? 'My Assigned Requests' : 'Total Requests'}
               </span>
-              <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-[#1E3A8A]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
@@ -829,7 +829,7 @@ export default function StaffDashboard() {
           <div className="staff-dash-metric-card pending">
             <div className="staff-dash-metric-top">
               <span className="staff-dash-metric-label">Pending</span>
-              <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-[#1E3A8A]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -842,7 +842,7 @@ export default function StaffDashboard() {
           <div className="staff-dash-metric-card processing">
             <div className="staff-dash-metric-top">
               <span className="staff-dash-metric-label">Processing</span>
-              <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-[#1E3A8A]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10" />
                 <polyline points="12 6 12 12 16 14" />
               </svg>
@@ -854,7 +854,7 @@ export default function StaffDashboard() {
           <div className="staff-dash-metric-card on-hold">
             <div className="staff-dash-metric-top">
               <span className="staff-dash-metric-label">On Hold</span>
-              <svg className="w-5 h-5 text-rose-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-[#1E3A8A]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="10" y1="15" x2="10" y2="9" />
                 <line x1="14" y1="15" x2="14" y2="9" />
@@ -867,7 +867,7 @@ export default function StaffDashboard() {
           <div className="staff-dash-metric-card for-release">
             <div className="staff-dash-metric-top">
               <span className="staff-dash-metric-label">For Release</span>
-              <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-[#1E3A8A]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
             </div>
@@ -878,7 +878,7 @@ export default function StaffDashboard() {
           <div className="staff-dash-metric-card completed">
             <div className="staff-dash-metric-top">
               <span className="staff-dash-metric-label">Completed Today</span>
-              <svg className="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-[#1E3A8A]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>

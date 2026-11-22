@@ -8,6 +8,8 @@ import usersApi from '../../api/users';
 import authApi from '../../api/auth';
 import useToast from '../../hooks/useToast';
 import CompactDatePicker from '../common/CompactDatePicker';
+import ExpandableDocList from '../common/ExpandableDocList';
+import { formatCompactRequestId } from '../common/ExpandableRequestId';
 
 const getStatusBadge = (statusStr) => {
   const s = String(statusStr || 'Pending').toUpperCase();
@@ -571,13 +573,15 @@ export default function StudentProfileModal({ isOpen, onClose }) {
                                     navigate(`${ROUTES.STUDENT.REQUESTS}?track=${encodeURIComponent(reqNum)}`);
                                   }}
                                   className="text-[#0B0B7A] hover:text-amber-600 hover:underline inline-flex items-center gap-1 cursor-pointer font-bold"
-                                  title="Track this request"
+                                  title={`Track ${reqNum}`}
                                 >
-                                  <span>{reqNum}</span>
+                                  <span>{formatCompactRequestId(reqNum)}</span>
                                   <span className="text-xs">↗</span>
                                 </button>
                               </td>
-                              <td className="py-3.5 pr-5 text-slate-700 font-medium">{docType}</td>
+                              <td className="py-3.5 pr-5 text-slate-700 font-medium">
+                                <ExpandableDocList text={docType} maxItems={2} />
+                              </td>
                               <td className="py-3.5 pr-5 text-slate-600 whitespace-nowrap">{dateStr}</td>
                               <td className="py-3.5 pr-5 text-slate-500 whitespace-nowrap text-xs">{timeStr}</td>
                               <td className="py-3.5 pr-5 whitespace-nowrap">

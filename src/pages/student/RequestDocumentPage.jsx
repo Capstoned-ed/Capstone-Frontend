@@ -354,21 +354,21 @@ export default function RequestDocumentPage() {
           fileDataUrl: previewUrl,
           name: file.name,
           type: file.type,
-          isPdf: isDoc,
+          isPdf,
         });
         saveClearanceAttachment('current_student_preview', previewUrl, {
-          isPdf: isDoc,
+          isPdf,
           fileName: file.name,
         });
         if (studentId) {
           saveClearanceAttachment(studentId, previewUrl, {
-            isPdf: isDoc,
+            isPdf,
             fileName: file.name,
           });
         }
       };
       reader.readAsDataURL(file);
-      toast.success(`Clearance ${isDoc ? 'PDF' : 'file'} attached successfully.`);
+      toast.success(`Clearance ${isPdf ? 'PDF' : 'file'} attached successfully.`);
       e.target.value = '';
     }
   };
