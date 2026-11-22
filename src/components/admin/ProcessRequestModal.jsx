@@ -364,7 +364,6 @@ export default function ProcessRequestModal({
     }
   }, [requestItem?.id, requestItem?.rawId, requestItem?.status]);
 
-  const [autoApproveEnabled, setAutoApproveEnabled] = useState(true);
   const [activeSignatoryName, setActiveSignatoryName] = useState('');
 
   useEffect(() => {
@@ -374,7 +373,6 @@ export default function ProcessRequestModal({
       .getRegistrarApproval()
       .then((data) => {
         if (ignore || !data) return;
-        setAutoApproveEnabled(Boolean(data.auto_approve_requests ?? true));
         const sig =
           data.active_registrar_name ||
           data.signatory_name ||
@@ -447,27 +445,18 @@ export default function ProcessRequestModal({
   );
 
   const [localIsApproved, setLocalIsApproved] = useState(() => Boolean(requestItem?.is_approved));
-  const [localIsAutoApproved, setLocalIsAutoApproved] = useState(() => Boolean(requestItem?.is_auto_approved));
   const [localApprovedByName, setLocalApprovedByName] = useState(() => requestItem?.approved_by_name || '');
 
   useEffect(() => {
     setLocalIsApproved(Boolean(requestItem?.is_approved));
-    setLocalIsAutoApproved(Boolean(requestItem?.is_auto_approved));
     setLocalApprovedByName(requestItem?.approved_by_name || '');
-  }, [requestItem?.is_approved, requestItem?.is_auto_approved, requestItem?.approved_by_name]);
+  }, [requestItem?.is_approved, requestItem?.approved_by_name]);
 
   const isApproved = localIsApproved;
-  const isAutoApproved = localIsAutoApproved;
   const approvedByName = localApprovedByName;
   const isRegistrarOrAdmin =
     String(user?.role || '').toLowerCase() === 'registrar' ||
     String(user?.role || '').toLowerCase() === 'admin';
-
-  // Enforce OFF Mode: when Auto-Approve is OFF and request is not yet approved by Registrar,
-  // Staff cannot confirm/bypass Registrar approval until Registrar approves first.
-  const isWaitingForRegistrarApproval = Boolean(
-    !autoApproveEnabled && !isApproved && !isRegistrarOrAdmin
-  );
 
   const canOverrideStatus = Boolean(
     !isAdmin &&
@@ -554,16 +543,13 @@ export default function ProcessRequestModal({
       }
       const approverName = approveRes?.approved_by_name || fallbackApproverName;
       requestItem.is_approved = true;
-      requestItem.is_auto_approved = false;
       requestItem.approved_by_name = approverName;
       setLocalIsApproved(true);
-      setLocalIsAutoApproved(false);
       setLocalApprovedByName(approverName);
       updateStoredRequest(
         requestItem.id || targetRawId,
         {
           is_approved: true,
-          is_auto_approved: false,
           approved_by_name: approverName,
         },
         { fallbackItem: requestItem }
@@ -573,7 +559,6 @@ export default function ProcessRequestModal({
         onUpdated({
           ...requestItem,
           is_approved: true,
-          is_auto_approved: false,
           approved_by_name: approverName,
         });
       }
@@ -677,14 +662,10 @@ export default function ProcessRequestModal({
             nextTransitions = ['Processing', 'Rejected'];
             break;
           case REQUEST_STATUS.PAYMENT_VERIFIED:
-            nextTransitions = autoApproveEnabled
-              ? ['Processing', 'Ready for Release']
-              : ['Processing', 'Pending Registrar Approval'];
+            nextTransitions = ['Processing', 'Ready for Release'];
             break;
           case REQUEST_STATUS.PROCESSING:
-            nextTransitions = autoApproveEnabled
-              ? ['Ready for Release']
-              : ['Pending Registrar Approval'];
+            nextTransitions = ['Ready for Release'];
             break;
           case REQUEST_STATUS.READY_FOR_RELEASE:
             nextTransitions = ['Claimed'];
@@ -713,7 +694,7 @@ export default function ProcessRequestModal({
     ];
 
     return options;
-  }, [persistedStatus, requestItem?.status, user?.role, isWaitingForRegistrarApproval, autoApproveEnabled]);
+  }, [persistedStatus, requestItem?.status, user?.role]);
 
   useEffect(() => {
     let ignore = false;
@@ -1035,10 +1016,6 @@ export default function ProcessRequestModal({
       toast.warning('Please verify the student clearance first before confirming the request.');
       return;
     }
-    if (isWaitingForRegistrarApproval) {
-      toast.warning('Waiting for Registrar Approval: Auto-Approve is OFF. A Registrar must approve this request before Staff can confirm it.');
-      return;
-    }
 
     setConfirmingAssessment(true);
     try {
@@ -1093,12 +1070,9 @@ export default function ProcessRequestModal({
       const persistedNextStatus = transitionRes?.status || 'PAYMENT_PENDING';
       const displayNextStatus = formatStatusDisplay(persistedNextStatus, { useReleasing: true }) || 'Pending Payment';
 
-      // Immediately sync Registrar Auto-Approval signatory state from backend response (or active settings)
+      // Immediately sync Registrar approval signatory state from backend response (or active settings)
       const resolvedIsApproved = Boolean(
-        transitionRes?.is_approved ?? (autoApproveEnabled ? true : localIsApproved)
-      );
-      const resolvedIsAutoApproved = Boolean(
-        transitionRes?.is_auto_approved ?? (autoApproveEnabled && resolvedIsApproved)
+        transitionRes?.is_approved ?? localIsApproved
       );
       const resolvedApprovedByName =
         transitionRes?.approved_by_name ||
@@ -1119,7 +1093,6 @@ export default function ProcessRequestModal({
         is_confirmed: true,
         confirmed_for_payment: true,
         is_approved: resolvedIsApproved,
-        is_auto_approved: resolvedIsAutoApproved,
         approved_by_name: resolvedApprovedByName,
         notes: '',
         staff_notes: '',
@@ -1140,7 +1113,6 @@ export default function ProcessRequestModal({
       requestItem.is_confirmed = true;
       requestItem.confirmed_for_payment = true;
       requestItem.is_approved = resolvedIsApproved;
-      requestItem.is_auto_approved = resolvedIsAutoApproved;
       requestItem.approved_by_name = resolvedApprovedByName;
 
       updateStoredRequest(targetId, patch, { fallbackItem: requestItem, silentNotify: true });
@@ -1149,7 +1121,6 @@ export default function ProcessRequestModal({
       setStatusDirectly(displayNextStatus);
       setIsOrderConfirmed(true);
       setLocalIsApproved(resolvedIsApproved);
-      setLocalIsAutoApproved(resolvedIsAutoApproved);
       setLocalApprovedByName(resolvedApprovedByName);
 
       saveStoredNotification({
@@ -1581,14 +1552,12 @@ export default function ProcessRequestModal({
       let finalResolvedRawStatus = resolveModalTargetBackendStatus(localStatus);
       if (isBackendId) {
         let backendStatus = resolveModalTargetBackendStatus(localStatus);
-        // When Staff advances a PROCESSING request to Ready for Release while
-        // Registrar Auto-Approve is ON, submit via PENDING_REGISTRAR_APPROVAL so
-        // the backend enforces the persisted Registrar Auto-Approve bypass gate.
+        // When Staff advances a PROCESSING request to Ready for Release, submit
+        // via PENDING_REGISTRAR_APPROVAL so the backend routes to Registrar approval.
         if (
           userRole === 'STAFF' &&
           persistedBackendStatus === REQUEST_STATUS.PROCESSING &&
-          backendStatus === REQUEST_STATUS.READY_FOR_RELEASE &&
-          autoApproveEnabled
+          backendStatus === REQUEST_STATUS.READY_FOR_RELEASE
         ) {
           backendStatus = 'PENDING_REGISTRAR_APPROVAL';
         }
@@ -1650,10 +1619,6 @@ export default function ProcessRequestModal({
           if (updatedBackend.is_approved !== undefined) {
             setLocalIsApproved(Boolean(updatedBackend.is_approved));
             requestItem.is_approved = Boolean(updatedBackend.is_approved);
-          }
-          if (updatedBackend.is_auto_approved !== undefined) {
-            setLocalIsAutoApproved(Boolean(updatedBackend.is_auto_approved));
-            requestItem.is_auto_approved = Boolean(updatedBackend.is_auto_approved);
           }
           if (updatedBackend.approved_by_name) {
             setLocalApprovedByName(updatedBackend.approved_by_name);
@@ -2322,9 +2287,7 @@ export default function ProcessRequestModal({
                         className="px-3 py-2 text-xs bg-emerald-50 border border-emerald-200 text-emerald-900 font-semibold rounded-lg flex items-center justify-between shadow-2xs"
                       >
                         <span className="truncate" title={approvedByName}>
-                          {isAutoApproved
-                            ? `Auto-Approved (${approvedByName || 'University Registrar'})`
-                            : (approvedByName || 'University Registrar')}
+                          {approvedByName || 'University Registrar'}
                         </span>
                         <span className="text-[10px] bg-emerald-200/80 text-emerald-900 font-extrabold px-1.5 py-0.5 rounded shrink-0 ml-1">
                           Approved
@@ -2465,8 +2428,6 @@ export default function ProcessRequestModal({
                             ? 'View Only (Admin): Admins cannot confirm payment orders'
                             : !isClearanceVerified
                             ? 'Please verify student clearance first before confirming the request.'
-                            : isWaitingForRegistrarApproval
-                            ? 'Waiting for Registrar Approval: Auto-Approve is OFF. A Registrar must approve first.'
                             : 'Confirm request and order of payment'
                         }
                       >

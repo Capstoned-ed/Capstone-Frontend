@@ -385,7 +385,7 @@ test.describe('Final Defense Polish & Hardening Verification', () => {
     expect(betaIndex).toBeLessThan(alphaIndex);
   });
 
-  test('4. Registrar Auto-Approve toggle sits in Requests header beside Select Multiple, and Claim Stub Download saves PDF cleanly', async ({ page }) => {
+  test('4. Registrar Auto-Approve toggle is cleanly removed and Select Multiple is present', async ({ page }) => {
     const consoleErrors: string[] = [];
     page.on('pageerror', (err) => consoleErrors.push(err.message));
 
@@ -424,22 +424,11 @@ test.describe('Final Defense Polish & Hardening Verification', () => {
     });
 
     await page.route('**/api/settings/registrar-approval/**', async (route) => {
-      if (route.request().method() === 'GET') {
-        return route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            auto_approve_requests: true,
-            active_registrar_name: 'Jonalin Lagrada, MPSM',
-            signatory_name: 'Jonalin Lagrada, MPSM',
-          }),
-        });
-      }
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          auto_approve_requests: false,
+          auto_approve_requests: true,
           active_registrar_name: 'Jonalin Lagrada, MPSM',
           signatory_name: 'Jonalin Lagrada, MPSM',
         }),
@@ -496,24 +485,16 @@ test.describe('Final Defense Polish & Hardening Verification', () => {
       });
     });
 
-    // 1. Check Registrar Dashboard: Auto-Approve toggle is NOT in hero banner, IS in Requests card header
+    // 1. Check Registrar Dashboard: Auto-Approve toggle is removed
     await page.goto('/registrar/dashboard');
     await page.waitForLoadState('domcontentloaded');
 
-    await expect(page.getByTestId('auto-approve-toggle')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByTestId('auto-approve-status')).toHaveText('ON');
-    await expect(page.getByText('Signatory: Jonalin Lagrada, MPSM').first()).toBeVisible();
+    await expect(page.getByTestId('auto-approve-toggle')).toHaveCount(0);
 
-    // Ensure hero banner does NOT contain the toggle
-    const heroBanner = page.locator('.hero-welcome-banner, .registrar-hero-banner').first();
-    if (await heroBanner.count() > 0) {
-      await expect(heroBanner.getByTestId('auto-approve-toggle')).toHaveCount(0);
-    }
-
-    // 2. Check Registrar Requests page: Auto-Approve toggle is beside Select Multiple
+    // 2. Check Registrar Requests page: Auto-Approve toggle is removed, Select Multiple is present
     await page.goto('/registrar/requests');
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.getByTestId('auto-approve-toggle')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('auto-approve-toggle')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Select Multiple/i }).first()).toBeVisible({ timeout: 10000 });
     expect(consoleErrors).toEqual([]);
   });

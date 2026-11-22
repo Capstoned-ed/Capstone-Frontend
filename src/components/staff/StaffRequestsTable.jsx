@@ -295,8 +295,8 @@ export default function StaffRequestsTable({
                       )}
                     </td>
                   )}
-                  <td className="staff-date-text">{item.request_date}</td>
-                  <td className="staff-date-text">{item.release_date}</td>
+                  <td className="staff-date-text">{item.request_date || '—'}</td>
+                  <td className="staff-date-text">{item.release_date || '—'}</td>
                   <td className="text-right">
                     {renderActions(item)}
                   </td>

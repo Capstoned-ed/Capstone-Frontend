@@ -103,23 +103,9 @@ test.describe('Registrar Auto-Approval & Dynamic Signatory Workflow', () => {
     await page.goto('/registrar');
     await page.waitForLoadState('domcontentloaded');
 
-    // 1. Verify toggle switch is present
+    // 1. Verify toggle switch is removed
     const toggleBtn = page.locator('[data-testid="auto-approve-toggle"]');
-    await expect(toggleBtn).toBeVisible({ timeout: 15000 });
-
-    const statusBadge = page.locator('[data-testid="auto-approve-status"]');
-    await expect(statusBadge).toBeVisible();
-    await expect(statusBadge).toHaveText('ON');
-
-    // 2. Click toggle to turn OFF
-    await toggleBtn.click();
-    await expect(statusBadge).toHaveText('OFF');
-    expect(currentAutoApprove).toBe(false);
-
-    // 3. Click toggle again to turn ON
-    await toggleBtn.click();
-    await expect(statusBadge).toHaveText('ON');
-    expect(currentAutoApprove).toBe(true);
+    await expect(toggleBtn).toHaveCount(0);
   });
 
   test('Mode A (Auto-Approve ON): Process modal displays dynamic auto-approval signatory', async ({ page }) => {
@@ -215,8 +201,8 @@ test.describe('Registrar Auto-Approval & Dynamic Signatory Workflow', () => {
     await expect(viewBtn).toBeVisible({ timeout: 15000 });
     await viewBtn.click();
 
-    // Verify modal displays "Auto-Approved (Jonalin Lagrada, MPSM)" in Approved by field
-    await expect(page.getByText(/Auto-Approved \(Jonalin Lagrada, MPSM\)/i)).toBeVisible({ timeout: 10000 });
+    // Verify modal displays "Jonalin Lagrada, MPSM" in Approved by field
+    await expect(page.getByText(/Jonalin Lagrada, MPSM/i)).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Approved', { exact: true })).toBeVisible();
 
     // Verify "Claimed & Done" and "Print Claim Stub" are available because request is approved

@@ -1127,10 +1127,21 @@ function normalizeBackendRequest(b) {
       ? 'PAYMENT_SUBMITTED'
       : latestBackendPayment?.status || b.payment_status || null;
 
-  const parsedReleaseDate = extractReleaseDateFromRemarks(b.remarks || b.notes);
-  const overrideReleaseDate = getReleaseDateOverride(b);
+  const isPrePayment = [
+    'PENDING',
+    'SUBMITTED',
+    'PENDING_PAYMENT',
+    'FOR_PAYMENT',
+    'PAYMENT_PENDING',
+    'REQUIREMENTS_VERIFICATION',
+    'FOR_VERIFICATION',
+    'FOR VERIFICATION',
+  ].includes(String(b.status || '').toUpperCase());
+
+  const parsedReleaseDate = isPrePayment ? null : extractReleaseDateFromRemarks(b.remarks || b.notes);
+  const overrideReleaseDate = isPrePayment ? null : getReleaseDateOverride(b);
   const resolvedReleaseDate =
-    b.release_date || b.date_of_release || overrideReleaseDate || parsedReleaseDate || null;
+    isPrePayment ? null : (b.release_date || b.date_of_release || overrideReleaseDate || parsedReleaseDate || null);
 
   return {
     ...b,

@@ -442,6 +442,22 @@ export default function TrackStatusPage() {
       return;
     }
 
+    const isPrePayment = [
+      'PENDING',
+      'SUBMITTED',
+      'PENDING_PAYMENT',
+      'FOR_PAYMENT',
+      'PAYMENT_PENDING',
+      'REQUIREMENTS_VERIFICATION',
+      'FOR_VERIFICATION',
+      'FOR VERIFICATION',
+    ].includes(String(matchedRequest.status || '').toUpperCase());
+
+    if (isPrePayment) {
+      setMlEstimatedCompletion(null);
+      return;
+    }
+
     // If request already has an explicit release date set by registrar, respect it
     if (matchedRequest.release_date && matchedRequest.release_date !== 'N/A') {
       setMlEstimatedCompletion(null);
@@ -486,11 +502,26 @@ export default function TrackStatusPage() {
     return () => {
       ignore = true;
     };
-  }, [matchedRequest?.id, matchedRequest?.release_date, matchedCred?.code, matchedRequest?.created_at]);
+  }, [matchedRequest?.id, matchedRequest?.release_date, matchedRequest?.status, matchedCred?.code, matchedRequest?.created_at]);
 
   // Dynamic Estimated Completion Date (ML predicted operating date with arithmetic fallback)
   const estimatedCompletion = useMemo(() => {
     if (!matchedRequest) return 'N/A';
+    const isPrePayment = [
+      'PENDING',
+      'SUBMITTED',
+      'PENDING_PAYMENT',
+      'FOR_PAYMENT',
+      'PAYMENT_PENDING',
+      'REQUIREMENTS_VERIFICATION',
+      'FOR_VERIFICATION',
+      'FOR VERIFICATION',
+    ].includes(String(matchedRequest.status || '').toUpperCase());
+
+    if (isPrePayment) {
+      return 'Pending Payment';
+    }
+
     if (matchedRequest.release_date && matchedRequest.release_date !== 'N/A') {
       const d = new Date(matchedRequest.release_date);
       if (!isNaN(d.getTime())) {
@@ -568,7 +599,20 @@ export default function TrackStatusPage() {
 
     // 5. Date of Release
     let dateOfRelease = matchedRequest.release_date || matchedRequest.date_of_release;
-    if (dateOfRelease && dateOfRelease !== 'N/A') {
+    const isPrePayment = [
+      'PENDING',
+      'SUBMITTED',
+      'PENDING_PAYMENT',
+      'FOR_PAYMENT',
+      'PAYMENT_PENDING',
+      'REQUIREMENTS_VERIFICATION',
+      'FOR_VERIFICATION',
+      'FOR VERIFICATION',
+    ].includes(String(matchedRequest.status || '').toUpperCase());
+
+    if (isPrePayment) {
+      dateOfRelease = 'Pending Payment';
+    } else if (dateOfRelease && dateOfRelease !== 'N/A') {
       const d = new Date(dateOfRelease);
       if (!isNaN(d.getTime())) {
         dateOfRelease = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });

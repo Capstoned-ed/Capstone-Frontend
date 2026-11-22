@@ -15,6 +15,7 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
     middle_name: '',
     last_name: '',
     name_extension: '',
+    year_level: '1st year',
   });
 
   const [loading, setLoading] = useState(false);
@@ -60,6 +61,7 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
       if (formData.middle_name.trim()) payload.middle_name = formData.middle_name.trim();
       if (formData.last_name.trim()) payload.last_name = formData.last_name.trim();
       if (formData.name_extension.trim()) payload.name_extension = formData.name_extension.trim();
+      if (formData.role === ROLES.STUDENT && formData.year_level) payload.year_level = formData.year_level;
 
       const createdUser = await usersApi.create(payload);
 
@@ -242,18 +244,21 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Name Extension <span className="text-slate-400 font-normal">(Optional)</span>
               </label>
-              <input
-                type="text"
+              <select
                 name="name_extension"
                 value={formData.name_extension}
                 onChange={handleChange}
                 disabled={loading}
-                readOnly={loading}
-                tabIndex={loading ? -1 : undefined}
-                aria-disabled={loading ? 'true' : undefined}
-                placeholder="e.g. Jr., Sr., III"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36] disabled:bg-slate-100 disabled:cursor-not-allowed"
-              />
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36] disabled:bg-slate-100 disabled:cursor-not-allowed"
+              >
+                <option value="">None</option>
+                <option value="Jr.">Jr.</option>
+                <option value="Sr.">Sr.</option>
+                <option value="II">II</option>
+                <option value="III">III</option>
+                <option value="IV">IV</option>
+                <option value="V">V</option>
+              </select>
             </div>
           </div>
 
@@ -359,6 +364,29 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
               ]}
             />
           </div>
+
+          {/* Academic Status / Year Level (Students Only) */}
+          {formData.role === ROLES.STUDENT && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Year Level / Academic Status
+              </label>
+              <select
+                name="year_level"
+                value={formData.year_level || '1st year'}
+                onChange={handleChange}
+                disabled={loading}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36] disabled:bg-slate-100 disabled:cursor-not-allowed"
+              >
+                <option value="1st year">1st year</option>
+                <option value="2nd year">2nd year</option>
+                <option value="3rd year">3rd year</option>
+                <option value="4th year">4th year</option>
+                <option value="5th year">5th year</option>
+                <option value="Alumnus">Alumnus</option>
+              </select>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-100">

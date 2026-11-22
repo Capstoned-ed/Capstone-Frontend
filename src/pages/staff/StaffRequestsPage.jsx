@@ -369,13 +369,25 @@ export default function StaffRequestsPage() {
           r.amount ||
           (cred?.price ? `P${parseFloat(cred.price).toFixed(0)}` : 'P0');
 
+        const isPrePayment = [
+          'PENDING',
+          'SUBMITTED',
+          'PENDING_PAYMENT',
+          'FOR_PAYMENT',
+          'PAYMENT_PENDING',
+          'REQUIREMENTS_VERIFICATION',
+          'FOR_VERIFICATION',
+          'FOR VERIFICATION',
+        ].includes(String(r.status || '').toUpperCase());
+
         const requestDate = r.request_date || (r.created_at ? r.created_at.split('T')[0] : 'N/A');
-        const releaseDate =
-          matchedStored?.date_of_release ||
-          matchedStored?.release_date ||
-          r.date_of_release ||
-          r.release_date ||
-          calculateReleaseDate(r.created_at, cred?.processing_days);
+        const releaseDate = isPrePayment
+          ? 'Pending Payment'
+          : (matchedStored?.date_of_release ||
+             matchedStored?.release_date ||
+             r.date_of_release ||
+             r.release_date ||
+             calculateReleaseDate(r.created_at, cred?.processing_days));
 
         let claimedMap = {};
         try {
