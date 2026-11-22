@@ -202,7 +202,7 @@ test.describe('Fresh Incognito Context Verification (Login -> All 4 Dashboards)'
     await expect(page.locator('header.hidden.md\\:flex')).toHaveCount(0);
     await expect(page.getByText('Predicted Insight this week')).toBeVisible();
     await expect(page.getByText('1 (20%)').first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByTestId('auto-approve-toggle')).toBeVisible();
+    await expect(page.getByTestId('auto-approve-toggle')).toHaveCount(0);
 
     // Navigate to Credential Types: live edited TOR (₱175.00, code 9) wins AND unseeded standard types still appear
     await page.goto('http://localhost:4173/registrar/credentials');

@@ -209,14 +209,20 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Name Extension <span className="text-slate-400 font-normal">(Optional)</span>
               </label>
-              <input
-                type="text"
+              <select
                 name="name_extension"
                 value={formData.name_extension}
                 onChange={handleChange}
-                placeholder="e.g. Jr., Sr., III"
                 className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-              />
+              >
+                <option value="">None</option>
+                <option value="Jr.">Jr.</option>
+                <option value="Sr.">Sr.</option>
+                <option value="II">II</option>
+                <option value="III">III</option>
+                <option value="IV">IV</option>
+                <option value="V">V</option>
+              </select>
             </div>
           </div>
 

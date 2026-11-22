@@ -37,8 +37,10 @@ export default function UserManagementPage() {
   const [addUserLoading, setAddUserLoading] = useState(false);
   const [addUserFirstName, setAddUserFirstName] = useState('');
   const [addUserFirstNameError, setAddUserFirstNameError] = useState('');
+  const [addUserMiddleName, setAddUserMiddleName] = useState('');
   const [addUserLastName, setAddUserLastName] = useState('');
   const [addUserLastNameError, setAddUserLastNameError] = useState('');
+  const [addUserExtension, setAddUserExtension] = useState('');
   const [addUserIdInput, setAddUserIdInput] = useState('');
   const [addUserIdError, setAddUserIdError] = useState('');
   const [addUserEmail, setAddUserEmail] = useState('');
@@ -51,8 +53,10 @@ export default function UserManagementPage() {
   const [addStudentLoading, setAddStudentLoading] = useState(false);
   const [studentFirstName, setStudentFirstName] = useState('');
   const [studentFirstNameError, setStudentFirstNameError] = useState('');
+  const [studentMiddleName, setStudentMiddleName] = useState('');
   const [studentLastName, setStudentLastName] = useState('');
   const [studentLastNameError, setStudentLastNameError] = useState('');
+  const [studentExtension, setStudentExtension] = useState('');
   const [studentIdInput, setStudentIdInput] = useState('');
   const [studentIdError, setStudentIdError] = useState('');
   const [studentEmail, setStudentEmail] = useState('');
@@ -195,8 +199,10 @@ export default function UserManagementPage() {
   const handleAddUserReset = () => {
     setAddUserFirstName('');
     setAddUserFirstNameError('');
+    setAddUserMiddleName('');
     setAddUserLastName('');
     setAddUserLastNameError('');
+    setAddUserExtension('');
     setAddUserIdInput('');
     setAddUserIdError('');
     setAddUserEmail('');
@@ -257,8 +263,12 @@ export default function UserManagementPage() {
 
     try {
       const firstName = capitalizeNameWords(addUserFirstName.trim());
+      const middleName = capitalizeNameWords(addUserMiddleName.trim());
       const lastName = capitalizeNameWords(addUserLastName.trim());
-      const fullName = `${firstName} ${lastName}`.trim();
+      const nameExtension = addUserExtension.trim();
+      const midPart = middleName ? `${middleName} ` : '';
+      const extPart = nameExtension ? ` ${nameExtension}` : '';
+      const fullName = `${firstName} ${midPart}${lastName}${extPart}`.trim().replace(/\s+/g, ' ');
 
       const finalIdNumber = addUserIdInput.trim();
 
@@ -269,7 +279,9 @@ export default function UserManagementPage() {
         password: finalIdNumber,
         role: addUserRole,
         first_name: firstName,
+        middle_name: middleName,
         last_name: lastName,
+        name_extension: nameExtension,
         ...(contactNo ? { contact_number: contactNo } : {}),
       };
 
@@ -277,7 +289,9 @@ export default function UserManagementPage() {
       let newUser = {
         ...res,
         first_name: firstName,
+        middle_name: middleName,
         last_name: lastName,
+        name_extension: nameExtension,
         full_name: fullName,
         username: finalIdNumber,
         employee_id: finalIdNumber,
@@ -285,21 +299,25 @@ export default function UserManagementPage() {
         contact_number: contactNo,
       };
 
-      // Patch first_name, last_name, and contact_number via usersApi.update because UserCreateSerializer
+      // Patch first_name, middle_name, last_name, name_extension, and contact_number via usersApi.update because UserCreateSerializer
       // in Django backend only validates ['username', 'email', 'password', 'role'],
-      // whereas UserUpdateSerializer accepts ['first_name', 'last_name', 'email', 'role', 'contact_number', 'is_active']
-      if (res?.id && (firstName || lastName || contactNo)) {
+      // whereas UserUpdateSerializer accepts ['first_name', 'middle_name', 'last_name', 'name_extension', 'email', 'role', 'contact_number', 'is_active']
+      if (res?.id && (firstName || lastName || middleName || nameExtension || contactNo)) {
         try {
           const patched = await usersApi.update(res.id, {
             first_name: firstName,
+            middle_name: middleName,
             last_name: lastName,
+            name_extension: nameExtension,
             ...(contactNo ? { contact_number: contactNo } : {}),
           });
           newUser = {
             ...newUser,
             ...patched,
             first_name: firstName,
+            middle_name: middleName,
             last_name: lastName,
+            name_extension: nameExtension,
             full_name: fullName,
             contact_number: contactNo,
           };
@@ -411,8 +429,10 @@ export default function UserManagementPage() {
   const handleAddStudentReset = () => {
     setStudentFirstName('');
     setStudentFirstNameError('');
+    setStudentMiddleName('');
     setStudentLastName('');
     setStudentLastNameError('');
+    setStudentExtension('');
     setStudentIdInput('');
     setStudentIdError('');
     setStudentEmail('');
@@ -488,8 +508,12 @@ export default function UserManagementPage() {
 
     try {
       const firstName = capitalizeNameWords(studentFirstName.trim());
+      const middleName = capitalizeNameWords(studentMiddleName.trim());
       const lastName = capitalizeNameWords(studentLastName.trim());
-      const fullName = `${firstName} ${lastName}`.trim();
+      const nameExtension = studentExtension.trim();
+      const midPart = middleName ? `${middleName} ` : '';
+      const extPart = nameExtension ? ` ${nameExtension}` : '';
+      const fullName = `${firstName} ${midPart}${lastName}${extPart}`.trim().replace(/\s+/g, ' ');
 
       const finalStudentId = studentIdInput.trim();
       const courseCode = USTP_COURSE_CODE_MAP[studentProgram] || 'IT';
@@ -500,7 +524,9 @@ export default function UserManagementPage() {
         password: finalStudentId,
         role: ROLES.STUDENT,
         first_name: firstName,
+        middle_name: middleName,
         last_name: lastName,
+        name_extension: nameExtension,
         course_name: studentProgram.trim(),
         course_code: courseCode,
         birth_date: studentBirthDate || null,
@@ -512,7 +538,9 @@ export default function UserManagementPage() {
       let newStudent = {
         ...res,
         first_name: firstName,
+        middle_name: middleName,
         last_name: lastName,
+        name_extension: nameExtension,
         full_name: fullName,
         student_id: finalStudentId,
         program: studentProgram.trim(),
@@ -530,7 +558,9 @@ export default function UserManagementPage() {
         try {
           const patched = await usersApi.update(res.id, {
             first_name: firstName,
+            middle_name: middleName,
             last_name: lastName,
+            name_extension: nameExtension,
             course_name: studentProgram.trim(),
             course_code: courseCode,
             birth_date: studentBirthDate || null,
@@ -560,7 +590,9 @@ export default function UserManagementPage() {
           username: finalStudentId,
           student_id: finalStudentId,
           first_name: firstName,
+          middle_name: middleName,
           last_name: lastName,
+          name_extension: nameExtension,
           full_name: fullName,
           program: studentProgram.trim(),
           course: studentProgram.trim(),
@@ -753,6 +785,18 @@ export default function UserManagementPage() {
               <div>
                 <input
                   type="text"
+                  placeholder="Middle Name (Optional)"
+                  value={addUserMiddleName}
+                  onChange={(e) => setAddUserMiddleName(capitalizeNameWords(e.target.value))}
+                  className="add-user-input"
+                />
+              </div>
+            </div>
+
+            <div className="add-student-grid-2">
+              <div>
+                <input
+                  type="text"
                   placeholder="Last Name"
                   value={addUserLastName}
                   onChange={(e) => {
@@ -766,6 +810,23 @@ export default function UserManagementPage() {
                 {addUserLastNameError && (
                   <p className="text-xs text-red-600 mt-1 font-medium">{addUserLastNameError}</p>
                 )}
+              </div>
+
+              <div>
+                <select
+                  value={addUserExtension}
+                  onChange={(e) => setAddUserExtension(e.target.value)}
+                  className="add-user-input"
+                  aria-label="Name Extension (Optional)"
+                >
+                  <option value="">Name Extension (Optional) - None</option>
+                  <option value="Jr.">Jr.</option>
+                  <option value="Sr.">Sr.</option>
+                  <option value="II">II</option>
+                  <option value="III">III</option>
+                  <option value="IV">IV</option>
+                  <option value="V">V</option>
+                </select>
               </div>
             </div>
 
@@ -929,6 +990,18 @@ export default function UserManagementPage() {
               <div>
                 <input
                   type="text"
+                  placeholder="Middle Name (Optional)"
+                  value={studentMiddleName}
+                  onChange={(e) => setStudentMiddleName(capitalizeNameWords(e.target.value))}
+                  className="add-student-input"
+                />
+              </div>
+            </div>
+
+            <div className="add-student-grid-2">
+              <div>
+                <input
+                  type="text"
                   placeholder="Last Name"
                   value={studentLastName}
                   onChange={(e) => {
@@ -942,6 +1015,23 @@ export default function UserManagementPage() {
                 {studentLastNameError && (
                   <p className="text-xs text-red-600 mt-1 font-medium">{studentLastNameError}</p>
                 )}
+              </div>
+
+              <div>
+                <select
+                  value={studentExtension}
+                  onChange={(e) => setStudentExtension(e.target.value)}
+                  className="add-student-input"
+                  aria-label="Name Extension (Optional)"
+                >
+                  <option value="">Name Extension (Optional) - None</option>
+                  <option value="Jr.">Jr.</option>
+                  <option value="Sr.">Sr.</option>
+                  <option value="II">II</option>
+                  <option value="III">III</option>
+                  <option value="IV">IV</option>
+                  <option value="V">V</option>
+                </select>
               </div>
             </div>
 

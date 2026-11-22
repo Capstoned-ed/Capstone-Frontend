@@ -121,7 +121,7 @@ test.describe('6 Critical Pre-Defense Integration & RBAC Fixes', () => {
     await expect(copiesVal).toHaveText('4 copies');
   });
 
-  test('Fix 2: Registrar Auto-Approve displays logged-in Registrar name (never hardcoded Jonalin Lagrada) and persists signatory on toggle', async ({ page }) => {
+  test('Fix 2: Registrar Auto-Approve toggle is removed from Registrar Dashboard and Requests queue', async ({ page }) => {
     const regToken = createMockJwt({
       user_id: 909,
       username: 'reg_elena',
@@ -129,8 +129,6 @@ test.describe('6 Critical Pre-Defense Integration & RBAC Fixes', () => {
       first_name: 'Elena',
       last_name: 'Reyes',
     });
-
-    let patchBody: any = null;
 
     await page.addInitScript(({ token }) => {
       localStorage.setItem('access_token', token);
@@ -153,25 +151,12 @@ test.describe('6 Critical Pre-Defense Integration & RBAC Fixes', () => {
     );
 
     await page.route('**/api/settings/registrar-approval/**', (route) => {
-      if (route.request().method() === 'PATCH') {
-        patchBody = route.request().postDataJSON();
-        return route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            auto_approve_requests: Boolean(patchBody.auto_approve_requests),
-            default_signatory_name: patchBody.default_signatory_name || 'Elena Reyes',
-            default_signatory_title: 'University Registrar',
-            active_registrar_name: 'Elena Reyes',
-          }),
-        });
-      }
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
           auto_approve_requests: true,
-          default_signatory_name: '',
+          default_signatory_name: 'Elena Reyes',
           default_signatory_title: 'University Registrar',
           active_registrar_name: 'Elena Reyes',
         }),
@@ -197,20 +182,11 @@ test.describe('6 Critical Pre-Defense Integration & RBAC Fixes', () => {
 
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/registrar/dashboard');
-
-    await expect(page.getByText(/Signatory:\s*Elena Reyes/i)).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText(/Jonalin Lagrada/i)).toHaveCount(0);
-
-    // Toggle Auto-Approve and confirm PATCH sends Elena Reyes
-    await page.getByTestId('auto-approve-toggle').click();
-    await expect(page.getByTestId('auto-approve-status')).toHaveText('OFF');
-    expect(patchBody?.auto_approve_requests).toBe(false);
-    expect(patchBody?.default_signatory_name).toBe('Elena Reyes');
+    await expect(page.getByTestId('auto-approve-toggle')).toHaveCount(0);
 
     // Also verify RegistrarRequestsPage
     await page.goto('/registrar/requests');
-    await expect(page.getByText(/Signatory:\s*Elena Reyes/i)).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText(/Jonalin Lagrada/i)).toHaveCount(0);
+    await expect(page.getByTestId('auto-approve-toggle')).toHaveCount(0);
   });
 
   test('Fix 3: Student receipt upload binds to exact request UUID and Staff modal fetches live detail + renders authenticated blob preview', async ({ page }) => {

@@ -9,7 +9,6 @@ import BatchUpdateModal from '../../components/common/BatchUpdateModal';
 import TablePagination from '../../components/common/TablePagination';
 import { StaffRequestsTable } from '../../components/staff';
 import useToast from '../../hooks/useToast';
-import settingsApi from '../../api/settings';
 import {
   REQUEST_STATUS,
   REQUEST_STATUSES,
@@ -238,61 +237,6 @@ export default function RegistrarRequestsPage() {
     );
   }, [currentUser]);
 
-  const [autoApprove, setAutoApprove] = useState(true);
-  const [signatoryName, setSignatoryName] = useState('');
-  const [togglingSettings, setTogglingSettings] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    settingsApi.getRegistrarApproval().then((data) => {
-      if (!active) return;
-      setAutoApprove(Boolean(data?.auto_approve_requests ?? true));
-      const sigName =
-        loggedInRegistrarName ||
-        data?.active_registrar_name ||
-        data?.signatory_name ||
-        data?.default_signatory_name ||
-        '';
-      if (sigName) {
-        setSignatoryName(sigName);
-      }
-    }).catch(() => {
-      if (!active) return;
-      setAutoApprove(true);
-      if (loggedInRegistrarName) {
-        setSignatoryName(loggedInRegistrarName);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, [loggedInRegistrarName]);
-
-  const handleToggleAutoApprove = async () => {
-    if (togglingSettings) return;
-    setTogglingSettings(true);
-    const nextVal = !autoApprove;
-    try {
-      const res = await settingsApi.updateRegistrarApproval(nextVal, loggedInRegistrarName || null);
-      setAutoApprove(Boolean(res?.auto_approve_requests ?? nextVal));
-      const resSig =
-        loggedInRegistrarName ||
-        res?.active_registrar_name ||
-        res?.signatory_name ||
-        res?.default_signatory_name;
-      if (resSig) setSignatoryName(resSig);
-      toast.success(
-        nextVal
-          ? 'Auto-Approval Enabled: Requests are auto-approved upon staff confirmation.'
-          : 'Auto-Approval Disabled: Requests will pause for manual Registrar approval.'
-      );
-    } catch {
-      setAutoApprove(nextVal);
-      toast.info(`Auto-approval ${nextVal ? 'enabled' : 'disabled'}.`);
-    } finally {
-      setTogglingSettings(false);
-    }
-  };
 
   const handleToggleSelect = (rawOrId) => {
     const key = String(rawOrId);
@@ -648,13 +592,25 @@ export default function RegistrarRequestsPage() {
           r.amount ||
           (cred?.price ? `P${parseFloat(cred.price).toFixed(0)}` : 'P0');
 
+        const isPrePayment = [
+          'PENDING',
+          'SUBMITTED',
+          'PENDING_PAYMENT',
+          'FOR_PAYMENT',
+          'PAYMENT_PENDING',
+          'REQUIREMENTS_VERIFICATION',
+          'FOR_VERIFICATION',
+          'FOR VERIFICATION',
+        ].includes(String(r.status || '').toUpperCase());
+
         const requestDate = r.request_date || (r.created_at ? r.created_at.split('T')[0] : 'N/A');
-        const releaseDate =
-          matchedStored?.date_of_release ||
-          matchedStored?.release_date ||
-          r.date_of_release ||
-          r.release_date ||
-          calculateReleaseDate(r.created_at, cred?.processing_days);
+        const releaseDate = isPrePayment
+          ? 'Pending Payment'
+          : (matchedStored?.date_of_release ||
+             matchedStored?.release_date ||
+             r.date_of_release ||
+             r.release_date ||
+             calculateReleaseDate(r.created_at, cred?.processing_days));
 
         const effectiveRawStatus =
           matchedStored?.status && String(matchedStored.status).toUpperCase() !== 'PENDING'
@@ -1563,53 +1519,6 @@ export default function RegistrarRequestsPage() {
             Requests Assignment - {selectedBatch === 'ALL' ? 'All Batches' : selectedBatch}
           </h3>
           <div className="flex items-center gap-3 flex-wrap">
-            {/* Auto-Approval Toggle Pill */}
-            <div className="bg-slate-50 border border-slate-200/90 rounded-xl px-3 py-1.5 flex items-center gap-3 shadow-2xs">
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-2 h-2 rounded-full ${autoApprove ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}
-                />
-                <div className="text-left">
-                  <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5 leading-none">
-                    <span>Auto-Approve Requests</span>
-                    <span
-                      data-testid="auto-approve-status"
-                      className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded ${
-                        autoApprove
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                          : 'bg-amber-100 text-amber-800 border border-amber-300'
-                      }`}
-                    >
-                      {autoApprove ? 'ON' : 'OFF'}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">
-                    Signatory: <span className="font-medium text-slate-700">{signatoryName || 'University Registrar'}</span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                role="switch"
-                aria-checked={autoApprove}
-                aria-label="Toggle auto-approve requests"
-                data-testid="auto-approve-toggle"
-                disabled={togglingSettings}
-                onClick={handleToggleAutoApprove}
-                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${
-                  autoApprove ? 'bg-emerald-600' : 'bg-slate-300'
-                } ${togglingSettings ? 'opacity-60 cursor-not-allowed' : ''}`}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
-                    autoApprove ? 'translate-x-4' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-
             <button
               type="button"
               onClick={() => {

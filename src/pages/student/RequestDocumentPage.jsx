@@ -14,6 +14,12 @@ import clearancesApi, { saveClearanceAttachment } from '../../api/clearances';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
 import { extractApiErrorMessage } from '../../utils/errorUtils';
+import {
+  dataURLtoFile,
+  saveDraftFile,
+  getDraftFile,
+  clearDraftFiles,
+} from '../../utils/draftStorage';
 import ustpLogo from '../../assets/USTP Logo against Light Background 1.png';
 import '../../styles/student/RequestDocumentPage.css';
 
@@ -112,7 +118,28 @@ export default function RequestDocumentPage() {
 
   const [dateOfRequest, setDateOfRequest] = useState(() => new Date().toISOString().split('T')[0]);
   const [birthDate, setBirthDate] = useState(() => initialDraft?.birthDate || '2002-05-15');
-  const [userCategory, setUserCategory] = useState(() => initialDraft?.userCategory || 'student'); // 'student' or 'alumnus'
+  const [yearLevel, setYearLevel] = useState(user?.year_level || '4th year');
+
+  const isAlumnusAccount = useMemo(() => {
+    const raw = String(yearLevel || user?.year_level || '').trim().toLowerCase();
+    return raw.includes('alumn') || raw.includes('grad');
+  }, [yearLevel, user?.year_level]);
+
+  const [userCategory, setUserCategory] = useState(() => {
+    const raw = String(user?.year_level || '').trim().toLowerCase();
+    if (raw.includes('alumn') || raw.includes('grad')) return 'alumnus';
+    if (initialDraft?.userCategory) return initialDraft.userCategory;
+    return 'student';
+  });
+
+  useEffect(() => {
+    if (isAlumnusAccount) {
+      setUserCategory('alumnus');
+    } else {
+      setUserCategory('student');
+    }
+  }, [isAlumnusAccount]);
+
   const [contactNo, setContactNo] = useState(() => initialDraft?.contactNo || '09123456789');
   const [contactNoError, setContactNoError] = useState('');
 
@@ -240,6 +267,12 @@ export default function RequestDocumentPage() {
       const reader = new FileReader();
       reader.onloadend = () => {
         setPhotoPreview(reader.result);
+        const draftUserId = user?.id || user?.username || 'guest';
+        saveDraftFile(draftUserId, 'photo', {
+          fileDataUrl: reader.result,
+          name: file.name,
+          type: file.type,
+        });
       };
       reader.readAsDataURL(file);
       toast.success('Photo attached successfully.');
@@ -250,6 +283,8 @@ export default function RequestDocumentPage() {
   const handleRemovePhoto = () => {
     setPhotoFile(null);
     setPhotoPreview(null);
+    const draftUserId = user?.id || user?.username || 'guest';
+    clearDraftFiles(draftUserId, 'photo');
   };
 
   // Clearance Attachment State (Part 1 - Cleared?)
@@ -278,6 +313,13 @@ export default function RequestDocumentPage() {
       reader.onloadend = () => {
         const previewUrl = reader.result;
         setClearancePreview(previewUrl);
+        const draftUserId = user?.id || user?.username || 'guest';
+        saveDraftFile(draftUserId, 'clearance', {
+          fileDataUrl: previewUrl,
+          name: file.name,
+          type: file.type,
+          isPdf: isDoc,
+        });
         saveClearanceAttachment('current_student_preview', previewUrl, {
           isPdf: isDoc,
           fileName: file.name,
@@ -299,6 +341,8 @@ export default function RequestDocumentPage() {
     setClearanceFile(null);
     setClearancePreview(null);
     setClearanceIsPdf(false);
+    const draftUserId = user?.id || user?.username || 'guest';
+    clearDraftFiles(draftUserId, 'clearance');
   };
 
   // Step 2 State: Per-document copies map { [docTitle]: number }
@@ -307,7 +351,6 @@ export default function RequestDocumentPage() {
   );
   const [docPendingRemoval, setDocPendingRemoval] = useState(null);
   const [copies, setCopies] = useState(1);
-  const [yearLevel, setYearLevel] = useState(user?.year_level || '4th year');
   const [studentId, setStudentId] = useState(user?.student_id || user?.username || '2026202666');
   const [email, setEmail] = useState(() => resolveStudentEmail(user));
 
@@ -832,6 +875,7 @@ export default function RequestDocumentPage() {
     try {
       if (currentStep === 3) {
         sessionStorage.removeItem(draftKey);
+        clearDraftFiles(user?.id || user?.username || 'guest');
       } else {
         sessionStorage.setItem(
           draftKey,
@@ -874,7 +918,44 @@ export default function RequestDocumentPage() {
     prevDocRequested,
     prevDateRequested,
     isCleared,
+    user?.id,
+    user?.username,
   ]);
+
+  // Restore uploaded clearance & photo files across page navigation & browser refresh
+  useEffect(() => {
+    let ignore = false;
+    const draftUserId = user?.id || user?.username || 'guest';
+    async function restoreDraftFiles() {
+      try {
+        const clearanceData = await getDraftFile(draftUserId, 'clearance');
+        if (!ignore && clearanceData?.fileDataUrl) {
+          const reconstructed = dataURLtoFile(clearanceData.fileDataUrl, clearanceData.name || 'clearance');
+          if (reconstructed) {
+            setClearanceFile(reconstructed);
+            setClearancePreview(clearanceData.fileDataUrl);
+            setClearanceIsPdf(Boolean(clearanceData.isPdf));
+            setIsCleared('yes');
+            setClearanceError(false);
+          }
+        }
+        const photoData = await getDraftFile(draftUserId, 'photo');
+        if (!ignore && photoData?.fileDataUrl) {
+          const reconstructed = dataURLtoFile(photoData.fileDataUrl, photoData.name || 'photo.png');
+          if (reconstructed) {
+            setPhotoFile(reconstructed);
+            setPhotoPreview(photoData.fileDataUrl);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to restore draft files from storage:', err);
+      }
+    }
+    restoreDraftFiles();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id, user?.username]);
 
   const appliedDocQueryRef = useRef(null);
 
@@ -1257,7 +1338,7 @@ export default function RequestDocumentPage() {
         remarks: formattedRemarks,
         created_at: new Date().toISOString(),
         request_date: new Date().toISOString().split('T')[0],
-        release_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        release_date: null,
         clearance_preview: clearancePreview || null,
         clearance_id: backendClearanceId || null,
         clearance_is_pdf: clearanceIsPdf || false,
@@ -1302,6 +1383,7 @@ export default function RequestDocumentPage() {
       toast.success('Your credential request was successfully submitted!');
       try {
         sessionStorage.removeItem(draftKey);
+        clearDraftFiles(user?.id || user?.username || 'guest');
       } catch {}
       setCurrentStep(3);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1422,24 +1504,42 @@ export default function RequestDocumentPage() {
                   />
                 </div>
                 <div className="ustp-category-radios">
-                  <label className="ustp-checkbox-row">
+                  <label
+                    className={`ustp-checkbox-row ${
+                      isAlumnusAccount ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                    }`}
+                  >
                     <input
                       type="radio"
                       name="userCategory"
                       value="student"
                       checked={userCategory === 'student'}
-                      onChange={() => setUserCategory('student')}
+                      disabled={isAlumnusAccount}
+                      aria-disabled={isAlumnusAccount ? 'true' : undefined}
+                      tabIndex={isAlumnusAccount ? -1 : undefined}
+                      onChange={() => {
+                        if (!isAlumnusAccount) setUserCategory('student');
+                      }}
                       className="ustp-checkbox-input"
                     />
                     <span className="ustp-category-text">Student (Undergraduate/Graduate)</span>
                   </label>
-                  <label className="ustp-checkbox-row">
+                  <label
+                    className={`ustp-checkbox-row ${
+                      !isAlumnusAccount ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                    }`}
+                  >
                     <input
                       type="radio"
                       name="userCategory"
                       value="alumnus"
                       checked={userCategory === 'alumnus'}
-                      onChange={() => setUserCategory('alumnus')}
+                      disabled={!isAlumnusAccount}
+                      aria-disabled={!isAlumnusAccount ? 'true' : undefined}
+                      tabIndex={!isAlumnusAccount ? -1 : undefined}
+                      onChange={() => {
+                        if (isAlumnusAccount) setUserCategory('alumnus');
+                      }}
                       className="ustp-checkbox-input"
                     />
                     <span className="ustp-category-text">Alumnus (High School/Undergrad/Graduate)</span>
