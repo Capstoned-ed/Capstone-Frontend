@@ -132,6 +132,12 @@ export default function RequestDocumentPage() {
     return 'student';
   });
 
+  const isAlumnus = Boolean(isAlumnusAccount || userCategory === 'alumnus');
+  const GRADUATE_ONLY_PURPOSES = useMemo(
+    () => ['For Board Exam', 'For Advanced Studies', 'For Ranking'],
+    []
+  );
+
   useEffect(() => {
     if (isAlumnusAccount) {
       setUserCategory('alumnus');
@@ -231,7 +237,11 @@ export default function RequestDocumentPage() {
     };
   }, []);
 
-  const [dateOfGraduation, setDateOfGraduation] = useState(() => initialDraft?.dateOfGraduation || '');
+  const [dateOfGraduation, setDateOfGraduation] = useState(() => {
+    const raw = String(user?.year_level || '').trim().toLowerCase();
+    const isAlumnusInitial = raw.includes('alumn') || raw.includes('grad');
+    return isAlumnusInitial ? (initialDraft?.dateOfGraduation || '') : '';
+  });
   const [lastSemAttendance, setLastSemAttendance] = useState(() => initialDraft?.lastSemAttendance || '2nd Sem, AY 2025-2026');
   const [alreadyRequested, setAlreadyRequested] = useState(() => initialDraft?.alreadyRequested || 'no');
   const [prevDocRequested, setPrevDocRequested] = useState(() => initialDraft?.prevDocRequested || '');
@@ -246,10 +256,22 @@ export default function RequestDocumentPage() {
   const [selectedCredTypeId, setSelectedCredTypeId] = useState(() => initialDraft?.selectedCredTypeId || null);
 
   // Purpose in Part 3 (multiple purposes allowed)
-  const [selectedPurposes, setSelectedPurposes] = useState(() =>
-    Array.isArray(initialDraft?.selectedPurposes) ? initialDraft.selectedPurposes : []
-  );
+  const [selectedPurposes, setSelectedPurposes] = useState(() => {
+    const rawList = Array.isArray(initialDraft?.selectedPurposes) ? initialDraft.selectedPurposes : [];
+    const raw = String(user?.year_level || '').trim().toLowerCase();
+    const isAlumnusInitial = raw.includes('alumn') || raw.includes('grad');
+    return isAlumnusInitial
+      ? rawList
+      : rawList.filter((p) => !['For Board Exam', 'For Advanced Studies', 'For Ranking'].includes(p));
+  });
   const [otherPurpose, setOtherPurpose] = useState(() => initialDraft?.otherPurpose || '');
+
+  // Clear graduation date if user is an enrolled student
+  useEffect(() => {
+    if (!isAlumnus && dateOfGraduation) {
+      setDateOfGraduation('');
+    }
+  }, [isAlumnus, dateOfGraduation]);
 
   // Photo Upload State (Part 3)
   const [photoFile, setPhotoFile] = useState(null);
@@ -891,6 +913,9 @@ export default function RequestDocumentPage() {
         sessionStorage.removeItem(draftKey);
         clearDraftFiles(user?.id || user?.username || 'guest');
       } else {
+        const sanitizedPurposes = isAlumnus
+          ? selectedPurposes
+          : selectedPurposes.filter((p) => !GRADUATE_ONLY_PURPOSES.includes(p));
         sessionStorage.setItem(
           draftKey,
           JSON.stringify({
@@ -898,12 +923,12 @@ export default function RequestDocumentPage() {
             selectedDocs,
             docCopies,
             selectedCredTypeId,
-            selectedPurposes,
+            selectedPurposes: sanitizedPurposes,
             otherPurpose,
             userCategory,
             contactNo,
             birthDate,
-            dateOfGraduation,
+            dateOfGraduation: isAlumnus ? dateOfGraduation : '',
             lastSemAttendance,
             alreadyRequested,
             prevDocRequested,
@@ -924,6 +949,8 @@ export default function RequestDocumentPage() {
     selectedPurposes,
     otherPurpose,
     userCategory,
+    isAlumnus,
+    GRADUATE_ONLY_PURPOSES,
     contactNo,
     birthDate,
     dateOfGraduation,
@@ -1066,6 +1093,10 @@ export default function RequestDocumentPage() {
   };
 
   const handleTogglePurpose = (p) => {
+    if (!isAlumnus && GRADUATE_ONLY_PURPOSES.includes(p)) {
+      toast.warning(`"${p}" is available for alumni and graduates only.`);
+      return;
+    }
     setSelectedPurposes((prev) => {
       const next = prev.includes(p) ? prev.filter((item) => item !== p) : [...prev, p];
       syncPurposeInput(next, otherPurpose);
@@ -1081,6 +1112,20 @@ export default function RequestDocumentPage() {
       return next;
     });
   };
+
+  // Auto-strip graduate-only purposes if user is an enrolled student
+  useEffect(() => {
+    if (!isAlumnus) {
+      setSelectedPurposes((prev) => {
+        const filtered = prev.filter((p) => !GRADUATE_ONLY_PURPOSES.includes(p));
+        if (filtered.length !== prev.length) {
+          syncPurposeInput(filtered, otherPurpose);
+          return filtered;
+        }
+        return prev;
+      });
+    }
+  }, [isAlumnus, GRADUATE_ONLY_PURPOSES, otherPurpose]);
 
   const handlePurposeSelect = (p) => {
     handleTogglePurpose(p);
@@ -1241,7 +1286,10 @@ export default function RequestDocumentPage() {
       const primaryDoc = selectedDocs[0] || '';
       const targetCredTypeId = selectedCredTypeId || resolveCredentialTypeId(primaryDoc, credentialTypes);
       const exactDocTitle = currentDocDetails.title || primaryDoc || 'Document Request';
-      const cleanPurpose = purposeInput || selectedPurposes.join(', ') || 'Official Academic Credential Request';
+      const effectivePurposes = isAlumnus
+        ? selectedPurposes
+        : selectedPurposes.filter((p) => !GRADUATE_ONLY_PURPOSES.includes(p));
+      const cleanPurpose = purposeInput || effectivePurposes.join(', ') || 'Official Academic Credential Request';
       const totalCopiesToSubmit = Math.max(1, Number(currentDocDetails.totalCopies) || 1);
       const structuredItems = (currentDocDetails.items || []).map((it) => {
         const matchedType = credentialTypes.find(
@@ -1352,6 +1400,7 @@ export default function RequestDocumentPage() {
         remarks: formattedRemarks,
         created_at: new Date().toISOString(),
         request_date: new Date().toISOString().split('T')[0],
+        date_of_graduation: isAlumnus ? dateOfGraduation : null,
         release_date: null,
         clearance_preview: clearancePreview || null,
         clearance_id: backendClearanceId || null,
@@ -1591,10 +1640,21 @@ export default function RequestDocumentPage() {
                     <span className="ustp-part1-text">If a graduate, state the <strong>Date of Graduation</strong>:</span>
                     <input
                       type="text"
-                      placeholder="e.g. June 2025"
-                      value={dateOfGraduation}
-                      onChange={(e) => setDateOfGraduation(e.target.value)}
-                      className="ustp-underline-field ustp-flex-1"
+                      placeholder={isAlumnus ? "e.g. June 2025" : "N/A (Enrolled Student)"}
+                      value={isAlumnus ? dateOfGraduation : ''}
+                      disabled={!isAlumnus}
+                      readOnly={!isAlumnus}
+                      tabIndex={!isAlumnus ? -1 : undefined}
+                      aria-disabled={!isAlumnus ? 'true' : undefined}
+                      onChange={(e) => {
+                        if (!isAlumnus) return;
+                        setDateOfGraduation(e.target.value);
+                      }}
+                      className={`ustp-underline-field ustp-flex-1 ${
+                        !isAlumnus
+                          ? 'opacity-60 cursor-not-allowed bg-gray-100 pointer-events-none'
+                          : ''
+                      }`}
                     />
                   </div>
                   <div className="ustp-part1-row">
@@ -2096,32 +2156,66 @@ export default function RequestDocumentPage() {
                 <div className="ustp-purpose-grid">
                   {/* Left Column */}
                   <div className="ustp-purpose-col">
-                    {['For Evaluation', 'For Scholarship', 'For Passport', 'For Board Exam'].map((p) => (
-                      <label key={p} className="ustp-checkbox-row">
-                        <input
-                          type="checkbox"
-                          checked={selectedPurposes.includes(p)}
-                          onChange={() => handleTogglePurpose(p)}
-                          className="ustp-checkbox-input"
-                        />
-                        <span>{p}</span>
-                      </label>
-                    ))}
+                    {['For Evaluation', 'For Scholarship', 'For Passport', 'For Board Exam'].map((p) => {
+                      const isLocked = !isAlumnus && GRADUATE_ONLY_PURPOSES.includes(p);
+                      return (
+                        <label
+                          key={p}
+                          className={`ustp-checkbox-row ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          title={isLocked ? 'Available for Alumni/Graduates only' : undefined}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!isLocked && selectedPurposes.includes(p)}
+                            disabled={isLocked}
+                            aria-disabled={isLocked ? 'true' : undefined}
+                            tabIndex={isLocked ? -1 : undefined}
+                            onChange={() => handleTogglePurpose(p)}
+                            className={`ustp-checkbox-input ${isLocked ? 'cursor-not-allowed pointer-events-none' : ''}`}
+                          />
+                          <span className="flex items-center gap-1.5 flex-wrap">
+                            <span>{p}</span>
+                            {isLocked && (
+                              <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 whitespace-nowrap">
+                                Alumni only
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
 
                   {/* Right Column */}
                   <div className="ustp-purpose-col">
-                    {['For Employment', 'For Personal File', 'For Advanced Studies', 'For Ranking'].map((p) => (
-                      <label key={p} className="ustp-checkbox-row">
-                        <input
-                          type="checkbox"
-                          checked={selectedPurposes.includes(p)}
-                          onChange={() => handleTogglePurpose(p)}
-                          className="ustp-checkbox-input"
-                        />
-                        <span>{p}</span>
-                      </label>
-                    ))}
+                    {['For Employment', 'For Personal File', 'For Advanced Studies', 'For Ranking'].map((p) => {
+                      const isLocked = !isAlumnus && GRADUATE_ONLY_PURPOSES.includes(p);
+                      return (
+                        <label
+                          key={p}
+                          className={`ustp-checkbox-row ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          title={isLocked ? 'Available for Alumni/Graduates only' : undefined}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!isLocked && selectedPurposes.includes(p)}
+                            disabled={isLocked}
+                            aria-disabled={isLocked ? 'true' : undefined}
+                            tabIndex={isLocked ? -1 : undefined}
+                            onChange={() => handleTogglePurpose(p)}
+                            className={`ustp-checkbox-input ${isLocked ? 'cursor-not-allowed pointer-events-none' : ''}`}
+                          />
+                          <span className="flex items-center gap-1.5 flex-wrap">
+                            <span>{p}</span>
+                            {isLocked && (
+                              <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 whitespace-nowrap">
+                                Alumni only
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -2585,11 +2679,11 @@ export default function RequestDocumentPage() {
 
                     <div>
                       <label className="review-input-label">
-                        {userCategory === 'alumnus' || dateOfGraduation ? 'Date of Graduation' : 'Last Semester of Attendance'}
+                        {isAlumnus ? 'Date of Graduation' : 'Last Semester of Attendance'}
                       </label>
                       <input
                         type="text"
-                        value={dateOfGraduation || lastSemAttendance || '2nd Sem, AY 2025-2026'}
+                        value={isAlumnus ? (dateOfGraduation || 'N/A') : (lastSemAttendance || '2nd Sem, AY 2025-2026')}
                         disabled={true}
                         readOnly={true}
                         tabIndex={-1}
@@ -2628,8 +2722,10 @@ export default function RequestDocumentPage() {
                 {/* Attached Clearance & Passport Photo Section */}
                 {(() => {
                   const isBoardExamPurpose =
-                    selectedPurposes.some((p) => p.toLowerCase().includes('board exam')) ||
-                    purposeInput.toLowerCase().includes('board exam');
+                    isAlumnus && (
+                      selectedPurposes.some((p) => p.toLowerCase().includes('board exam')) ||
+                      purposeInput.toLowerCase().includes('board exam')
+                    );
                   const showPassportCard = isBoardExamPurpose || Boolean(photoPreview);
 
                   return (
