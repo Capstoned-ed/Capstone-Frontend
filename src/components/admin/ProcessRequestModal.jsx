@@ -2135,11 +2135,18 @@ export default function ProcessRequestModal({
                     {showInlineClearance && (
                       <div className="pt-2 border-t border-slate-200">
                         {clearanceDoc?.isPdf || requestItem.clearance_is_pdf ? (
-                          <iframe
-                            src={clearanceDoc?.url || requestItem.clearance_preview}
-                            title="Clearance Document"
-                            className="w-full h-72 rounded-lg border border-slate-300 bg-white"
-                          />
+                          <div className="p-4 bg-slate-50 border border-slate-300 rounded-lg flex flex-col items-center justify-center gap-2">
+                            <span className="text-3xl">📄</span>
+                            <span className="text-xs font-semibold text-slate-700">Clearance Document (PDF)</span>
+                            <a
+                              href={clearanceDoc?.url || requestItem.clearance_preview}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                            >
+                              Open PDF Document in New Tab
+                            </a>
+                          </div>
                         ) : (
                           <div className="max-h-80 overflow-auto rounded-lg bg-slate-950 p-2 flex items-center justify-center">
                             <img
@@ -2545,11 +2552,18 @@ export default function ProcessRequestModal({
                             Loading receipt preview...
                           </div>
                         ) : receiptIsPdf && displayReceiptImage ? (
-                          <iframe
-                            src={displayReceiptImage}
-                            title="Official Receipt PDF"
-                            className="w-full h-72 rounded-lg border border-slate-300 bg-white"
-                          />
+                          <div className="p-4 bg-slate-50 border border-slate-300 rounded-lg flex flex-col items-center justify-center gap-2">
+                            <span className="text-3xl">🧾</span>
+                            <span className="text-xs font-semibold text-slate-700">Official Receipt (PDF)</span>
+                            <a
+                              href={displayReceiptImage}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                            >
+                              Open Receipt in New Tab
+                            </a>
+                          </div>
                         ) : displayReceiptImage ? (
                           <div className="max-h-72 overflow-auto rounded-lg bg-slate-950 p-2 flex items-center justify-center">
                             <img

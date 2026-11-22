@@ -258,8 +258,14 @@ export default function RequestDocumentPage() {
   const handlePhotoUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!file.type.startsWith('image/')) {
-        toast.warning('Please select an image file (PNG, JPG, JPEG).');
+      const allowedPhotoTypes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowedPhotoTypes.includes(file.type.toLowerCase())) {
+        toast.warning('Please select a valid image file (PNG, JPG, JPEG, WEBP).');
+        e.target.value = '';
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast.warning('Photo file exceeds the 10MB size limit. Please upload a smaller image.');
         e.target.value = '';
         return;
       }
@@ -272,6 +278,7 @@ export default function RequestDocumentPage() {
           fileDataUrl: reader.result,
           name: file.name,
           type: file.type,
+          size: file.size,
         });
       };
       reader.readAsDataURL(file);
@@ -295,17 +302,24 @@ export default function RequestDocumentPage() {
   const handleClearanceUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      const isImg = file.type.startsWith('image/');
-      const isDoc = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      const allowedClearanceTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+      const fileMime = file.type.toLowerCase();
+      const isPdf = fileMime === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      const isImg = fileMime.startsWith('image/') && ['image/jpeg', 'image/png', 'image/webp'].includes(fileMime);
 
-      if (!isImg && !isDoc) {
-        toast.warning('Please select a PDF document or image file (PNG, JPG, JPEG).');
+      if (!isImg && !isPdf) {
+        toast.warning('Please select a PDF document or image file (PNG, JPG, JPEG, WEBP).');
+        e.target.value = '';
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast.warning('Clearance document exceeds the 10MB size limit.');
         e.target.value = '';
         return;
       }
 
       setClearanceFile(file);
-      setClearanceIsPdf(isDoc);
+      setClearanceIsPdf(isPdf);
       setIsCleared('yes');
       setClearanceError(false);
 
