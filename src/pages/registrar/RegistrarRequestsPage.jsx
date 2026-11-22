@@ -1395,7 +1395,7 @@ export default function RegistrarRequestsPage() {
   return (
     <div className="admin-req-container">
       {/* Queue View Tabs: Active Requests vs Request History */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-3 mb-6">
+      <div className="flex items-center justify-end gap-2 border-b border-slate-200 pb-3 mb-6">
         <button
           type="button"
           onClick={() => setActiveTab('active')}
