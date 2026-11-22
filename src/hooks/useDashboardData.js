@@ -126,6 +126,12 @@ export default function useDashboardData() {
 
   const [statusDistribution, setStatusDistribution] = useState([]);
   const [staffMetrics, setStaffMetrics] = useState([]);
+  const [weeklyStaffMetrics, setWeeklyStaffMetrics] = useState([]);
+  const [monthlyStaffMetrics, setMonthlyStaffMetrics] = useState([]);
+  const [weeklyStaffPeriodLabel, setWeeklyStaffPeriodLabel] = useState('');
+  const [monthlyStaffPeriodLabel, setMonthlyStaffPeriodLabel] = useState('');
+  const [weeklyStaffColumns, setWeeklyStaffColumns] = useState([]);
+  const [monthlyStaffColumns, setMonthlyStaffColumns] = useState([]);
   const [dailyVolume, setDailyVolume] = useState([]);
   const [monthlyVolume, setMonthlyVolume] = useState([]);
   const [volumeSeries, setVolumeSeries] = useState([]);
@@ -254,43 +260,172 @@ export default function useDashboardData() {
           return r === ROLES.STAFF || r === 'staff';
         });
 
-        const computedStaffMetrics = staffUsers.map((staff) => {
-          const displayName = staff.first_name && staff.last_name
-            ? `${staff.first_name} ${staff.last_name}`
-            : staff.full_name || staff.first_name || staff.username;
+        const computeStaffMetricsList = (reqList) =>
+          staffUsers
+            .map((staff) => {
+              const displayName =
+                staff.first_name && staff.last_name
+                  ? `${staff.first_name} ${staff.last_name}`
+                  : staff.full_name || staff.first_name || staff.username;
 
-          // Match strictly against live PostgreSQL assigned_to / assigned_staff (zero localStorage dependency)
-          const staffReqs = validRequests.filter((r) =>
-            isRequestAssignedToUser(r, staff, {}, users)
-          );
+              const staffReqs = reqList.filter((r) =>
+                isRequestAssignedToUser(r, staff, {}, users)
+              );
 
-          const completedReqs = staffReqs.filter((r) => isCompletedRequest(r));
-          const staffCompleted = completedReqs.length;
-          const remainingReqs = staffReqs.filter((r) => !isCompletedRequest(r));
-          const staffForProcessing = remainingReqs.filter((r) => isForProcessingRequest(r)).length;
-          const staffProcessing = remainingReqs.filter((r) => isProcessingRequest(r)).length;
-          const staffPending = remainingReqs.filter(
-            (r) => !isForProcessingRequest(r) && !isProcessingRequest(r)
-          ).length;
+              const completedReqs = staffReqs.filter((r) => isCompletedRequest(r));
+              const staffCompleted = completedReqs.length;
+              const remainingReqs = staffReqs.filter((r) => !isCompletedRequest(r));
+              const staffForProcessing = remainingReqs.filter((r) => isForProcessingRequest(r)).length;
+              const staffProcessing = remainingReqs.filter((r) => isProcessingRequest(r)).length;
+              const staffPending = remainingReqs.filter(
+                (r) => !isForProcessingRequest(r) && !isProcessingRequest(r)
+              ).length;
 
-          return {
-            name: displayName,
-            completed: staffCompleted,
-            forProcessing: staffForProcessing,
-            processing: staffProcessing,
-            pending: staffPending,
-          };
-        }).sort((a, b) => {
-          // Sort descending: highest completed first, then highest total workload
-          if (b.completed !== a.completed) {
-            return b.completed - a.completed;
-          }
-          const bTotal = b.completed + b.forProcessing + b.processing + b.pending;
-          const aTotal = a.completed + a.forProcessing + a.processing + a.pending;
-          return bTotal - aTotal;
+              return {
+                name: displayName,
+                completed: staffCompleted,
+                forProcessing: staffForProcessing,
+                processing: staffProcessing,
+                pending: staffPending,
+              };
+            })
+            .sort((a, b) => {
+              if (b.completed !== a.completed) {
+                return b.completed - a.completed;
+              }
+              const bTotal = b.completed + b.forProcessing + b.processing + b.pending;
+              const aTotal = a.completed + a.forProcessing + a.processing + a.pending;
+              return bTotal - aTotal;
+            });
+
+        const computedStaffMetrics = computeStaffMetricsList(validRequests);
+        setStaffMetrics(computedStaffMetrics);
+
+        // Weekly (Mon-Sun of current week) & Monthly (current calendar month) slices
+        const nowRef = new Date();
+        const dayIdx = (nowRef.getDay() + 6) % 7;
+        const weekStart = new Date(nowRef);
+        weekStart.setDate(nowRef.getDate() - dayIdx);
+        weekStart.setHours(0, 0, 0, 0);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 5); // Mon-Sat (no office on Sunday)
+        weekEnd.setHours(23, 59, 59, 999);
+
+        const monthStart = new Date(nowRef.getFullYear(), nowRef.getMonth(), 1, 0, 0, 0, 0);
+        const monthEnd = new Date(nowRef.getFullYear(), nowRef.getMonth() + 1, 0, 23, 59, 59, 999);
+
+        const parseReqActivityDate = (r) => {
+          const raw = r.updated_at || r.created_at || r.request_date;
+          if (!raw) return null;
+          const d = new Date(raw);
+          return isNaN(d.getTime()) ? null : d;
+        };
+
+        const weeklyReqs = validRequests.filter((r) => {
+          const d = parseReqActivityDate(r);
+          return d && d >= weekStart && d <= weekEnd;
+        });
+        const monthlyReqs = validRequests.filter((r) => {
+          const d = parseReqActivityDate(r);
+          return d && d >= monthStart && d <= monthEnd;
         });
 
-        setStaffMetrics(computedStaffMetrics);
+        const weekCols = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((label, idx) => {
+          const d = new Date(weekStart);
+          d.setDate(weekStart.getDate() + idx);
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          return {
+            key: `${yyyy}-${mm}-${dd}`,
+            label,
+            shortDate: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          };
+        });
+        setWeeklyStaffColumns(weekCols);
+
+        const monthCols = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(
+          (label, idx) => ({
+            key: String(idx),
+            label,
+          })
+        );
+        setMonthlyStaffColumns(monthCols);
+
+        const toLocalYmd = (d) => {
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          return `${yyyy}-${mm}-${dd}`;
+        };
+
+        const weeklyWithBuckets = computeStaffMetricsList(weeklyReqs).map((entry) => {
+          const staffObj = staffUsers.find((u) => {
+            const dn =
+              u.first_name && u.last_name
+                ? `${u.first_name} ${u.last_name}`
+                : u.full_name || u.first_name || u.username;
+            return dn === entry.name;
+          });
+          const bucketCounts = {};
+          weekCols.forEach((c) => {
+            bucketCounts[c.key] = 0;
+          });
+          if (staffObj) {
+            weeklyReqs
+              .filter((r) => isRequestAssignedToUser(r, staffObj, {}, users) && isCompletedRequest(r))
+              .forEach((r) => {
+                const d = parseReqActivityDate(r);
+                if (d) {
+                  const k = toLocalYmd(d);
+                  if (bucketCounts[k] !== undefined) bucketCounts[k] += 1;
+                }
+              });
+          }
+          return { ...entry, bucketCounts };
+        });
+
+        const staffCurrentYear = nowRef.getFullYear();
+        const yearReqs = validRequests.filter((r) => {
+          const d = parseReqActivityDate(r);
+          return d && d.getFullYear() === staffCurrentYear;
+        });
+
+        const monthlyWithBuckets = computeStaffMetricsList(monthlyReqs).map((entry) => {
+          const staffObj = staffUsers.find((u) => {
+            const dn =
+              u.first_name && u.last_name
+                ? `${u.first_name} ${u.last_name}`
+                : u.full_name || u.first_name || u.username;
+            return dn === entry.name;
+          });
+          const bucketCounts = {};
+          monthCols.forEach((c) => {
+            bucketCounts[c.key] = 0;
+          });
+          if (staffObj) {
+            yearReqs
+              .filter((r) => isRequestAssignedToUser(r, staffObj, {}, users) && isCompletedRequest(r))
+              .forEach((r) => {
+                const d = parseReqActivityDate(r);
+                if (d) {
+                  const k = String(d.getMonth());
+                  if (bucketCounts[k] !== undefined) bucketCounts[k] += 1;
+                }
+              });
+          }
+          return { ...entry, bucketCounts };
+        });
+
+        setWeeklyStaffMetrics(weeklyWithBuckets);
+        setMonthlyStaffMetrics(monthlyWithBuckets);
+
+        const wkFrom = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const wkTo = weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        setWeeklyStaffPeriodLabel(`${wkFrom} – ${wkTo}`);
+        setMonthlyStaffPeriodLabel(
+          nowRef.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+        );
 
         // -------------------------------------------------------------
         // 3. Compute Dynamic Request Volume (Daily & Monthly) across ALL requested document items
@@ -444,6 +579,12 @@ export default function useDashboardData() {
     refetch,
     statusDistribution,
     staffMetrics,
+    weeklyStaffMetrics,
+    monthlyStaffMetrics,
+    weeklyStaffPeriodLabel,
+    monthlyStaffPeriodLabel,
+    weeklyStaffColumns,
+    monthlyStaffColumns,
     dailyVolume,
     monthlyVolume,
     volumeSeries,
