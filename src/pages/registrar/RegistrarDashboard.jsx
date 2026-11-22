@@ -5,6 +5,7 @@ import ustpBuilding from '../../assets/USTP.png';
 import PredictedInsightCard from '../../components/admin/PredictedInsightCard';
 import RequestVolumeCard from '../../components/admin/RequestVolumeCard';
 import TablePagination from '../../components/common/TablePagination';
+import StaffPerformanceExportButtons from '../../components/common/StaffPerformanceExportButtons';
 import useDashboardData from '../../hooks/useDashboardData';
 import { useAuth } from '../../hooks/useAuth';
 import useToast from '../../hooks/useToast';
@@ -91,10 +92,23 @@ export default function RegistrarDashboard() {
   const {
     loading,
     statusDistribution,
-    staffMetrics,
+    weeklyStaffMetrics,
+    monthlyStaffMetrics,
+    weeklyStaffPeriodLabel,
+    monthlyStaffPeriodLabel,
+    weeklyStaffColumns,
+    monthlyStaffColumns,
     dailyVolume,
     monthlyVolume,
   } = useDashboardData();
+
+  const [staffMetricsMode, setStaffMetricsMode] = useState('weekly');
+  const activeStaffMetrics =
+    staffMetricsMode === 'monthly' ? monthlyStaffMetrics : weeklyStaffMetrics;
+  const activeStaffPeriodLabel =
+    staffMetricsMode === 'monthly' ? monthlyStaffPeriodLabel : weeklyStaffPeriodLabel;
+  const activeStaffColumns =
+    staffMetricsMode === 'monthly' ? monthlyStaffColumns : weeklyStaffColumns;
 
   const [requests, setRequests] = useState([]);
   const [requestsLoading, setRequestsLoading] = useState(true);
@@ -106,9 +120,9 @@ export default function RegistrarDashboard() {
   const staffMetricsTableRef = useRef(null);
   const [lockedStaffMetricsHeight, setLockedStaffMetricsHeight] = useState(null);
 
-  const totalStaffMetricsPages = Math.max(1, Math.ceil(staffMetrics.length / STAFF_METRICS_PAGE_SIZE));
+  const totalStaffMetricsPages = Math.max(1, Math.ceil(activeStaffMetrics.length / STAFF_METRICS_PAGE_SIZE));
   const safeStaffMetricsPage = Math.min(staffMetricsPage, totalStaffMetricsPages);
-  const paginatedStaffMetrics = staffMetrics.slice(
+  const paginatedStaffMetrics = activeStaffMetrics.slice(
     (safeStaffMetricsPage - 1) * STAFF_METRICS_PAGE_SIZE,
     safeStaffMetricsPage * STAFF_METRICS_PAGE_SIZE
   );
@@ -543,14 +557,17 @@ export default function RegistrarDashboard() {
             {/* Staff Performance Metrics Card */}
             <div className="admin-card" style={{ overflowAnchor: 'none' }}>
               <div>
-                <div className="admin-card-header-stacked">
-                  <h3 className="admin-card-title">
-                    Staff Performance Metrics
-                  </h3>
-                  <p className="admin-card-subtitle">
-                    Productivity analysis
-                  </p>
-                </div>
+                <StaffPerformanceExportButtons
+                  staffMetrics={activeStaffMetrics}
+                  periodLabel={activeStaffPeriodLabel}
+                  columns={activeStaffColumns}
+                  mode={staffMetricsMode}
+                  onModeChange={(nextMode) => {
+                    setStaffMetricsMode(nextMode);
+                    setStaffMetricsPage(1);
+                  }}
+                  showExport={!loading && activeStaffMetrics.length > 0}
+                />
 
                 {loading ? (
                   <div className="space-y-3 py-2">
@@ -563,7 +580,7 @@ export default function RegistrarDashboard() {
                       </div>
                     ))}
                   </div>
-                ) : staffMetrics.length === 0 ? (
+                ) : activeStaffMetrics.length === 0 ? (
                   <div className="admin-card-empty">
                     No active staff performance metrics found.
                   </div>
@@ -608,10 +625,10 @@ export default function RegistrarDashboard() {
                   </div>
                 )}
               </div>
-              {!loading && staffMetrics.length > 0 && (
+              {!loading && activeStaffMetrics.length > 0 && (
                 <TablePagination
                   currentPage={safeStaffMetricsPage}
-                  totalItems={staffMetrics.length}
+                  totalItems={activeStaffMetrics.length}
                   pageSize={STAFF_METRICS_PAGE_SIZE}
                   onPageChange={setStaffMetricsPage}
                   accentColor="blue"
