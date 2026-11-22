@@ -1,15 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ROLES } from '../../constants/roles';
+import usersApi from '../../api/users';
+import useToast from '../../hooks/useToast';
 import StudentEditModal from './StudentEditModal';
+import UserDeleteDialog from './UserDeleteDialog';
 import TablePagination from '../common/TablePagination';
 import '../../styles/admin/StudentTableCard.css';
 
 const PAGE_SIZE = 10;
 
-export default function StudentTableCard({ users = [], onStudentUpdated }) {
+export default function StudentTableCard({ users = [], onStudentUpdated, onStudentDeactivated }) {
+  const toast = useToast();
   const tableScrollRef = useRef(null);
   const [lockedMinHeight, setLockedMinHeight] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [deactivatingStudent, setDeactivatingStudent] = useState(null);
+  const [actionLoadingId, setActionLoadingId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -79,6 +85,32 @@ export default function StudentTableCard({ users = [], onStudentUpdated }) {
       onStudentUpdated(updatedStudent);
     }
     setSelectedStudent(null);
+  };
+
+  const handleStudentDeactivated = (studentId) => {
+    if (onStudentDeactivated) {
+      onStudentDeactivated(studentId);
+    } else if (onStudentUpdated) {
+      onStudentUpdated({ id: studentId, is_active: false });
+    }
+    setDeactivatingStudent(null);
+    window.dispatchEvent(new Event('regquest_users_updated'));
+  };
+
+  const handleReactivate = async (student) => {
+    setActionLoadingId(student.id);
+    try {
+      const updated = await usersApi.activate(student.id);
+      toast.success(`Student "${formatStudentName(student)}" reactivated successfully.`);
+      if (onStudentUpdated) {
+        onStudentUpdated(updated);
+      }
+      window.dispatchEvent(new Event('regquest_users_updated'));
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to reactivate student.');
+    } finally {
+      setActionLoadingId(null);
+    }
   };
 
   return (
@@ -195,15 +227,38 @@ export default function StudentTableCard({ users = [], onStudentUpdated }) {
                       {email}
                     </td>
 
-                    {/* Actions: [ View / Update ] */}
+                    {/* Actions: [ View / Update ] & [ Deactivate / Activate ] */}
                     <td className="student-table-cell">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedStudent(student)}
-                        className="btn-view-update"
-                      >
-                        View / Update
-                      </button>
+                      <div className="action-btn-group">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedStudent(student)}
+                          className="btn-view-update"
+                        >
+                          View / Update
+                        </button>
+                        {student.is_active !== false ? (
+                          <button
+                            type="button"
+                            onClick={() => setDeactivatingStudent(student)}
+                            className="btn-deactivate"
+                          >
+                            Deactivate
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleReactivate(student)}
+                            disabled={actionLoadingId === student.id}
+                            className="btn-activate"
+                          >
+                            {actionLoadingId === student.id ? (
+                              <div className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                            ) : null}
+                            <span>Activate</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -227,6 +282,14 @@ export default function StudentTableCard({ users = [], onStudentUpdated }) {
         isOpen={!!selectedStudent}
         onClose={() => setSelectedStudent(null)}
         onStudentUpdated={handleUpdate}
+      />
+
+      {/* Deactivate Confirmation Dialog */}
+      <UserDeleteDialog
+        user={deactivatingStudent}
+        isOpen={!!deactivatingStudent}
+        onClose={() => setDeactivatingStudent(null)}
+        onUserDeactivated={handleStudentDeactivated}
       />
     </div>
   );

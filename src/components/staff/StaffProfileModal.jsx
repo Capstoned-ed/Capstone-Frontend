@@ -10,6 +10,8 @@ import authApi from '../../api/auth';
 import { getProcessedActions } from '../../api/requests';
 import useToast from '../../hooks/useToast';
 import CompactDatePicker from '../common/CompactDatePicker';
+import ExpandableDocList from '../common/ExpandableDocList';
+import ExpandableRequestId from '../common/ExpandableRequestId';
 
 export default function StaffProfileModal({ isOpen, onClose }) {
   const { user, logout } = useAuth();
@@ -676,24 +678,26 @@ export default function StaffProfileModal({ isOpen, onClose }) {
 
                               {/* ID / Tracking */}
                               <td className="py-3 px-4 whitespace-nowrap">
-                                <span className="font-mono text-xs font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-                                  {trackingCode}
-                                </span>
+                                <ExpandableRequestId id={trackingCode} />
                               </td>
 
                               {/* Role or Document Type */}
-                              <td className="py-3 px-4 whitespace-nowrap">
-                                <span
-                                  className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                                    item.role === 'admin'
-                                      ? 'bg-purple-100 text-purple-800'
-                                      : item.role === 'staff' || item.role === 'registrar'
-                                      ? 'bg-amber-100 text-amber-800'
-                                      : 'bg-blue-100 text-[#0B0B7A]'
-                                  }`}
-                                >
-                                  {item.documentType || item.role || 'Document'}
-                                </span>
+                              <td className="py-3 px-4">
+                                {item.documentType ? (
+                                  <ExpandableDocList text={item.documentType} maxItems={2} />
+                                ) : (
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap ${
+                                      item.role === 'admin'
+                                        ? 'bg-purple-100 text-purple-800'
+                                        : item.role === 'staff' || item.role === 'registrar'
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'bg-blue-100 text-[#0B0B7A]'
+                                    }`}
+                                  >
+                                    {item.role || 'Document'}
+                                  </span>
+                                )}
                               </td>
 
                               {/* Action Performed */}

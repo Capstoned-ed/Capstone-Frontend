@@ -156,7 +156,8 @@ export default function StudentPaymentsPage() {
   const [archivedPaymentsMap, setArchivedPaymentsMap] = useState(() => getArchivedPaymentsMap());
 
   // Filter Tab State: 'ALL' | 'READY_PAYMENT' | 'PENDING_VERIFY' | 'VERIFIED'
-  const [activeTab, setActiveTab] = useState('ALL');
+  const [activeTab, setActiveTab] = useState('READY_PAYMENT');
+  const [expandedDocsMap, setExpandedDocsMap] = useState({});
 
   // Modal State for uploading proof of payment
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -465,102 +466,9 @@ export default function StudentPaymentsPage() {
 
 
 
-        {/* OTC 3-Step Guide Banner (Active View Only) */}
-        {viewMode === 'active' && (
-          <div className="otc-guide-banner">
-            <div className="otc-guide-header">
-              <div className="otc-guide-icon">₱</div>
-              <div>
-                <h2 className="otc-guide-title">How Over-The-Counter (OTC) Payment Works</h2>
-                <p className="otc-guide-sub">
-                  Once staff or admin confirms your request and assesses the fee:
-                </p>
-              </div>
-            </div>
-
-            <div className="otc-steps-grid">
-              <div className="otc-step-item">
-                <div className="otc-step-num">1</div>
-                <div>
-                  <h4 className="otc-step-heading">Print &amp; Have Form Signed</h4>
-                  <p className="otc-step-text">
-                    Download and print your official assessed form, then <strong>go to the Registrar's Office to have it signed</strong> before paying at the Cashier.
-                  </p>
-                </div>
-              </div>
-
-              <div className="otc-step-item">
-                <div className="otc-step-num">2</div>
-                <div>
-                  <h4 className="otc-step-heading">Pay at USTP Cashier</h4>
-                  <p className="otc-step-text">
-                    Present your <strong>signed</strong> printed form at the <strong>USTP Cashier's Office</strong> and pay the assessed amount. Keep your Official Receipt (O.R.) safe.
-                  </p>
-                </div>
-              </div>
-
-              <div className="otc-step-item">
-                <div className="otc-step-num">3</div>
-                <div>
-                  <h4 className="otc-step-heading">Attach Receipt &amp; Keep for Claiming</h4>
-                  <p className="otc-step-text">
-                    Upload a clear photo of your Official Receipt (O.R.) below for verification. <strong>Do not lose your receipt</strong> — it must be submitted/presented when claiming your document(s).
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="mt-3.5 p-3 sm:p-3.5 bg-rose-50 border-2 border-rose-300 rounded-xl flex items-start gap-2.5 text-rose-950 shadow-2xs">
-              <svg className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <p className="text-xs sm:text-sm font-semibold leading-snug m-0">
-                <span className="font-extrabold uppercase tracking-wide text-rose-700">Important Reminder:</span>{' '}
-                <strong>Do not lose your Official Receipt (O.R.)</strong> — you must keep and submit/present it together when claiming your requested document(s).
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Notice for requests awaiting staff confirmation (Active View Only) */}
-        {viewMode === 'active' && pendingReviewRequests.length > 0 && (
-          <div className="mb-6 p-4 rounded-xl border border-amber-200 bg-amber-50/80 flex items-start gap-3 text-xs text-amber-900 shadow-2xs">
-            <span className="text-base shrink-0 mt-0.5">
-                <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
-                </svg>
-              </span>
-            <div>
-              <h4 className="font-bold text-amber-950">
-                {pendingReviewRequests.length} Request(s) Awaiting Staff Confirmation
-              </h4>
-              <p className="mt-0.5 text-amber-800 leading-relaxed">
-                Still under review by the Registrar. Once assessed, your request will appear here for payment and form download.
-              </p>
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.STUDENT.REQUESTS)}
-                className="mt-2 text-xs font-bold text-indigo-900 hover:underline cursor-pointer inline-flex items-center gap-1"
-              >
-                <span>Track status of awaiting requests</span>
-                <span>→</span>
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Filter Tabs (Active View Only) */}
         {viewMode === 'active' && (
           <div className="payments-filter-tabs">
-            <button
-              type="button"
-              onClick={() => setActiveTab('ALL')}
-              className={`payments-filter-tab ${activeTab === 'ALL' ? 'active' : ''}`}
-            >
-              <span>All Confirmed Requests</span>
-              <span className="payments-tab-count">{tabCounts.all}</span>
-            </button>
-
             <button
               type="button"
               onClick={() => setActiveTab('READY_PAYMENT')}
@@ -577,15 +485,6 @@ export default function StudentPaymentsPage() {
             >
               <span>Pending Verification</span>
               <span className="payments-tab-count">{tabCounts.pendingVerify}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('VERIFIED')}
-              className={`payments-filter-tab ${activeTab === 'VERIFIED' ? 'active' : ''}`}
-            >
-              <span>Payment Verified</span>
-              <span className="payments-tab-count">{tabCounts.verified}</span>
             </button>
           </div>
         )}
@@ -646,9 +545,40 @@ export default function StudentPaymentsPage() {
                           )}
                         </button>
                       </div>
-                      <h3 className="text-base sm:text-lg font-extrabold text-[#0B0B36]">
-                        {docTitle}
-                      </h3>
+                      {(() => {
+                        const docParts = String(docTitle || '')
+                          .split(',')
+                          .map((s) => s.trim())
+                          .filter(Boolean);
+                        const hasExtraDocs = docParts.length > 3;
+                        const isDocsExpanded = Boolean(expandedDocsMap[trackingCode]);
+                        const visibleDocText =
+                          hasExtraDocs && !isDocsExpanded ? docParts.slice(0, 3).join(', ') : docTitle;
+                        const extraDocCount = hasExtraDocs ? docParts.length - 3 : 0;
+                        return (
+                          <h3
+                            className="text-base sm:text-lg font-extrabold text-[#0B0B36] flex flex-wrap items-center gap-2"
+                            title={docTitle}
+                          >
+                            <span>{visibleDocText}</span>
+                            {hasExtraDocs && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedDocsMap((prev) => ({
+                                    ...prev,
+                                    [trackingCode]: !prev[trackingCode],
+                                  }));
+                                }}
+                                className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 cursor-pointer transition-colors"
+                              >
+                                {isDocsExpanded ? 'Show less' : `+${extraDocCount} more`}
+                              </button>
+                            )}
+                          </h3>
+                        );
+                      })()}
                     </div>
 
                     <div>

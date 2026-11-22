@@ -17,6 +17,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
 import ClaimStubModal from '../../components/common/ClaimStubModal';
+import { formatCompactDocText } from '../../components/common/ExpandableDocList';
 import {
   REQUEST_STATUS,
   normalizeToBackendStatus,
@@ -121,6 +122,8 @@ export default function TrackStatusPage() {
   const [copied, setCopied] = useState(false);
   const [showClaimStubModal, setShowClaimStubModal] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [showAllTrackDocs, setShowAllTrackDocs] = useState(false);
+  const [showAllTrackCopies, setShowAllTrackCopies] = useState(false);
   const claimStubRef = useRef(null);
 
   // Download Claim Stub as PDF
@@ -795,8 +798,8 @@ export default function TrackStatusPage() {
                         <span className="font-bold text-xs sm:text-sm tracking-tight text-slate-900 break-all sm:break-normal sm:shrink-0">
                           {code}
                         </span>
-                        <span className="text-xs text-slate-500 truncate max-w-full sm:max-w-[280px]">
-                          ({docTitle})
+                        <span className="text-xs opacity-80 break-words max-w-full sm:max-w-[320px]" title={docTitle}>
+                          ({formatCompactDocText(docTitle, 2)})
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0 pl-4 sm:pl-0">
@@ -1012,20 +1015,67 @@ export default function TrackStatusPage() {
               <div className="track-info-grid">
                 <div className="track-info-item">
                   <span className="track-info-lbl">Document Requested</span>
-                  <span className="track-info-val" data-testid="track-document-value" title={resolveRequestDocType(matchedRequest, matchedCred)}>
+                  <span className="track-info-val flex flex-wrap items-center gap-1.5" data-testid="track-document-value" title={resolveRequestDocType(matchedRequest, matchedCred)}>
                     {(() => {
                       const items = extractDocumentItems(matchedRequest, credentialTypes);
-                      if (items.length > 1) {
-                        return items.map((it) => it.name).join(', ');
-                      }
-                      return resolveRequestDocType(matchedRequest, matchedCred);
+                      const fullDocStr =
+                        items.length > 1
+                          ? items.map((it) => it.name).join(', ')
+                          : resolveRequestDocType(matchedRequest, matchedCred);
+                      const docParts = String(fullDocStr || '')
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean);
+                      const hasExtra = docParts.length > 3;
+                      const visibleText =
+                        hasExtra && !showAllTrackDocs ? docParts.slice(0, 3).join(', ') : fullDocStr;
+                      return (
+                        <>
+                          <span>{visibleText}</span>
+                          {hasExtra && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAllTrackDocs((prev) => !prev)}
+                              className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 cursor-pointer transition-colors"
+                            >
+                              {showAllTrackDocs ? 'Show less' : `+${docParts.length - 3} more`}
+                            </button>
+                          )}
+                        </>
+                      );
                     })()}
                   </span>
                 </div>
                 <div className="track-info-item">
                   <span className="track-info-lbl">Copies / Quantity</span>
-                  <span className="track-info-val" data-testid="track-copies-value">
-                    {formatRequestedCopies(matchedRequest)}
+                  <span className="track-info-val flex flex-wrap items-center gap-1.5" data-testid="track-copies-value">
+                    {(() => {
+                      const fullCopies = formatRequestedCopies(matchedRequest);
+                      const matchParen = fullCopies.match(/^([^(]+)\((.+)\)$/);
+                      if (!matchParen) return fullCopies;
+                      const basePart = matchParen[1].trim();
+                      const breakdownParts = matchParen[2]
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean);
+                      if (breakdownParts.length <= 3) return fullCopies;
+                      return (
+                        <>
+                          <span>
+                            {showAllTrackCopies
+                              ? fullCopies
+                              : `${basePart} (${breakdownParts.slice(0, 3).join(', ')})`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowAllTrackCopies((prev) => !prev)}
+                            className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 cursor-pointer transition-colors"
+                          >
+                            {showAllTrackCopies ? 'Show less' : `+${breakdownParts.length - 3} more`}
+                          </button>
+                        </>
+                      );
+                    })()}
                   </span>
                 </div>
                 <div className="track-info-item">
@@ -1161,16 +1211,28 @@ export default function TrackStatusPage() {
                           <h3 className={`track-node-title ${isCurrent ? 'text-[#0B0B36]' : 'text-slate-800'}`}>
                             {step.name} <span className="text-xs font-normal text-slate-500 hidden sm:inline">({step.label})</span>
                           </h3>
-                          <span
-                            className={`text-xs font-bold ${isCurrent && isOnHold
-                                ? 'text-amber-700'
-                                : isPastOrCurrent
-                                  ? 'text-[#0B0B36]'
-                                  : 'text-slate-400'
-                              }`}
-                          >
-                            {dateText}
-                          </span>
+                          {index === 1 && isCurrent && activeQueueTab !== 'history' ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate(ROUTES.STUDENT.PAYMENTS)}
+                              className="mt-1 sm:mt-0 px-2 py-0.5 text-[11px] font-bold text-[#0B0B36] bg-amber-400 hover:bg-amber-500 active:scale-95 rounded-md shadow-2xs transition-all cursor-pointer inline-flex items-center gap-1 w-fit"
+                              title="Go to Student Payments to upload Official Receipt"
+                            >
+                              <span>Proceed to Payments</span>
+                              <span>→</span>
+                            </button>
+                          ) : (
+                            <span
+                              className={`text-xs font-bold ${isCurrent && isOnHold
+                                  ? 'text-amber-700'
+                                  : isPastOrCurrent
+                                    ? 'text-[#0B0B36]'
+                                    : 'text-slate-400'
+                                }`}
+                            >
+                              {dateText}
+                            </span>
+                          )}
                         </div>
                         <p className="track-node-desc">
                           {stepDesc}

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import useToast from '../../hooks/useToast';
 import TablePagination from '../common/TablePagination';
+import ExpandableDocList from '../common/ExpandableDocList';
+import ExpandableRequestId from '../common/ExpandableRequestId';
 
 const PAGE_SIZE = 10;
 
@@ -266,7 +268,9 @@ export default function StaffRequestsTable({
                         />
                       </td>
                     )}
-                    <td className="staff-req-id">{item.id}</td>
+                    <td className="staff-req-id">
+                      <ExpandableRequestId id={item.id} />
+                    </td>
                   <td>
                     <div className="staff-student-name">{item.student_name}</div>
                     <div className="staff-student-sub">{item.student_id}</div>
@@ -284,7 +288,9 @@ export default function StaffRequestsTable({
                     )}
                   </td>
                   <td>
-                    <div className="staff-doc-name">{item.document_type}</div>
+                    <div className="staff-doc-name">
+                      <ExpandableDocList text={item.document_type} maxItems={2} />
+                    </div>
                     <div className="staff-doc-sub">{item.copies}</div>
                   </td>
                   <td>{getStatusBadge ? getStatusBadge(item.status) : item.status}</td>

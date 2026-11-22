@@ -7,6 +7,8 @@ import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
 import BatchUpdateModal from '../../components/common/BatchUpdateModal';
 import TablePagination from '../../components/common/TablePagination';
+import ExpandableDocList from '../../components/common/ExpandableDocList';
+import ExpandableRequestId from '../../components/common/ExpandableRequestId';
 import { StaffRequestsTable } from '../../components/staff';
 import useToast from '../../hooks/useToast';
 import {
@@ -1616,13 +1618,17 @@ export default function RegistrarRequestsPage() {
                         />
                       </td>
                     )}
-                    <td className="req-id-text">{item.id}</td>
+                    <td className="req-id-text">
+                      <ExpandableRequestId id={item.id} />
+                    </td>
                     <td>
                       <div className="student-name-text">{item.student_name}</div>
                       <div className="student-id-sub">{item.student_id}</div>
                     </td>
                     <td>
-                      <div className="doc-name-text">{item.document_type}</div>
+                      <div className="doc-name-text">
+                        <ExpandableDocList text={item.document_type} maxItems={2} />
+                      </div>
                       <div className="doc-copies-sub">{item.copies}</div>
                     </td>
                     <td>{getStatusBadge(item.batch_status || item.status)}</td>
@@ -1856,13 +1862,17 @@ export default function RegistrarRequestsPage() {
                             />
                           </td>
                         )}
-                        <td className="req-id-text">{item.id}</td>
+                        <td className="req-id-text">
+                      <ExpandableRequestId id={item.id} />
+                    </td>
                         <td>
                           <div className="student-name-text">{item.student_name}</div>
                           <div className="student-id-sub">{item.student_id}</div>
                         </td>
                         <td>
-                          <div className="doc-name-text">{item.document_type}</div>
+                          <div className="doc-name-text">
+                        <ExpandableDocList text={item.document_type} maxItems={2} />
+                      </div>
                           <div className="doc-copies-sub">{item.copies}</div>
                         </td>
                         <td>{getStatusBadge(item.batch_status || item.status)}</td>

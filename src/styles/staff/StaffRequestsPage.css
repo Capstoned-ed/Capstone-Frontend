@@ -160,9 +160,40 @@
 }
 
 .staff-req-id {
-  font-weight: 800;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.staff-req-id-text {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+  font-weight: 700;
   color: #0f172a;
   white-space: nowrap;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.staff-req-id-text.is-clickable {
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.staff-req-id-text.is-clickable:hover {
+  background-color: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.staff-req-id-text.is-expanded {
+  max-width: 240px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .staff-student-name {

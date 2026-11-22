@@ -18,6 +18,7 @@ import requestsApi, {
   extractStaffRemark,
 } from '../../api/requests';
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
+import { DocumentItemsList } from '../common/ExpandableDocList';
 import settingsApi from '../../api/settings';
 import { saveStoredNotification } from '../../api/notifications';
 import paymentsApi, { getStoredPaymentProof, verifyStoredPaymentProof } from '../../api/payments';
@@ -457,6 +458,7 @@ export default function ProcessRequestModal({
   const isRegistrarOrAdmin =
     String(user?.role || '').toLowerCase() === 'registrar' ||
     String(user?.role || '').toLowerCase() === 'admin';
+  const isWaitingForRegistrarApproval = false;
 
   const canOverrideStatus = Boolean(
     !isAdmin &&
@@ -1942,10 +1944,12 @@ export default function ProcessRequestModal({
                     <div className="staff-field-pill font-semibold text-indigo-950">
                       {(() => {
                         const items = extractDocumentItems(liveRequestDetail || requestItem);
-                        if (items.length > 1) {
-                          return items.map((it) => `${it.name} (${it.copies})`).join(', ');
-                        }
-                        return requestItem.document_type || items[0]?.name || 'N/A';
+                        return (
+                          <DocumentItemsList
+                            items={items}
+                            fallback={requestItem.document_type || items[0]?.name || 'N/A'}
+                          />
+                        );
                       })()}
                     </div>
                   </div>

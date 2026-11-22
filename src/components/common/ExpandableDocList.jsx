@@ -1,0 +1,76 @@
+import React, { useState } from 'react';
+
+export function formatCompactDocText(text, maxItems = 2) {
+  const raw = String(text || '');
+  const parts = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (parts.length <= maxItems) return raw;
+  return `${parts.slice(0, maxItems).join(', ')} +${parts.length - maxItems} more`;
+}
+
+export default function ExpandableDocList({
+  text,
+  maxItems = 2,
+  className = '',
+  badgeClassName = '',
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const raw = String(text || '');
+  const parts = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (parts.length <= maxItems) {
+    return <span className={className}>{raw}</span>;
+  }
+
+  const visibleText = expanded ? raw : parts.slice(0, maxItems).join(', ');
+  const extraCount = parts.length - maxItems;
+
+  return (
+    <span className={`inline-flex flex-wrap items-center gap-1.5 ${className}`} title={raw}>
+      <span>{visibleText}</span>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setExpanded((prev) => !prev);
+        }}
+        className={
+          badgeClassName ||
+          'px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 cursor-pointer transition-colors whitespace-nowrap'
+        }
+      >
+        {expanded ? 'Show less' : `+${extraCount} more`}
+      </button>
+    </span>
+  );
+}
+
+/**
+ * Renders a structured vertical list of requested documents with per-item copy badges.
+ */
+export function DocumentItemsList({ items = [], fallback = 'N/A' }) {
+  if (!Array.isArray(items) || items.length <= 1) {
+    return <span>{fallback || items?.[0]?.name || 'N/A'}</span>;
+  }
+
+  return (
+    <ul className="w-full space-y-1.5 max-h-40 overflow-y-auto pr-1">
+      {items.map((it, idx) => (
+        <li
+          key={`${it.name || 'doc'}-${idx}`}
+          className="flex items-center justify-between gap-2 pb-1.5 border-b border-slate-200/70 last:border-b-0 last:pb-0 text-xs"
+        >
+          <span className="font-semibold text-indigo-950">{it.name}</span>
+          <span className="shrink-0 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200/80 text-[11px] font-bold">
+            {it.copies} {Number(it.copies) === 1 ? 'copy' : 'copies'}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}

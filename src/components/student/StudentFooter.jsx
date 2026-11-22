@@ -14,7 +14,7 @@ export default function StudentFooter() {
           {/* Column 1: Mission Statement */}
           <div className="student-footer-col">
             <p className="student-footer-desc">
-              A online portal to streamlines the credential request process
+              An online portal that streamlines the credential request process
             </p>
           </div>
 
@@ -70,7 +70,7 @@ export default function StudentFooter() {
             <h4 className="student-footer-title">Connect With Us</h4>
             <div className="student-footer-address">
               <p>USTP Campus</p>
-              <p>Cagayn de Oro City, Philippines</p>
+              <p>Cagayan de Oro City, Philippines</p>
             </div>
           </div>
         </div>

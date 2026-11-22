@@ -336,21 +336,6 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
             </div>
           </div>
 
-          {/* Row 4: Account Status */}
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-700">Account Active</span>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                name="is_active"
-                checked={formData.is_active}
-                onChange={handleChange}
-                className="sr-only peer"
-              />
-              <div className="w-9 h-5 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500" />
-            </label>
-          </div>
-
           {/* Modal Footer */}
           <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
             <button

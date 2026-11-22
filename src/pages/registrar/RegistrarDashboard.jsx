@@ -5,6 +5,8 @@ import ustpBuilding from '../../assets/USTP.png';
 import PredictedInsightCard from '../../components/admin/PredictedInsightCard';
 import RequestVolumeCard from '../../components/admin/RequestVolumeCard';
 import TablePagination from '../../components/common/TablePagination';
+import ExpandableDocList from '../../components/common/ExpandableDocList';
+import ExpandableRequestId from '../../components/common/ExpandableRequestId';
 import StaffPerformanceExportButtons from '../../components/common/StaffPerformanceExportButtons';
 import useDashboardData from '../../hooks/useDashboardData';
 import { useAuth } from '../../hooks/useAuth';
@@ -633,13 +635,17 @@ export default function RegistrarDashboard() {
                   ) : (
                     activeRequests.slice(0, 5).map((item) => (
                       <tr key={item.rawId || item.id}>
-                        <td className="req-id-text">{item.id}</td>
+                        <td className="req-id-text">
+                          <ExpandableRequestId id={item.id} />
+                        </td>
                         <td>
                           <div className="student-name-text">{item.student_name}</div>
                           <div className="student-id-sub">{item.student_id}</div>
                         </td>
                         <td>
-                          <div className="doc-name-text">{item.document_type}</div>
+                          <div className="doc-name-text">
+                            <ExpandableDocList text={item.document_type} maxItems={2} />
+                          </div>
                           <div className="doc-copies-sub">{item.copies}</div>
                         </td>
                         <td>{getStatusBadge(item.status)}</td>
