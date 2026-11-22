@@ -4,6 +4,7 @@ import { authApi } from '../api/auth';
 import usersApi from '../api/users';
 import { ROLES } from '../constants/roles';
 import { AuthContext } from './AuthContextDefinition';
+import { clearAllDraftStorage } from '../utils/draftStorage';
 
 export { AuthContext };
 
@@ -131,6 +132,11 @@ export function AuthProvider({ children }) {
         localStorage.removeItem('refresh_token');
       } catch (e) {
         console.warn('Failed to clear auth tokens on logout:', e);
+      }
+      try {
+        await clearAllDraftStorage();
+      } catch (e) {
+        console.warn('Failed to clear draft storage on logout:', e);
       }
       try {
         sessionStorage.clear();
