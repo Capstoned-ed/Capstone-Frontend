@@ -18,7 +18,9 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
 
   const [formData, setFormData] = useState({
     first_name: student.first_name || cachedProfile.first_name || '',
+    middle_name: student.middle_name || cachedProfile.middle_name || '',
     last_name: student.last_name || cachedProfile.last_name || '',
+    name_extension: student.name_extension || cachedProfile.name_extension || '',
     student_id: student.student_id || student.username || cachedProfile.student_id || '',
     email: student.email || cachedProfile.email || '',
     birth_date: student.birth_date || student.birthdate || cachedProfile.birth_date || cachedProfile.birthdate || '',
@@ -56,9 +58,19 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
     try {
       const courseName = formData.program.trim();
       const courseCode = USTP_COURSE_CODE_MAP[courseName] || student.course_code || '';
+      const firstName = formData.first_name.trim();
+      const middleName = formData.middle_name.trim();
+      const lastName = formData.last_name.trim();
+      const nameExtension = formData.name_extension.trim();
+      const nameParts = [firstName, middleName, lastName].filter(Boolean);
+      let fullName = nameParts.join(' ').trim();
+      if (nameExtension) fullName = `${fullName} ${nameExtension}`.trim();
+
       const payload = {
-        first_name: formData.first_name.trim(),
-        last_name: formData.last_name.trim(),
+        first_name: firstName,
+        middle_name: middleName,
+        last_name: lastName,
+        name_extension: nameExtension,
         email: formData.email.trim(),
         course_name: courseName,
         ...(courseCode ? { course_code: courseCode } : {}),
@@ -70,14 +82,15 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
 
       const updated = await usersApi.update(student.id, payload);
       // Merge local extended profile info including edited student ID, birthdate, and contact number
-      const fullName = `${formData.first_name.trim()} ${formData.last_name.trim()}`.trim();
       const merged = {
         ...updated,
         student_id: formData.student_id.trim() || student.username,
         username: formData.student_id.trim() || student.username,
-        first_name: formData.first_name.trim(),
-        last_name: formData.last_name.trim(),
-        full_name: fullName || formData.first_name.trim() || student.username,
+        first_name: firstName,
+        middle_name: middleName,
+        last_name: lastName,
+        name_extension: nameExtension,
+        full_name: fullName || firstName || student.username,
         birth_date: formData.birth_date,
         birthdate: formData.birth_date,
         contact_number: formData.contact_number.trim(),
@@ -149,7 +162,7 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
 
         {/* Modal Form */}
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
-          {/* Row 1: First Name & Last Name */}
+          {/* Row 1: First Name & Middle Name */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -165,6 +178,23 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
+                Middle Name <span className="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <input
+                type="text"
+                name="middle_name"
+                value={formData.middle_name}
+                onChange={handleChange}
+                placeholder="Middle Name"
+                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          {/* Row 2: Last Name & Name Extension */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
                 Last Name
               </label>
               <input
@@ -172,6 +202,19 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
                 name="last_name"
                 value={formData.last_name}
                 onChange={handleChange}
+                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Name Extension <span className="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <input
+                type="text"
+                name="name_extension"
+                value={formData.name_extension}
+                onChange={handleChange}
+                placeholder="e.g. Jr., Sr., III"
                 className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
               />
             </div>

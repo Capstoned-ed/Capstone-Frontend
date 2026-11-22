@@ -111,9 +111,9 @@ export default function RequestDocumentPage() {
   const [course, setCourse] = useState(user?.program || 'BS in Information Technology');
 
   const [dateOfRequest, setDateOfRequest] = useState(() => new Date().toISOString().split('T')[0]);
-  const [birthDate, setBirthDate] = useState('2002-05-15');
-  const [userCategory, setUserCategory] = useState('student'); // 'student' or 'alumnus'
-  const [contactNo, setContactNo] = useState('09123456789');
+  const [birthDate, setBirthDate] = useState(() => initialDraft?.birthDate || '2002-05-15');
+  const [userCategory, setUserCategory] = useState(() => initialDraft?.userCategory || 'student'); // 'student' or 'alumnus'
+  const [contactNo, setContactNo] = useState(() => initialDraft?.contactNo || '09123456789');
   const [contactNoError, setContactNoError] = useState('');
 
   const getContactNoError = (value, { required = false } = {}) => {
@@ -149,23 +149,74 @@ export default function RequestDocumentPage() {
       const p = profiles[user?.student_id] || profiles[user?.username] || profiles[user?.id] || {};
       const resolvedBirthDate = user?.birth_date || user?.birthdate || p?.birth_date || p?.birthdate;
       const resolvedContact = user?.contact_number || p?.contact_number;
-      if (resolvedBirthDate) setBirthDate(resolvedBirthDate);
-      if (resolvedContact && resolvedContact.trim()) setContactNo(resolvedContact.trim());
+      if (resolvedBirthDate && !initialDraft?.birthDate) setBirthDate(resolvedBirthDate);
+      if (resolvedContact && resolvedContact.trim() && !initialDraft?.contactNo) setContactNo(resolvedContact.trim());
     } catch {}
   }, [user]);
-  const [dateOfGraduation, setDateOfGraduation] = useState('');
-  const [lastSemAttendance, setLastSemAttendance] = useState('2nd Sem, AY 2025-2026');
-  const [alreadyRequested, setAlreadyRequested] = useState('no');
-  const [prevDocRequested, setPrevDocRequested] = useState('');
-  const [prevDateRequested, setPrevDateRequested] = useState('');
-  const [isCleared, setIsCleared] = useState('yes');
+
+  // Fetch live fresh user profile on mount to guarantee updated "My Information" details are reflected immediately
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const me = await usersApi.getMe();
+        if (!active || !me) return;
+        const nameParts = [me.first_name, me.middle_name, me.last_name].filter(Boolean);
+        let full = nameParts.join(' ').trim();
+        if (me.name_extension) full = `${full} ${me.name_extension}`.trim();
+        if (full) {
+          setFullName(full);
+          setFirstName(me.first_name || '');
+          setLastName(me.last_name || '');
+        }
+        if (me.course_name) setCourse(me.course_name);
+        else if (me.program) setCourse(me.program);
+        if (me.birth_date && !initialDraft?.birthDate) setBirthDate(me.birth_date);
+        if (me.contact_number && me.contact_number.trim() && !initialDraft?.contactNo) {
+          setContactNo(me.contact_number.trim());
+        }
+        if (me.year_level) setYearLevel(me.year_level);
+        if (me.email) setEmail(me.email);
+      } catch (err) {
+        console.warn('Could not fetch fresh user profile on mount:', err);
+      }
+    })();
+
+    const handleProfileUpdated = (evt) => {
+      const updated = evt?.detail;
+      if (!updated) return;
+      if (updated.full_name) setFullName(updated.full_name);
+      if (updated.first_name) setFirstName(updated.first_name);
+      if (updated.last_name) setLastName(updated.last_name);
+      if (updated.program || updated.course_name) setCourse(updated.program || updated.course_name);
+      if (updated.birth_date || updated.birthdate) setBirthDate(updated.birth_date || updated.birthdate);
+      if (updated.contact_number || updated.phone || updated.mobile_number) {
+        setContactNo((updated.contact_number || updated.phone || updated.mobile_number).trim());
+      }
+      if (updated.year_level) setYearLevel(updated.year_level);
+      if (updated.email) setEmail(updated.email);
+    };
+
+    window.addEventListener('regquest_profile_updated', handleProfileUpdated);
+    return () => {
+      active = false;
+      window.removeEventListener('regquest_profile_updated', handleProfileUpdated);
+    };
+  }, []);
+
+  const [dateOfGraduation, setDateOfGraduation] = useState(() => initialDraft?.dateOfGraduation || '');
+  const [lastSemAttendance, setLastSemAttendance] = useState(() => initialDraft?.lastSemAttendance || '2nd Sem, AY 2025-2026');
+  const [alreadyRequested, setAlreadyRequested] = useState(() => initialDraft?.alreadyRequested || 'no');
+  const [prevDocRequested, setPrevDocRequested] = useState(() => initialDraft?.prevDocRequested || '');
+  const [prevDateRequested, setPrevDateRequested] = useState(() => initialDraft?.prevDateRequested || '');
+  const [isCleared, setIsCleared] = useState(() => initialDraft?.isCleared || 'yes');
   const [clearanceError, setClearanceError] = useState(false);
 
   // Selected Documents in Part 2 (multiple documents allowed)
   const [selectedDocs, setSelectedDocs] = useState(() =>
     Array.isArray(initialDraft?.selectedDocs) ? initialDraft.selectedDocs : []
   );
-  const [selectedCredTypeId, setSelectedCredTypeId] = useState(null);
+  const [selectedCredTypeId, setSelectedCredTypeId] = useState(() => initialDraft?.selectedCredTypeId || null);
 
   // Purpose in Part 3 (multiple purposes allowed)
   const [selectedPurposes, setSelectedPurposes] = useState(() =>
@@ -788,28 +839,42 @@ export default function RequestDocumentPage() {
             currentStep,
             selectedDocs,
             docCopies,
+            selectedCredTypeId,
             selectedPurposes,
             otherPurpose,
+            userCategory,
+            contactNo,
+            birthDate,
+            dateOfGraduation,
+            lastSemAttendance,
+            alreadyRequested,
+            prevDocRequested,
+            prevDateRequested,
+            isCleared,
           })
         );
       }
     } catch {
       // Ignore storage quota errors
     }
-  }, [draftKey, currentStep, selectedDocs, docCopies, selectedPurposes, otherPurpose]);
-
-  const draftKeyRef = useRef(draftKey);
-  draftKeyRef.current = draftKey;
-
-  useEffect(() => {
-    return () => {
-      try {
-        sessionStorage.removeItem(draftKeyRef.current);
-      } catch {
-        // Ignore storage errors
-      }
-    };
-  }, []);
+  }, [
+    draftKey,
+    currentStep,
+    selectedDocs,
+    docCopies,
+    selectedCredTypeId,
+    selectedPurposes,
+    otherPurpose,
+    userCategory,
+    contactNo,
+    birthDate,
+    dateOfGraduation,
+    lastSemAttendance,
+    alreadyRequested,
+    prevDocRequested,
+    prevDateRequested,
+    isCleared,
+  ]);
 
   const appliedDocQueryRef = useRef(null);
 
@@ -1235,6 +1300,9 @@ export default function RequestDocumentPage() {
       });
 
       toast.success('Your credential request was successfully submitted!');
+      try {
+        sessionStorage.removeItem(draftKey);
+      } catch {}
       setCurrentStep(3);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {

@@ -51,7 +51,7 @@ const formatStatus = (statusStr) => {
 };
 
 export default function StudentProfileModal({ isOpen, onClose }) {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -266,8 +266,9 @@ export default function StudentProfileModal({ isOpen, onClose }) {
 
     setIsSaving(true);
     try {
+      let updatedMe = null;
       try {
-        await usersApi.updateMe({
+        updatedMe = await usersApi.updateMe({
           email: editableEmail.trim(),
           contact_number: editableMobile.trim(),
           birth_date: editableBirthDate || null,
@@ -275,6 +276,12 @@ export default function StudentProfileModal({ isOpen, onClose }) {
         });
       } catch (apiErr) {
         console.warn('Backend self-profile update notice:', apiErr);
+      }
+
+      if (refreshProfile) {
+        try {
+          await refreshProfile();
+        } catch {}
       }
 
       const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
@@ -293,6 +300,7 @@ export default function StudentProfileModal({ isOpen, onClose }) {
         birth_date: editableBirthDate,
         birthdate: editableBirthDate,
         year_level: editableYearLevel,
+        ...(updatedMe || {}),
       };
 
       profiles[userKey] = updated;
@@ -301,6 +309,17 @@ export default function StudentProfileModal({ isOpen, onClose }) {
       if (user?.id) profiles[user?.id] = updated;
 
       localStorage.setItem('regquest_student_profiles', JSON.stringify(profiles));
+
+      try {
+        const usersCache = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
+        const uIdx = usersCache.findIndex(
+          (x) => x.username && x.username.toLowerCase() === (user?.username || '').toLowerCase()
+        );
+        if (uIdx !== -1) {
+          usersCache[uIdx] = { ...usersCache[uIdx], ...updated };
+          localStorage.setItem('regquest_users_cache', JSON.stringify(usersCache));
+        }
+      } catch {}
 
       // Notify other components
       window.dispatchEvent(new CustomEvent('regquest_profile_updated', { detail: updated }));

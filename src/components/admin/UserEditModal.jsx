@@ -37,7 +37,9 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
 
   const [formData, setFormData] = useState({
     first_name: user.first_name || cachedStaff.first_name || '',
+    middle_name: user.middle_name || cachedStaff.middle_name || '',
     last_name: user.last_name || cachedStaff.last_name || '',
+    name_extension: user.name_extension || cachedStaff.name_extension || '',
     email: user.email || cachedStaff.email || '',
     contact_number: user.contact_number || cachedStaff.contact_number || '',
     birth_date: user.birth_date || cachedStaff.birth_date || '',
@@ -93,13 +95,19 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
     setLoading(true);
     try {
       const firstName = formData.first_name.trim();
+      const middleName = formData.middle_name.trim();
       const lastName = formData.last_name.trim();
-      const fullName = `${firstName} ${lastName}`.trim();
+      const nameExtension = formData.name_extension.trim();
+      const nameParts = [firstName, middleName, lastName].filter(Boolean);
+      let fullName = nameParts.join(' ').trim();
+      if (nameExtension) fullName = `${fullName} ${nameExtension}`.trim();
       const emailLower = formData.email.trim().toLowerCase();
 
       const payload = {
         first_name: firstName,
+        middle_name: middleName,
         last_name: lastName,
+        name_extension: nameExtension,
         email: emailLower,
         contact_number: formData.contact_number.trim(),
         birth_date: formData.birth_date || null,
@@ -111,7 +119,9 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
       const merged = {
         ...updated,
         first_name: firstName,
+        middle_name: middleName,
         last_name: lastName,
+        name_extension: nameExtension,
         full_name: fullName || updated.username || user.username,
         email: emailLower,
         contact_number: formData.contact_number.trim(),
@@ -197,7 +207,7 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
         </span>
       </div>
 
-      {/* First Name & Last Name */}
+      {/* First & Middle Name */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -221,6 +231,23 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
         </div>
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1">
+            Middle Name <span className="text-slate-400 font-normal">(Optional)</span>
+          </label>
+          <input
+            type="text"
+            name="middle_name"
+            value={formData.middle_name}
+            onChange={handleChange}
+            placeholder="Middle Name"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+          />
+        </div>
+      </div>
+
+      {/* Last Name & Name Extension */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">
             Last Name
           </label>
           <input
@@ -238,6 +265,19 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
           {errors.last_name && (
             <p className="text-xs text-rose-500 mt-1 font-medium">{errors.last_name}</p>
           )}
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">
+            Name Extension <span className="text-slate-400 font-normal">(Optional)</span>
+          </label>
+          <input
+            type="text"
+            name="name_extension"
+            value={formData.name_extension}
+            onChange={handleChange}
+            placeholder="e.g. Jr., Sr., III"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+          />
         </div>
       </div>
 

@@ -1130,7 +1130,7 @@ function normalizeBackendRequest(b) {
   const parsedReleaseDate = extractReleaseDateFromRemarks(b.remarks || b.notes);
   const overrideReleaseDate = getReleaseDateOverride(b);
   const resolvedReleaseDate =
-    overrideReleaseDate || b.date_of_release || b.release_date || parsedReleaseDate || null;
+    b.release_date || b.date_of_release || overrideReleaseDate || parsedReleaseDate || null;
 
   return {
     ...b,
