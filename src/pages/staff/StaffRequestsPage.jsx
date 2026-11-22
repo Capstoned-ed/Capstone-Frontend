@@ -1348,10 +1348,16 @@ export default function StaffRequestsPage() {
       const targetRawId = selectedRequest.rawId || selectedRequest.id;
       if (targetRawId && !String(targetRawId).startsWith('fallback_')) {
         const backendStatus = BACKEND_STATUS_MAP[effectiveStatus] || effectiveStatus;
+        const targetReleaseDate =
+          selectedRequest.release_date ||
+          selectedRequest.date_of_release ||
+          null;
         try {
           await requestsApi.transition(targetRawId, {
             status: backendStatus,
             remarks: nextRemarks,
+            release_date: targetReleaseDate,
+            date_of_release: targetReleaseDate,
           });
         } catch (apiErr) {
           console.warn('Backend transition notice:', apiErr);

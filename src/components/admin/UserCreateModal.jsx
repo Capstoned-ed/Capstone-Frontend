@@ -12,7 +12,9 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
     password: '',
     role: ROLES.STAFF,
     first_name: '',
+    middle_name: '',
     last_name: '',
+    name_extension: '',
   });
 
   const [loading, setLoading] = useState(false);
@@ -55,7 +57,9 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
       };
 
       if (formData.first_name.trim()) payload.first_name = formData.first_name.trim();
+      if (formData.middle_name.trim()) payload.middle_name = formData.middle_name.trim();
       if (formData.last_name.trim()) payload.last_name = formData.last_name.trim();
+      if (formData.name_extension.trim()) payload.name_extension = formData.name_extension.trim();
 
       const createdUser = await usersApi.create(payload);
 
@@ -63,7 +67,12 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
       try {
         const email = formData.email.trim().toLowerCase();
         const username = formData.username.trim();
-        const fullName = `${formData.first_name.trim()} ${formData.last_name.trim()}`.trim() || username;
+        const nameParts = [formData.first_name.trim(), formData.middle_name.trim(), formData.last_name.trim()].filter(Boolean);
+        let fullName = nameParts.join(' ').trim();
+        if (formData.name_extension.trim()) {
+          fullName = `${fullName} ${formData.name_extension.trim()}`.trim();
+        }
+        fullName = fullName || username;
 
         if (formData.role === ROLES.STUDENT) {
           const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
@@ -72,7 +81,9 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
             username,
             student_id: username,
             first_name: formData.first_name.trim(),
+            middle_name: formData.middle_name.trim(),
             last_name: formData.last_name.trim(),
+            name_extension: formData.name_extension.trim(),
             full_name: fullName,
             email,
             program: 'B.S. in Information Technology',
@@ -170,7 +181,7 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
 
         {/* Modal Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* First & Last Name */}
+          {/* First & Middle Name */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -191,6 +202,27 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Middle Name <span className="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <input
+                type="text"
+                name="middle_name"
+                value={formData.middle_name}
+                onChange={handleChange}
+                disabled={loading}
+                readOnly={loading}
+                tabIndex={loading ? -1 : undefined}
+                aria-disabled={loading ? 'true' : undefined}
+                placeholder="e.g. Dela Cruz"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36] disabled:bg-slate-100 disabled:cursor-not-allowed"
+              />
+            </div>
+          </div>
+
+          {/* Last Name & Name Extension */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Last Name <span className="text-slate-400 font-normal">(Optional)</span>
               </label>
               <input
@@ -203,6 +235,23 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
                 tabIndex={loading ? -1 : undefined}
                 aria-disabled={loading ? 'true' : undefined}
                 placeholder="e.g. Santos"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36] disabled:bg-slate-100 disabled:cursor-not-allowed"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Name Extension <span className="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <input
+                type="text"
+                name="name_extension"
+                value={formData.name_extension}
+                onChange={handleChange}
+                disabled={loading}
+                readOnly={loading}
+                tabIndex={loading ? -1 : undefined}
+                aria-disabled={loading ? 'true' : undefined}
+                placeholder="e.g. Jr., Sr., III"
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36] disabled:bg-slate-100 disabled:cursor-not-allowed"
               />
             </div>

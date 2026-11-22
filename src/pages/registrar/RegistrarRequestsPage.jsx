@@ -219,9 +219,6 @@ export default function RegistrarRequestsPage() {
   const [historyBatchPage, setHistoryBatchPage] = useState(1);
   const historyBatchTableRef = useRef(null);
   const [lockedHistoryBatchHeight, setLockedHistoryBatchHeight] = useState(null);
-  const [requestsPage, setRequestsPage] = useState(1);
-  const requestsTableRef = useRef(null);
-  const [lockedRequestsTableHeight, setLockedRequestsTableHeight] = useState(null);
   const [activeTab, setActiveTab] = useState('active'); // 'active' | 'history'
   const [archivedMap, setArchivedMap] = useState(() => getArchivedRequestsMap());
 
@@ -824,12 +821,40 @@ export default function RegistrarRequestsPage() {
   }, [requests]);
 
   const batchRequests = useMemo(() => {
-    const activeReqs = requests.filter((r) => !isRequestArchived(r, archivedMap));
-    if (selectedBatch === 'ALL') {
-      return [...activeReqs].sort(sortRequestsNewestFirst);
+    let activeReqs = requests.filter((r) => !isRequestArchived(r, archivedMap));
+    if (selectedBatch !== 'ALL') {
+      activeReqs = activeReqs.filter((r) => r.batchId === selectedBatch);
     }
-    return activeReqs.filter((r) => r.batchId === selectedBatch).sort(sortRequestsNewestFirst);
-  }, [requests, selectedBatch, archivedMap, activityTimestamps, assignmentTimestamps, assignments]);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      activeReqs = activeReqs.filter(
+        (r) =>
+          (r.id && r.id.toLowerCase().includes(q)) ||
+          (r.tracking_number && r.tracking_number.toLowerCase().includes(q)) ||
+          (r.student_name && r.student_name.toLowerCase().includes(q)) ||
+          (r.student_id && r.student_id.toLowerCase().includes(q)) ||
+          (r.document_type && r.document_type.toLowerCase().includes(q))
+      );
+    }
+    if (docTypeFilter) {
+      const filterLow = docTypeFilter.toLowerCase();
+      activeReqs = activeReqs.filter((r) => {
+        const docLow = (r.document_type || '').toLowerCase();
+        return docLow.includes(filterLow) || filterLow.includes(docLow);
+      });
+    }
+    if (statusFilter) {
+      activeReqs = activeReqs.filter((r) => {
+        const itemStatus = (r.batch_status || r.status || '').toLowerCase();
+        return itemStatus === statusFilter.toLowerCase();
+      });
+    }
+    return activeReqs.sort(sortRequestsNewestFirst);
+  }, [requests, selectedBatch, archivedMap, searchQuery, docTypeFilter, statusFilter, activityTimestamps, assignmentTimestamps, assignments]);
+
+  useEffect(() => {
+    setBatchPage(1);
+  }, [selectedBatch, searchQuery, docTypeFilter, statusFilter]);
 
   const totalBatchPages = Math.max(1, Math.ceil(batchRequests.length / BATCH_PAGE_SIZE));
   const safeBatchPage = Math.min(batchPage, totalBatchPages);
@@ -1140,58 +1165,6 @@ export default function RegistrarRequestsPage() {
       setLockedHistoryBatchHeight(historyBatchTableRef.current.offsetHeight);
     }
   }, [totalHistoryBatchPages, paginatedHistoryBatchRequests.length]);
-
-  const filteredRequests = useMemo(() => {
-    return requests
-      .filter((r) => {
-        const q = searchQuery.toLowerCase().trim();
-        const matchesSearch =
-          !q ||
-          r.id.toLowerCase().includes(q) ||
-          r.student_name.toLowerCase().includes(q) ||
-          r.student_id.toLowerCase().includes(q);
-
-        if (!matchesSearch) return false;
-
-        if (docTypeFilter) {
-          const filterLow = docTypeFilter.toLowerCase();
-          const docLow = (r.document_type || '').toLowerCase();
-          if (!docLow.includes(filterLow) && !filterLow.includes(docLow)) {
-            return false;
-          }
-        }
-
-        if (statusFilter && r.status.toLowerCase() !== statusFilter.toLowerCase()) {
-          return false;
-        }
-
-        return true;
-      })
-      .sort(sortRequestsNewestFirst);
-  }, [requests, searchQuery, docTypeFilter, statusFilter]);
-
-  const activeFilteredRequests = useMemo(() => {
-    return filteredRequests
-      .filter((r) => !isRequestArchived(r, archivedMap))
-      .sort(sortRequestsNewestFirst);
-  }, [filteredRequests, archivedMap, activityTimestamps, assignmentTimestamps, assignments]);
-
-  const totalRequestsPages = Math.max(1, Math.ceil(activeFilteredRequests.length / BATCH_PAGE_SIZE));
-  const safeRequestsPage = Math.min(requestsPage, totalRequestsPages);
-  const paginatedActiveRequests = activeFilteredRequests.slice(
-    (safeRequestsPage - 1) * BATCH_PAGE_SIZE,
-    safeRequestsPage * BATCH_PAGE_SIZE
-  );
-
-  useEffect(() => {
-    if (
-      totalRequestsPages > 1 &&
-      paginatedActiveRequests.length === BATCH_PAGE_SIZE &&
-      requestsTableRef.current
-    ) {
-      setLockedRequestsTableHeight(requestsTableRef.current.offsetHeight);
-    }
-  }, [totalRequestsPages, paginatedActiveRequests.length]);
 
   const historyRequests = useMemo(() => {
     return requests
@@ -1534,191 +1507,6 @@ export default function RegistrarRequestsPage() {
         )}
       </div>
 
-      <div className="assign-table-card" style={{ overflowAnchor: 'none' }}>
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-          <h3 className="assign-table-title !mb-0">
-            Requests Assignment - {selectedBatch === 'ALL' ? 'All Batches' : selectedBatch}
-          </h3>
-          <button
-            type="button"
-            onClick={() => {
-              setIsSelectionMode((prev) => !prev);
-              if (isSelectionMode) setSelectedIds(new Set());
-            }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              isSelectionMode
-                ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
-                : 'bg-indigo-50 text-indigo-950 border border-indigo-200 hover:bg-indigo-100'
-            }`}
-          >
-            {isSelectionMode ? (
-              <>
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                <span>Cancel Selection</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                </svg>
-                <span>Select Multiple</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        <div
-          ref={batchTableRef}
-          className="table-responsive"
-          style={
-            totalBatchPages > 1 && lockedBatchTableHeight
-              ? { minHeight: `${lockedBatchTableHeight}px` }
-              : undefined
-          }
-        >
-          <table className="custom-data-table">
-            <thead>
-              <tr>
-                {isSelectionMode && (
-                  <th className="w-10 px-3 text-center">
-                    <input
-                      type="checkbox"
-                      checked={
-                        paginatedBatchRequests.length > 0 &&
-                        paginatedBatchRequests.every((item) => isItemSelected(item))
-                      }
-                      onChange={() =>
-                        handleToggleSelectAll(paginatedBatchRequests)
-                      }
-                      className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
-                      title="Select all"
-                    />
-                  </th>
-                )}
-                <th className="whitespace-nowrap">Request ID</th>
-                <th className="min-w-[140px]">Student</th>
-                <th className="min-w-[190px] max-w-[260px]">Document Type</th>
-                <th className="whitespace-nowrap">Status</th>
-                <th className="w-[195px] whitespace-nowrap">Assigned Staff</th>
-                <th className="whitespace-nowrap">Assignment Status</th>
-                <th className="text-right whitespace-nowrap min-w-[140px]">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
-                    Loading requests from server...
-                  </td>
-                </tr>
-              ) : batchRequests.length === 0 ? (
-                <tr>
-                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
-                    {requests.length === 0
-                      ? 'No student requests have been submitted yet.'
-                      : 'No requests found in this batch.'}
-                  </td>
-                </tr>
-              ) : (
-                paginatedBatchRequests.map((item) => (
-                  <tr key={item.rawId || item.id} className={isItemSelected(item) && isSelectionMode ? 'bg-indigo-50/50' : ''}>
-                    {isSelectionMode && (
-                      <td className="w-10 px-3 text-center">
-                        <input
-                          type="checkbox"
-                          checked={isItemSelected(item)}
-                          onChange={() => handleToggleSelect(item.rawId || item.id)}
-                          className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
-                        />
-                      </td>
-                    )}
-                    <td className="req-id-text">{item.id}</td>
-                    <td>
-                      <div className="student-name-text">{item.student_name}</div>
-                      <div className="student-id-sub">{item.student_id}</div>
-                    </td>
-                    <td>
-                      <div className="doc-name-text">{item.document_type}</div>
-                      <div className="doc-copies-sub">{item.copies}</div>
-                    </td>
-                    <td>{getStatusBadge(item.batch_status || item.status)}</td>
-                    <td>
-                      <StaffAssignDropdown
-                        value={item.assigned_staff || ''}
-                        staffMembers={staffMembers}
-                        onChange={(nextStaff) => handleAssignStaff(item.id, item.rawId, nextStaff)}
-                      />
-                    </td>
-                    <td>
-                      {item.assigned_staff ? (
-                        <span className="badge-assigned">
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>Assigned</span>
-                        </span>
-                      ) : (
-                        <span className="badge-unassigned">
-                          <span>Unassigned</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="text-right whitespace-nowrap">
-                      <div className="inline-flex items-center justify-end gap-2 flex-nowrap whitespace-nowrap">
-                        {isClaimedStatus(item.batch_status || item.status) && !isRequestArchived(item, archivedMap) && (
-                          <button
-                            type="button"
-                            onClick={() => handleArchiveRequest(item)}
-                            className="staff-btn-archive"
-                            title="Document claimed: Mark as Done and move to History"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                            </svg>
-                            <span>Done</span>
-                          </button>
-                        )}
-                        {isRequestArchived(item, archivedMap) && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                            <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                            </svg>
-                            <span>Done</span>
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleOpenProcess(item)}
-                          className="staff-btn-view"
-                          title="View request details"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <circle cx="12" cy="12" r="3" strokeWidth={2} />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                          <span>View</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        {!loading && (
-          <TablePagination
-            currentPage={safeBatchPage}
-            totalItems={batchRequests.length}
-            pageSize={BATCH_PAGE_SIZE}
-            onPageChange={setBatchPage}
-            accentColor="blue"
-          />
-        )}
-      </div>
-
       <div className="req-search-card">
         <h4 className="req-search-title">Search</h4>
         <div className="req-search-controls">
@@ -1769,16 +1557,11 @@ export default function RegistrarRequestsPage() {
         </div>
       </div>
 
-      <div className="requests-list-card" style={{ overflowAnchor: 'none' }}>
-        <div className="requests-list-header flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <h3 className="requests-list-title">Requests</h3>
-            <p className="requests-list-subtitle">
-              {isStaff
-                ? 'Process approved requests, prepare documents, and update request statuses'
-                : 'Review and approve/reject credential requests from students'}
-            </p>
-          </div>
+      <div className="assign-table-card" style={{ overflowAnchor: 'none' }}>
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <h3 className="assign-table-title !mb-0">
+            Requests Assignment - {selectedBatch === 'ALL' ? 'All Batches' : selectedBatch}
+          </h3>
           <div className="flex items-center gap-3 flex-wrap">
             {/* Auto-Approval Toggle Pill */}
             <div className="bg-slate-50 border border-slate-200/90 rounded-xl px-3 py-1.5 flex items-center gap-3 shadow-2xs">
@@ -1859,11 +1642,11 @@ export default function RegistrarRequestsPage() {
         </div>
 
         <div
-          ref={requestsTableRef}
+          ref={batchTableRef}
           className="table-responsive"
           style={
-            totalRequestsPages > 1 && lockedRequestsTableHeight
-              ? { minHeight: `${lockedRequestsTableHeight}px` }
+            totalBatchPages > 1 && lockedBatchTableHeight
+              ? { minHeight: `${lockedBatchTableHeight}px` }
               : undefined
           }
         >
@@ -1875,49 +1658,44 @@ export default function RegistrarRequestsPage() {
                     <input
                       type="checkbox"
                       checked={
-                        paginatedActiveRequests.length > 0 &&
-                        paginatedActiveRequests.every((item) => isItemSelected(item))
+                        paginatedBatchRequests.length > 0 &&
+                        paginatedBatchRequests.every((item) => isItemSelected(item))
                       }
                       onChange={() =>
-                        handleToggleSelectAll(paginatedActiveRequests)
+                        handleToggleSelectAll(paginatedBatchRequests)
                       }
                       className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
                       title="Select all"
                     />
                   </th>
                 )}
-                <th>Request ID</th>
-                <th>Student</th>
-                <th>Document Type</th>
-                <th>Status</th>
-                <th>Request Date</th>
-                <th>Release Date</th>
-                <th className="text-right whitespace-nowrap min-w-[170px]">Actions</th>
+                <th className="whitespace-nowrap">Request ID</th>
+                <th className="min-w-[140px]">Student</th>
+                <th className="min-w-[190px] max-w-[260px]">Document Type</th>
+                <th className="whitespace-nowrap">Status</th>
+                <th className="whitespace-nowrap">Release Date</th>
+                <th className="w-[195px] whitespace-nowrap">Assigned Staff</th>
+                <th className="whitespace-nowrap">Assignment Status</th>
+                <th className="text-right whitespace-nowrap min-w-[140px]">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
+                  <td colSpan={isSelectionMode ? 9 : 8} className="py-8 text-center text-sm text-slate-400">
                     Loading requests from server...
                   </td>
                 </tr>
-              ) : error ? (
+              ) : batchRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-rose-500">
-                    {error}
-                  </td>
-                </tr>
-              ) : activeFilteredRequests.length === 0 ? (
-                <tr>
-                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
-                    {activeTotalCount === 0
-                      ? 'No active student requests in queue.'
-                      : 'No active requests found matching your filter criteria.'}
+                  <td colSpan={isSelectionMode ? 9 : 8} className="py-8 text-center text-sm text-slate-400">
+                    {requests.length === 0
+                      ? 'No student requests have been submitted yet.'
+                      : 'No requests found in this batch.'}
                   </td>
                 </tr>
               ) : (
-                paginatedActiveRequests.map((item) => (
+                paginatedBatchRequests.map((item) => (
                   <tr key={item.rawId || item.id} className={isItemSelected(item) && isSelectionMode ? 'bg-indigo-50/50' : ''}>
                     {isSelectionMode && (
                       <td className="w-10 px-3 text-center">
@@ -1938,12 +1716,34 @@ export default function RegistrarRequestsPage() {
                       <div className="doc-name-text">{item.document_type}</div>
                       <div className="doc-copies-sub">{item.copies}</div>
                     </td>
-                    <td>{getStatusBadge(item.status)}</td>
-                    <td className="font-semibold text-slate-800">{item.request_date}</td>
-                    <td className="font-semibold text-slate-800">{item.release_date}</td>
+                    <td>{getStatusBadge(item.batch_status || item.status)}</td>
+                    <td className="font-semibold text-slate-800 whitespace-nowrap">
+                      {item.release_date || item.date_of_release || '—'}
+                    </td>
+                    <td>
+                      <StaffAssignDropdown
+                        value={item.assigned_staff || ''}
+                        staffMembers={staffMembers}
+                        onChange={(nextStaff) => handleAssignStaff(item.id, item.rawId, nextStaff)}
+                      />
+                    </td>
+                    <td>
+                      {item.assigned_staff ? (
+                        <span className="badge-assigned">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Assigned</span>
+                        </span>
+                      ) : (
+                        <span className="badge-unassigned">
+                          <span>Unassigned</span>
+                        </span>
+                      )}
+                    </td>
                     <td className="text-right whitespace-nowrap">
                       <div className="inline-flex items-center justify-end gap-2 flex-nowrap whitespace-nowrap">
-                        {isClaimedStatus(item.status) && !isRequestArchived(item, archivedMap) && (
+                        {isClaimedStatus(item.batch_status || item.status) && !isRequestArchived(item, archivedMap) && (
                           <button
                             type="button"
                             onClick={() => handleArchiveRequest(item)}
@@ -1984,12 +1784,12 @@ export default function RegistrarRequestsPage() {
             </tbody>
           </table>
         </div>
-        {!loading && !error && (
+        {!loading && (
           <TablePagination
-            currentPage={safeRequestsPage}
-            totalItems={activeFilteredRequests.length}
+            currentPage={safeBatchPage}
+            totalItems={batchRequests.length}
             pageSize={BATCH_PAGE_SIZE}
-            onPageChange={setRequestsPage}
+            onPageChange={setBatchPage}
             accentColor="blue"
           />
         )}

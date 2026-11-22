@@ -1058,12 +1058,15 @@ export default function ProcessRequestModal({
 
       if (isBackendId) {
         const opRemarks = mergeStaffNoteIntoRemarks(requestItem, '');
+        const targetRelDate = dateOfRelease || requestItem?.release_date || requestItem?.date_of_release || null;
         try {
           transitionRes = await requestsApi.transition(
             targetRawId,
             {
               status: 'PAYMENT_PENDING',
               remarks: opRemarks,
+              release_date: targetRelDate,
+              date_of_release: targetRelDate,
             },
             { throwOnError: true }
           );
@@ -1071,14 +1074,14 @@ export default function ProcessRequestModal({
           try {
             await requestsApi.transition(
               targetRawId,
-              { status: 'REQUIREMENTS_VERIFICATION', remarks: opRemarks },
+              { status: 'REQUIREMENTS_VERIFICATION', remarks: opRemarks, release_date: targetRelDate, date_of_release: targetRelDate },
               { throwOnError: true }
             );
           } catch {}
           try {
             transitionRes = await requestsApi.transition(
               targetRawId,
-              { status: 'PAYMENT_PENDING', remarks: opRemarks },
+              { status: 'PAYMENT_PENDING', remarks: opRemarks, release_date: targetRelDate, date_of_release: targetRelDate },
               { throwOnError: true }
             );
           } catch (err2) {
@@ -1614,6 +1617,8 @@ export default function ProcessRequestModal({
             {
               status: backendStatus,
               remarks: transitionRemarks,
+              release_date: dateOfRelease || requestItem?.release_date || requestItem?.date_of_release || null,
+              date_of_release: dateOfRelease || requestItem?.date_of_release || requestItem?.release_date || null,
             },
             { throwOnError: true }
           );

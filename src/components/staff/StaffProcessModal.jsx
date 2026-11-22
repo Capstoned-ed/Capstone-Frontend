@@ -85,11 +85,23 @@ export default function StaffProcessModal({
     normalizeStatus(newStatus || selectedRequest?.status || 'Processing')
   );
 
+  const [localReleaseDate, setLocalReleaseDate] = useState(() => {
+    const raw = selectedRequest?.release_date || selectedRequest?.date_of_release;
+    return raw ? String(raw).split('T')[0] : '';
+  });
+
   useEffect(() => {
     if (newStatus) {
       setLocalStatus(normalizeStatus(newStatus));
     }
   }, [newStatus]);
+
+  useEffect(() => {
+    const raw = selectedRequest?.release_date || selectedRequest?.date_of_release;
+    if (raw) {
+      setLocalReleaseDate(String(raw).split('T')[0]);
+    }
+  }, [selectedRequest]);
 
   const isTerminal = useMemo(() => {
     const raw = String(selectedRequest?.status || '').toUpperCase();
@@ -281,6 +293,10 @@ export default function StaffProcessModal({
               if (selectedRequest) {
                 const effectiveStatus = localStatus || newStatus || selectedRequest.status || 'Pending';
                 selectedRequest.status = effectiveStatus;
+                if (localReleaseDate) {
+                  selectedRequest.release_date = localReleaseDate;
+                  selectedRequest.date_of_release = localReleaseDate;
+                }
               }
               if (onUpdateStatus) {
                 onUpdateStatus(e);
@@ -336,7 +352,20 @@ export default function StaffProcessModal({
 
                   <div className="staff-field-group">
                     <span className="staff-field-label">Target Release Date</span>
-                    <div className="staff-field-pill font-semibold">{dateOfRelease}</div>
+                    <input
+                      type="date"
+                      value={localReleaseDate || ''}
+                      onChange={(e) => {
+                        if (updating || isTerminal) return;
+                        setLocalReleaseDate(e.target.value);
+                        if (selectedRequest) {
+                          selectedRequest.release_date = e.target.value;
+                          selectedRequest.date_of_release = e.target.value;
+                        }
+                      }}
+                      disabled={updating || isTerminal}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 bg-white disabled:bg-slate-50 disabled:text-slate-500"
+                    />
                   </div>
                 </div>
 
