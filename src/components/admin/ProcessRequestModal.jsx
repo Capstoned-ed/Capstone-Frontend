@@ -20,7 +20,6 @@ import requestsApi, {
 import clearancesApi, { resolveClearancePreview } from '../../api/clearances';
 import { DocumentItemsList } from '../common/ExpandableDocList';
 import settingsApi from '../../api/settings';
-import { saveStoredNotification } from '../../api/notifications';
 import paymentsApi, { getStoredPaymentProof, verifyStoredPaymentProof } from '../../api/payments';
 import {
   REQUEST_STATUS,
@@ -1129,19 +1128,6 @@ export default function ProcessRequestModal({
       setLocalIsApproved(resolvedIsApproved);
       setLocalApprovedByName(resolvedApprovedByName);
 
-      saveStoredNotification({
-        event_type: 'PAYMENT_PENDING',
-        title: 'Your Request Is Ready for Payment',
-        message: `Your credential request has been reviewed and confirmed. The status is now "For Payment".\n\n• Request Number: ${trackingCode}\n• Requested Document: ${docName}\n• Total Amount: ${cleanAmount}\n\nPlease download and print your official request form and proceed with payment.\n\nAfter payment, attach your Official Receipt (OR) in the Payments page.`,
-        related_object_type: 'CredentialRequest',
-        related_object_id: trackingCode,
-        target_role: 'student',
-        target_roles: ['student'],
-        target_user_id: requestItem.user || null,
-        target_username: requestItem.student_id || requestItem.student_name || null,
-        target_student_id: requestItem.student_id || null,
-      });
-
       logProcessedAction({
         actor: user?.username,
         actorName: user?.full_name || user?.username,
@@ -1217,19 +1203,6 @@ export default function ProcessRequestModal({
         documentType: requestItem.document_type,
         action: `Request rejected: ${reason}`,
         status: 'Rejected',
-      });
-
-      saveStoredNotification({
-        event_type: 'REQUEST_STATUS_CHANGED',
-        title: 'Request Rejected',
-        message: `Your request ${trackingCode} for ${requestItem.document_type || 'credential'} was rejected. Reason: ${reason}`,
-        related_object_type: 'CredentialRequest',
-        related_object_id: trackingCode,
-        target_role: 'student',
-        target_roles: ['student'],
-        target_user_id: requestItem.user || null,
-        target_username: requestItem.student_id || requestItem.student_name || null,
-        target_student_id: requestItem.student_id || null,
       });
 
       setStatusDirectly('Rejected');
@@ -1442,17 +1415,6 @@ export default function ProcessRequestModal({
       });
 
       if (isVerified) {
-        saveStoredNotification({
-          event_type: 'PAYMENT_VERIFIED',
-          message: `Your payment (OR: ${finalOrNumber}) for request ${trackingCode} has been verified by the Registrar. Your request status is now Processing.`,
-          related_object_type: 'CredentialRequest',
-          related_object_id: trackingCode,
-          target_role: 'student',
-          target_roles: ['student'],
-          target_user_id: requestItem.user || null,
-          target_username: requestItem.student_name || null,
-          target_student_id: requestItem.student_id || null,
-        });
         toast.success('Payment confirmed! Status updated to "Processing".');
         onClose();
       } else {
@@ -1791,19 +1753,6 @@ export default function ProcessRequestModal({
         documentType: requestItem.document_type,
         action: 'Marked Claimed & moved to History',
         status: 'Claimed',
-      });
-
-      saveStoredNotification({
-        event_type: 'DOCUMENT_CLAIMED',
-        title: 'Document Claimed Successfully',
-        message: `Your requested credential (${requestItem.document_type}) has been officially claimed and released. Thank you!`,
-        related_object_type: 'CredentialRequest',
-        related_object_id: trackingCode,
-        target_role: 'student',
-        target_roles: ['student'],
-        target_user_id: requestItem.user || null,
-        target_username: requestItem.student_id || requestItem.student_name || null,
-        target_student_id: requestItem.student_id || null,
       });
 
       if (onUpdated) {

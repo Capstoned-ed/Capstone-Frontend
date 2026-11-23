@@ -1,6 +1,4 @@
 import apiClient from './client';
-import { saveStoredNotification } from './notifications';
-import { getStaffAssignments } from './requests';
 
 // Clean up legacy keys that were mistakenly saved by student ID or user ID
 if (typeof window !== 'undefined' && window.localStorage) {
@@ -125,35 +123,6 @@ export const paymentsApi = {
         } catch {}
       }
     }
-
-    // Notify assigned Staff & Registrar that student has submitted proof of payment
-    const assignmentsMap = getStaffAssignments();
-    const assignedStaff =
-      assignmentsMap[String(trackingNumber)] ||
-      assignmentsMap[String(requestId)] ||
-      null;
-    saveStoredNotification({
-      event_type: 'PAYMENT_SUBMITTED',
-      message: `Proof of Payment: ${studentName} (${studentId || trackingNumber}) submitted Official Receipt ${receiptReferenceNumber || ''} (₱${numericAmount.toFixed(2)}) for request ${trackingNumber}.`,
-      related_object_type: 'Payment',
-      related_object_id: trackingNumber || requestId,
-      target_roles: ['staff', 'registrar'],
-      target_role: 'staff',
-      target_name: assignedStaff || undefined,
-    });
-
-    // Notify Student confirming submission
-    saveStoredNotification({
-      event_type: 'PAYMENT_SUBMITTED',
-      message: `Your proof of payment (${receiptReferenceNumber || 'Official Receipt'}) for request ${trackingNumber} has been received and is pending Registrar verification.`,
-      related_object_type: 'Payment',
-      related_object_id: trackingNumber || requestId,
-      target_roles: ['student'],
-      target_role: 'student',
-      target_user_id: userId,
-      target_student_id: studentId,
-      target_username: studentName,
-    });
 
     return paymentRecord;
   },

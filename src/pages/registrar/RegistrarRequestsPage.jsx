@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, getStaffAssignmentTimestamps, recordStaffAssignmentTimestamp, getRequestActivityTimestamps, recordRequestActivityTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived, preserveDocTagInRemarks, mergeReleaseDateIntoRemarks, formatCleanPurpose } from '../../api/requests';
-import { saveStoredNotification } from '../../api/notifications';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
 import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
@@ -1070,18 +1069,6 @@ export default function RegistrarRequestsPage() {
       const docType = req?.document_type || 'Credential Request';
       const studentName = req?.student_name || 'Student';
 
-      saveStoredNotification({
-        event_type: 'REQUEST_ASSIGNED',
-        title: 'New Assigned Request',
-        message: `New assigned request: You have been assigned to process ${docType} (${trackingNum}) for ${studentName}.`,
-        related_object_type: 'CredentialRequest',
-        related_object_id: trackingNum,
-        target_role: 'staff',
-        target_roles: ['staff'],
-        target_user_id: targetStaff?.id || null,
-        target_username: targetStaff?.username || null,
-        target_name: staffName,
-      });
       window.dispatchEvent(new Event('regquest_assignments_updated'));
       window.dispatchEvent(new Event('regquest_requests_updated'));
       await loadData();

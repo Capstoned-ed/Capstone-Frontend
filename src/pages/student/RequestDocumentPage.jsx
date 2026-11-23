@@ -7,7 +7,6 @@ import requestsApi, {
   resolveDocCodes,
   generateTrackingNumberFallback,
 } from '../../api/requests';
-import { saveStoredNotification } from '../../api/notifications';
 import credentialTypesApi from '../../api/credentialTypes';
 import settingsApi from '../../api/settings';
 import clearancesApi, { saveClearanceAttachment } from '../../api/clearances';
