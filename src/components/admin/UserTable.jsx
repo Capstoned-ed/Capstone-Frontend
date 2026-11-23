@@ -240,7 +240,7 @@ export default function UserTable({
           <div className="flex items-center gap-1.5 flex-wrap">
             {[
               { key: 'ALL', label: 'All Roles' },
-              { key: ROLES.REGISTRAR, label: 'Registrar' },
+              { key: ROLES.REGISTRAR, label: 'Registrar Frontdesk' },
               { key: ROLES.STAFF, label: 'Staff' },
               { key: ROLES.ADMIN, label: 'Administrator' },
             ].map((tab) => (
@@ -356,7 +356,7 @@ export default function UserTable({
                           </span>
                         ) : (
                           <span className="role-badge role-badge-registrar">
-                            Registrar
+                            Registrar Frontdesk
                           </span>
                         )}
                       </td>

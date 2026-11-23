@@ -35,6 +35,7 @@ import { StaffRequestsTable, StaffSearchFilter } from '../../components/staff';
 import {
   REQUEST_STATUS,
   REQUEST_STATUSES,
+  STAFF_REQUEST_STATUSES,
   BACKEND_STATUS_MAP,
   normalizeToBackendStatus,
   formatStatusDisplay,
@@ -611,7 +612,14 @@ export default function StaffRequestsPage() {
         if (/^student\s*#?\s*[1-4]$/i.test(sName) || /^student\s*#?\s*[1-4]$/i.test(sId)) {
           return false;
         }
-        return true;
+        // Strict separation of duties: Staff queue only displays verified requests (Processing and onward)
+        const norm = normalizeToBackendStatus(r.rawStatus || r.status);
+        const verifiedStatuses = [
+          REQUEST_STATUS.PROCESSING,
+          REQUEST_STATUS.READY_FOR_RELEASE,
+          REQUEST_STATUS.RELEASED,
+        ];
+        return verifiedStatuses.includes(norm);
       });
 
     return built.sort(sortRequestsNewestFirst);
@@ -1502,7 +1510,7 @@ export default function StaffRequestsPage() {
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
         credentialTypes={credentialTypes}
-        requestStatuses={REQUEST_STATUSES.filter((st) => st !== 'Claimed')}
+        requestStatuses={activeTab === 'history' ? ['Claimed'] : ['Processing', 'Releasing']}
         showStatusFilter={activeTab !== 'history'}
       />
 

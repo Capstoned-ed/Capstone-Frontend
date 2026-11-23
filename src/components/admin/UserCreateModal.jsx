@@ -357,7 +357,7 @@ export default function UserCreateModal({ isOpen, onClose, onUserCreated }) {
               disabled={loading}
               buttonClassName="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-[#0B0B36]/20 focus:border-[#0B0B36] disabled:bg-slate-100 disabled:cursor-not-allowed"
               options={[
-                { value: ROLES.REGISTRAR, label: 'Registrar — Review and approve/reject credential requests' },
+                { value: ROLES.REGISTRAR, label: 'Registrar Frontdesk — Review clearance, verify payments, and approve requests' },
                 { value: ROLES.STAFF, label: 'Staff — Process approved requests, prepare documents, and update statuses' },
                 { value: ROLES.ADMIN, label: 'Admin — Manage user accounts, assign roles, system settings, reports & monitor activities' },
                 { value: ROLES.STUDENT, label: 'Student — Request credentials and track status' },

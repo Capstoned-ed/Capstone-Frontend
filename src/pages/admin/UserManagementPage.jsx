@@ -664,7 +664,7 @@ export default function UserManagementPage() {
   const students = users.filter((u) => u.role === ROLES.STUDENT).length;
 
   const roleDescriptionMap = {
-    [ROLES.REGISTRAR]: 'Review and approve/reject credential requests.',
+    [ROLES.REGISTRAR]: 'Review clearance, verify OTC payments, approve requests, and oversee student records.',
     [ROLES.STAFF]: 'Process approved requests, prepare documents, and update request statuses.',
     [ROLES.ADMIN]: 'Manage user accounts, assign roles, system settings, reports, and monitor overall system activities.',
   };
@@ -681,7 +681,7 @@ export default function UserManagementPage() {
       ),
     },
     {
-      title: 'Registrar',
+      title: 'Registrar Frontdesk',
       value: registrars,
       pillClass: 'user-stat-pill-indigo',
       icon: (
@@ -887,7 +887,7 @@ export default function UserManagementPage() {
                   onChange={setAddUserRole}
                   buttonClassName="add-user-select"
                   options={[
-                    { value: ROLES.REGISTRAR, label: 'Registrar' },
+                    { value: ROLES.REGISTRAR, label: 'Registrar Frontdesk' },
                     { value: ROLES.STAFF, label: 'Staff' },
                     { value: ROLES.ADMIN, label: 'Administrator' },
                   ]}

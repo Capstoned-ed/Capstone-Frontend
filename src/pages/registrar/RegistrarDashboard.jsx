@@ -423,7 +423,7 @@ export default function RegistrarDashboard() {
         {/* Banner Text Content */}
         <div className="admin-banner-content">
           <h1 className="admin-banner-title">
-            Registrar{' '}
+            Registrar Frontdesk{' '}
             <span className="admin-banner-title-highlight">Dashboard</span>
           </h1>
           <p className="admin-banner-subtitle">

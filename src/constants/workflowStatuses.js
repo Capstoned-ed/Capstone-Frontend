@@ -245,3 +245,12 @@ export const REQUEST_STATUSES = Object.freeze([
   'Rejected',
   'Cancelled',
 ]);
+
+/**
+ * Verified statuses accessible to Staff role.
+ */
+export const STAFF_REQUEST_STATUSES = Object.freeze([
+  'Processing',
+  'Releasing',
+  'Claimed',
+]);

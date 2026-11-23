@@ -225,7 +225,9 @@ export default function Sidebar({ isCollapsed, onToggle, onNavigate }) {
     (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : null) ||
     (user?.username && !/^\d{6,}$/.test(user.username) ? user.username : null) ||
     (user?.username === '2023301564' ? 'Daisy Traya' : user?.username || 'Juan De Letchi');
-  const roleDisplay = userRole
+  const roleDisplay = userRole === ROLES.REGISTRAR
+    ? 'Registrar Frontdesk'
+    : userRole
     ? userRole.charAt(0).toUpperCase() + userRole.slice(1)
     : 'Student';
 

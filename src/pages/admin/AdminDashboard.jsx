@@ -94,7 +94,7 @@ export default function AdminDashboard() {
         {/* Banner Text Content */}
         <div className="admin-banner-content">
           <h1 className="admin-banner-title">
-            {isRegistrar ? 'Registrar' : 'Admin'}{' '}
+            {isRegistrar ? 'Registrar Frontdesk' : 'Admin'}{' '}
             <span className="admin-banner-title-highlight">Dashboard</span>
           </h1>
           <p className="admin-banner-subtitle">

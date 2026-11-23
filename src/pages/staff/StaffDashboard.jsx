@@ -268,6 +268,15 @@ export default function StaffDashboard() {
           if (/^student\s*#?\s*[1-4]$/i.test(sName) || /^student\s*#?\s*[1-4]$/i.test(sId)) {
             return false;
           }
+          if (String(user?.role || '').toLowerCase() === 'staff') {
+            const norm = normalizeToBackendStatus(r.rawStatus || r.status);
+            const verifiedStatuses = [
+              REQUEST_STATUS.PROCESSING,
+              REQUEST_STATUS.READY_FOR_RELEASE,
+              REQUEST_STATUS.RELEASED,
+            ];
+            return verifiedStatuses.includes(norm);
+          }
           return true;
         })
         .sort(sortRequestsNewestFirst);
@@ -826,18 +835,20 @@ export default function StaffDashboard() {
             <p className="staff-dash-metric-sub">{user?.role === 'staff' ? 'Assigned to Me' : 'All Time'}</p>
           </div>
 
-          <div className="staff-dash-metric-card pending">
-            <div className="staff-dash-metric-top">
-              <span className="staff-dash-metric-label">Pending</span>
-              <svg className="w-5 h-5 text-[#1E3A8A]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
+          {user?.role !== 'staff' && (
+            <div className="staff-dash-metric-card pending">
+              <div className="staff-dash-metric-top">
+                <span className="staff-dash-metric-label">Pending</span>
+                <svg className="w-5 h-5 text-[#1E3A8A]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </div>
+              <p className="staff-dash-metric-val">{metrics.pending}</p>
+              <p className="staff-dash-metric-sub">Need Attention</p>
             </div>
-            <p className="staff-dash-metric-val">{metrics.pending}</p>
-            <p className="staff-dash-metric-sub">Need Attention</p>
-          </div>
+          )}
 
           <div className="staff-dash-metric-card processing">
             <div className="staff-dash-metric-top">
@@ -851,18 +862,20 @@ export default function StaffDashboard() {
             <p className="staff-dash-metric-sub">In progress</p>
           </div>
 
-          <div className="staff-dash-metric-card on-hold">
-            <div className="staff-dash-metric-top">
-              <span className="staff-dash-metric-label">On Hold</span>
-              <svg className="w-5 h-5 text-[#1E3A8A]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="10" y1="15" x2="10" y2="9" />
-                <line x1="14" y1="15" x2="14" y2="9" />
-              </svg>
+          {user?.role !== 'staff' && (
+            <div className="staff-dash-metric-card on-hold">
+              <div className="staff-dash-metric-top">
+                <span className="staff-dash-metric-label">On Hold</span>
+                <svg className="w-5 h-5 text-[#1E3A8A]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="10" y1="15" x2="10" y2="9" />
+                  <line x1="14" y1="15" x2="14" y2="9" />
+                </svg>
+              </div>
+              <p className="staff-dash-metric-val">{metrics.onHold}</p>
+              <p className="staff-dash-metric-sub">Awaiting Action</p>
             </div>
-            <p className="staff-dash-metric-val">{metrics.onHold}</p>
-            <p className="staff-dash-metric-sub">Awaiting Action</p>
-          </div>
+          )}
 
           <div className="staff-dash-metric-card for-release">
             <div className="staff-dash-metric-top">

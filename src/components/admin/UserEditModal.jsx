@@ -448,7 +448,7 @@ function EditUserForm({ user, onClose, onUserUpdated, existingUsers = [] }) {
           }}
           buttonClassName={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${isSelf ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
           options={[
-            { value: ROLES.REGISTRAR, label: 'Registrar' },
+            { value: ROLES.REGISTRAR, label: 'Registrar Frontdesk' },
             { value: ROLES.STAFF, label: 'Staff' },
             { value: ROLES.ADMIN, label: 'Admin' },
           ]}

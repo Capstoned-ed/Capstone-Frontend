@@ -887,6 +887,10 @@ export default function ProcessRequestModal({
       toast.warning('View Only (Admin): Admins have read-only access to clearance verification.');
       return;
     }
+    if (!isRegistrarOrAdmin) {
+      toast.warning('Permission Denied: Only Registrar Frontdesk can review clearances.');
+      return;
+    }
     const previousStatus = clearanceStatus;
     setReviewingClearance(true);
     setClearanceStatus(statusToSet);
@@ -1260,6 +1264,10 @@ export default function ProcessRequestModal({
   const handleVerifyPayment = async (actionToSet = 'VERIFIED') => {
     if (isAdmin) {
       toast.warning('View Only (Admin): Admins cannot verify payment.');
+      return;
+    }
+    if (!isRegistrarOrAdmin) {
+      toast.warning('Permission Denied: Only Registrar Frontdesk can verify payments.');
       return;
     }
     if (isPaymentLocked && actionToSet !== 'VERIFIED') {
@@ -2079,16 +2087,22 @@ export default function ProcessRequestModal({
                               </svg>
                               <span>Clearance Rejected</span>
                             </div>
-                            <button
-                              type="button"
-                              disabled={reviewingClearance}
-                              onClick={() => handleVerifyClearance('PENDING')}
-                              className="px-2 py-1.5 text-[11px] font-semibold text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-indigo-200"
-                              title="Re-review clearance"
-                            >
-                              Re-review
-                            </button>
+                            {isRegistrarOrAdmin && (
+                              <button
+                                type="button"
+                                disabled={reviewingClearance}
+                                onClick={() => handleVerifyClearance('PENDING')}
+                                className="px-2 py-1.5 text-[11px] font-semibold text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-indigo-200"
+                                title="Re-review clearance"
+                              >
+                                Re-review
+                              </button>
+                            )}
                           </>
+                        ) : !isRegistrarOrAdmin ? (
+                          <div className="px-3 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 font-bold text-xs rounded-lg flex items-center gap-1.5">
+                            <span>Awaiting Registrar Review</span>
+                          </div>
                         ) : (
                           <>
                             <button
@@ -2616,7 +2630,7 @@ export default function ProcessRequestModal({
                         </svg>
                         <span>Payment Confirmed</span>
                       </div>
-                      {!isPaymentLocked && (
+                      {!isPaymentLocked && isRegistrarOrAdmin && (
                         <button
                           type="button"
                           onClick={() => handleVerifyPayment('PENDING')}
@@ -2638,29 +2652,35 @@ export default function ProcessRequestModal({
                         </svg>
                         <span>Payment Rejected</span>
                       </div>
-                      <button
-                        type="button"
-                        disabled={!canConfirmPayment || isAdmin || isPersistedTerminal || isPaymentLocked}
-                        aria-disabled={!canConfirmPayment || isAdmin || isPersistedTerminal || isPaymentLocked ? 'true' : undefined}
-                        tabIndex={!canConfirmPayment || isAdmin || isPersistedTerminal || isPaymentLocked ? -1 : undefined}
-                        onClick={() => handleVerifyPayment('VERIFIED')}
-                        className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                          canConfirmPayment && !isAdmin && !isPersistedTerminal && !isPaymentLocked
-                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs'
-                            : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
-                        }`}
-                        title={
-                          isAdmin
-                            ? 'View Only (Admin)'
-                            : isPaymentLocked
-                            ? 'Payment is locked'
-                            : !hasReceiptUploaded && !hasOrNumber
-                            ? 'Cannot confirm payment: Please enter the O.R. Number or upload receipt'
-                            : 'Confirm and verify payment'
-                        }
-                      >
-                        Confirm Payment
-                      </button>
+                      {isRegistrarOrAdmin && (
+                        <button
+                          type="button"
+                          disabled={!canConfirmPayment || isAdmin || isPersistedTerminal || isPaymentLocked}
+                          aria-disabled={!canConfirmPayment || isAdmin || isPersistedTerminal || isPaymentLocked ? 'true' : undefined}
+                          tabIndex={!canConfirmPayment || isAdmin || isPersistedTerminal || isPaymentLocked ? -1 : undefined}
+                          onClick={() => handleVerifyPayment('VERIFIED')}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                            canConfirmPayment && !isAdmin && !isPersistedTerminal && !isPaymentLocked
+                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs'
+                              : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
+                          }`}
+                          title={
+                            isAdmin
+                              ? 'View Only (Admin)'
+                              : isPaymentLocked
+                              ? 'Payment is locked'
+                              : !hasReceiptUploaded && !hasOrNumber
+                              ? 'Cannot confirm payment: Please enter the O.R. Number or upload receipt'
+                              : 'Confirm and verify payment'
+                          }
+                        >
+                          Confirm Payment
+                        </button>
+                      )}
+                    </div>
+                  ) : !isRegistrarOrAdmin ? (
+                    <div className="px-3.5 py-2 bg-amber-50 border border-amber-300 text-amber-800 font-bold text-xs rounded-lg flex items-center gap-1.5">
+                      <span>Awaiting Registrar Verification</span>
                     </div>
                   ) : (
                     <>
