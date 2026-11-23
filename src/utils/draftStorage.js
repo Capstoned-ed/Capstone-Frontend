@@ -224,6 +224,125 @@ export async function getDraftFile(userId, fileKey) {
 }
 
 /**
+ * Downscale and compress an image file using an offscreen HTML5 canvas.
+ * Reduces 6-10MB mobile phone camera photos down to ~250-400KB to prevent mobile Out-of-Memory crashes.
+ *
+ * @param {File} file - Source File object.
+ * @param {Object} [options]
+ * @param {number} [options.maxDimension=1600] - Max width or height in pixels.
+ * @param {number} [options.quality=0.82] - JPEG/WebP compression quality (0.0 to 1.0).
+ * @returns {Promise<File>} Compressed File object.
+ */
+export async function compressImageFile(file, { maxDimension = 1600, quality = 0.82 } = {}) {
+  if (!file || typeof window === 'undefined' || !file.type || !file.type.startsWith('image/')) {
+    return file;
+  }
+  if (file.type === 'image/svg+xml' || file.type === 'image/gif') {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    let objectUrl = null;
+    try {
+      objectUrl = URL.createObjectURL(file);
+    } catch {
+      resolve(file);
+      return;
+    }
+
+    const img = new Image();
+
+    const cleanup = () => {
+      if (objectUrl) {
+        try {
+          URL.revokeObjectURL(objectUrl);
+        } catch {}
+        objectUrl = null;
+      }
+    };
+
+    img.onload = () => {
+      try {
+        let { width, height } = img;
+        const needsDownscale = width > maxDimension || height > maxDimension;
+
+        if (needsDownscale) {
+          const ratio = Math.min(maxDimension / width, maxDimension / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        } else if (file.size <= 400 * 1024) {
+          // Already within 1600px and lightweight
+          cleanup();
+          resolve(file);
+          return;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, width);
+        canvas.height = Math.max(1, height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          cleanup();
+          resolve(file);
+          return;
+        }
+
+        // Fill white background for transparent PNGs
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const isWebp = file.type === 'image/webp';
+        const targetMime = isWebp ? 'image/webp' : 'image/jpeg';
+        const extension = isWebp ? '.webp' : '.jpg';
+
+        canvas.toBlob(
+          (blob) => {
+            cleanup();
+            if (!blob) {
+              resolve(file);
+              return;
+            }
+
+            if (blob.size >= file.size && !needsDownscale) {
+              resolve(file);
+              return;
+            }
+
+            const rawBaseName = (file.name || 'document').replace(/\.[^/.]+$/, '');
+            const safeBaseName = rawBaseName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+            const compressedFilename = `${safeBaseName}${extension}`;
+
+            const compressedFile = new File([blob], compressedFilename, {
+              type: targetMime,
+              lastModified: Date.now(),
+            });
+
+            resolve(compressedFile);
+          },
+          targetMime,
+          quality
+        );
+      } catch (err) {
+        cleanup();
+        console.warn('[draftStorage] Image compression error, using original file:', err);
+        resolve(file);
+      }
+    };
+
+    img.onerror = () => {
+      cleanup();
+      resolve(file);
+    };
+
+    img.src = objectUrl;
+  });
+}
+
+/**
  * Delete a specific draft file or all draft files for a given user.
  */
 export async function clearDraftFiles(userId = null, fileKey = null) {
@@ -239,6 +358,21 @@ export async function clearDraftFiles(userId = null, fileKey = null) {
       sessionStorage.removeItem(`regquest_file_${userId}_clearance`);
       sessionStorage.removeItem(`regquest_file_${userId}_photo`);
       sessionStorage.removeItem(`regquest_request_draft_${userId}`);
+
+      // Thoroughly clear any user-scoped draft keys from sessionStorage
+      const userPrefixes = [
+        `regquest_file_${userId}`,
+        `regquest_draft_${userId}`,
+        `regquest_request_draft_${userId}`,
+      ];
+      const keysToRemove = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && userPrefixes.some((p) => k.startsWith(p))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => sessionStorage.removeItem(k));
     }
   } catch {}
 
@@ -269,6 +403,18 @@ export async function clearDraftFiles(userId = null, fileKey = null) {
       resolve(false);
     }
   });
+}
+
+/**
+ * Purge all draft files from IndexedDB and all draft keys from sessionStorage
+ * for a specific user. Call upon successful request submission so subsequent
+ * requests start with a fresh, un-prefilled form.
+ */
+export async function clearDraftStorage(userId) {
+  if (!userId) {
+    return clearAllDraftStorage();
+  }
+  return clearDraftFiles(userId);
 }
 
 /**

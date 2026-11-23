@@ -19,7 +19,10 @@ import {
   saveDraftFile,
   getDraftFile,
   clearDraftFiles,
+  compressImageFile,
+  clearDraftStorage,
 } from '../../utils/draftStorage';
+import DocumentPreviewModal from '../../components/common/DocumentPreviewModal';
 import ustpLogo from '../../assets/USTP Logo against Light Background 1.png';
 import '../../styles/student/RequestDocumentPage.css';
 
@@ -277,34 +280,83 @@ export default function RequestDocumentPage() {
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
 
-  const handlePhotoUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  // In-Page Document Preview Lightbox Modal State
+  const [previewModal, setPreviewModal] = useState({
+    isOpen: false,
+    title: '',
+    src: '',
+    fileName: '',
+    isPdf: false,
+  });
+
+  const handleOpenClearancePreview = () => {
+    if (!clearancePreview) return;
+    setPreviewModal({
+      isOpen: true,
+      title: 'Clearance Document Preview',
+      src: clearancePreview,
+      fileName: clearanceFile?.name || (clearanceIsPdf ? 'Clearance_Document.pdf' : 'Clearance_Photo.jpg'),
+      isPdf: clearanceIsPdf || clearanceFile?.name?.toLowerCase().endsWith('.pdf'),
+    });
+  };
+
+  const handleOpenPhotoPreview = () => {
+    if (!photoPreview) return;
+    setPreviewModal({
+      isOpen: true,
+      title: 'Passport / 2x2 Photo Preview',
+      src: photoPreview,
+      fileName: photoFile?.name || 'Passport_Photo.jpg',
+      isPdf: false,
+    });
+  };
+
+  const handleClosePreviewModal = () => {
+    setPreviewModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const handlePhotoUpload = async (e) => {
+    const rawFile = e.target.files?.[0];
+    if (rawFile) {
       const allowedPhotoTypes = ['image/jpeg', 'image/png', 'image/webp'];
-      if (!allowedPhotoTypes.includes(file.type.toLowerCase())) {
+      if (!allowedPhotoTypes.includes(rawFile.type.toLowerCase())) {
         toast.warning('Please select a valid image file (PNG, JPG, JPEG, WEBP).');
         e.target.value = '';
         return;
       }
-      if (file.size > 10 * 1024 * 1024) {
+      if (rawFile.size > 10 * 1024 * 1024) {
         toast.warning('Photo file exceeds the 10MB size limit. Please upload a smaller image.');
         e.target.value = '';
         return;
       }
-      setPhotoFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoPreview(reader.result);
-        const draftUserId = user?.id || user?.username || 'guest';
-        saveDraftFile(draftUserId, 'photo', {
-          fileDataUrl: reader.result,
-          name: file.name,
-          type: file.type,
-          size: file.size,
-        });
-      };
-      reader.readAsDataURL(file);
-      toast.success('Photo attached successfully.');
+
+      try {
+        // Downscale and compress image client-side to prevent mobile browser OOM crashes
+        const file = await compressImageFile(rawFile, { maxDimension: 1600, quality: 0.82 });
+        setPhotoFile(file);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const previewUrl = reader.result;
+          setPhotoPreview(previewUrl);
+          const draftUserId = user?.id || user?.username || 'guest';
+          saveDraftFile(draftUserId, 'photo', {
+            fileDataUrl: previewUrl,
+            name: file.name,
+            type: file.type,
+            size: file.size,
+          });
+        };
+        reader.readAsDataURL(file);
+        toast.success('Photo attached successfully.');
+      } catch (err) {
+        console.warn('Could not compress photo, using original:', err);
+        setPhotoFile(rawFile);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setPhotoPreview(reader.result);
+        };
+        reader.readAsDataURL(rawFile);
+      }
       e.target.value = '';
     }
   };
@@ -321,12 +373,12 @@ export default function RequestDocumentPage() {
   const [clearancePreview, setClearancePreview] = useState(null);
   const [clearanceIsPdf, setClearanceIsPdf] = useState(false);
 
-  const handleClearanceUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  const handleClearanceUpload = async (e) => {
+    const rawFile = e.target.files?.[0];
+    if (rawFile) {
       const allowedClearanceTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-      const fileMime = file.type.toLowerCase();
-      const isPdf = fileMime === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      const fileMime = rawFile.type.toLowerCase();
+      const isPdf = fileMime === 'application/pdf' || rawFile.name.toLowerCase().endsWith('.pdf');
       const isImg = fileMime.startsWith('image/') && ['image/jpeg', 'image/png', 'image/webp'].includes(fileMime);
 
       if (!isImg && !isPdf) {
@@ -334,41 +386,60 @@ export default function RequestDocumentPage() {
         e.target.value = '';
         return;
       }
-      if (file.size > 10 * 1024 * 1024) {
+      if (rawFile.size > 10 * 1024 * 1024) {
         toast.warning('Clearance document exceeds the 10MB size limit.');
         e.target.value = '';
         return;
       }
 
-      setClearanceFile(file);
-      setClearanceIsPdf(isPdf);
-      setIsCleared('yes');
-      setClearanceError(false);
+      try {
+        // Downscale and compress image client-side to prevent mobile browser OOM crashes
+        const file = isPdf
+          ? rawFile
+          : await compressImageFile(rawFile, { maxDimension: 1600, quality: 0.82 });
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const previewUrl = reader.result;
-        setClearancePreview(previewUrl);
-        const draftUserId = user?.id || user?.username || 'guest';
-        saveDraftFile(draftUserId, 'clearance', {
-          fileDataUrl: previewUrl,
-          name: file.name,
-          type: file.type,
-          isPdf,
-        });
-        saveClearanceAttachment('current_student_preview', previewUrl, {
-          isPdf,
-          fileName: file.name,
-        });
-        if (studentId) {
-          saveClearanceAttachment(studentId, previewUrl, {
+        setClearanceFile(file);
+        setClearanceIsPdf(isPdf);
+        setIsCleared('yes');
+        setClearanceError(false);
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const previewUrl = reader.result;
+          setClearancePreview(previewUrl);
+          const draftUserId = user?.id || user?.username || 'guest';
+          saveDraftFile(draftUserId, 'clearance', {
+            fileDataUrl: previewUrl,
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            isPdf,
+          });
+          saveClearanceAttachment('current_student_preview', previewUrl, {
             isPdf,
             fileName: file.name,
           });
-        }
-      };
-      reader.readAsDataURL(file);
-      toast.success(`Clearance ${isPdf ? 'PDF' : 'file'} attached successfully.`);
+          if (studentId) {
+            saveClearanceAttachment(studentId, previewUrl, {
+              isPdf,
+              fileName: file.name,
+            });
+          }
+        };
+        reader.readAsDataURL(file);
+        toast.success(`Clearance ${isPdf ? 'PDF' : 'file'} attached successfully.`);
+      } catch (err) {
+        console.warn('Could not compress clearance file, using original:', err);
+        setClearanceFile(rawFile);
+        setClearanceIsPdf(isPdf);
+        setIsCleared('yes');
+        setClearanceError(false);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setClearancePreview(reader.result);
+        };
+        reader.readAsDataURL(rawFile);
+      }
       e.target.value = '';
     }
   };
@@ -911,7 +982,7 @@ export default function RequestDocumentPage() {
     try {
       if (currentStep === 3) {
         sessionStorage.removeItem(draftKey);
-        clearDraftFiles(user?.id || user?.username || 'guest');
+        clearDraftStorage(user?.id || user?.username || 'guest');
       } else {
         const sanitizedPurposes = isAlumnus
           ? selectedPurposes
@@ -1425,8 +1496,32 @@ export default function RequestDocumentPage() {
       toast.success('Your credential request was successfully submitted!');
       try {
         sessionStorage.removeItem(draftKey);
-        clearDraftFiles(user?.id || user?.username || 'guest');
-      } catch {}
+        await clearDraftStorage(user?.id || user?.username || 'guest');
+      } catch (storageErr) {
+        console.warn('Could not clear draft storage:', storageErr);
+      }
+
+      // Reset all request-specific fields so creating another request starts with a fresh form
+      setSelectedDocs([]);
+      setDocCopies({});
+      setSelectedCredTypeId(null);
+      setCopies(1);
+      setSelectedPurposes([]);
+      setOtherPurpose('');
+      setPurposeInput('');
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      setClearanceFile(null);
+      setClearancePreview(null);
+      setClearanceIsPdf(false);
+      setClearanceError(false);
+      setIsCleared('no');
+      setDateOfGraduation('');
+      setLastSemAttendance('');
+      setAlreadyRequested('no');
+      setPrevDocRequested('');
+      setPrevDateRequested('');
+
       setCurrentStep(3);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
@@ -1754,15 +1849,22 @@ export default function RequestDocumentPage() {
                           {/* Top: Attached Photo / Document Preview */}
                           <div className="ustp-attached-media">
                             {clearanceIsPdf || clearanceFile?.name?.toLowerCase().endsWith('.pdf') ? (
-                              <div className="ustp-pdf-badge">
+                              <button
+                                type="button"
+                                onClick={handleOpenClearancePreview}
+                                className="ustp-pdf-badge bg-transparent border-0 cursor-pointer p-0"
+                                title="Click to preview PDF document"
+                              >
                                 <span className="ustp-pdf-icon">📄</span>
                                 <span>PDF</span>
-                              </div>
+                              </button>
                             ) : clearancePreview ? (
                               <img
                                 src={clearancePreview}
                                 alt="Clearance Preview"
-                                className="ustp-img-preview"
+                                className="ustp-img-preview cursor-pointer hover:opacity-90 active:scale-95 transition"
+                                onClick={handleOpenClearancePreview}
+                                title="Click to preview clearance document"
                               />
                             ) : (
                               <div className="ustp-pdf-badge">
@@ -1776,14 +1878,14 @@ export default function RequestDocumentPage() {
                               <span className="ustp-attached-status">
                                 <span>✓ Attached Photo / Document</span>
                                 {clearancePreview && (
-                                  <a
-                                    href={clearancePreview}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="ustp-preview-link"
+                                  <button
+                                    type="button"
+                                    onClick={handleOpenClearancePreview}
+                                    className="ustp-preview-link bg-transparent border-0 cursor-pointer p-0 text-indigo-600 hover:text-indigo-800 font-semibold underline text-xs ml-1"
+                                    title="Open document preview"
                                   >
                                     (Preview)
-                                  </a>
+                                  </button>
                                 )}
                               </span>
                             </div>
@@ -2232,7 +2334,9 @@ export default function RequestDocumentPage() {
                           <img
                             src={photoPreview}
                             alt="Uploaded Preview"
-                            className="ustp-img-preview"
+                            className="ustp-img-preview cursor-pointer hover:opacity-90 active:scale-95 transition"
+                            onClick={handleOpenPhotoPreview}
+                            title="Click to preview passport photo"
                           />
                         )}
                         <div className="ustp-attached-text">
@@ -2240,7 +2344,17 @@ export default function RequestDocumentPage() {
                             {photoFile.name}
                           </span>
                           <span className="ustp-attached-status">
-                            ✓ Attached 2x2 / Passport Photo
+                            <span>✓ Attached 2x2 / Passport Photo</span>
+                            {photoPreview && (
+                              <button
+                                type="button"
+                                onClick={handleOpenPhotoPreview}
+                                className="ustp-preview-link bg-transparent border-0 cursor-pointer p-0 text-indigo-600 hover:text-indigo-800 font-semibold underline text-xs ml-1"
+                                title="Open photo preview"
+                              >
+                                (Preview)
+                              </button>
+                            )}
                           </span>
                         </div>
                       </div>
@@ -2726,15 +2840,22 @@ export default function RequestDocumentPage() {
                               <>
                                 <div className="review-attached-media">
                                   {clearanceIsPdf || clearanceFile?.name?.toLowerCase().endsWith('.pdf') ? (
-                                    <div className="review-pdf-badge">
+                                    <button
+                                      type="button"
+                                      onClick={handleOpenClearancePreview}
+                                      className="review-pdf-badge bg-transparent border-0 cursor-pointer p-0"
+                                      title="Click to preview PDF document"
+                                    >
                                       <span className="review-pdf-icon">📄</span>
                                       <span>PDF</span>
-                                    </div>
+                                    </button>
                                   ) : (
                                     <img
                                       src={clearancePreview}
                                       alt="Clearance Form"
-                                      className="review-attached-thumb"
+                                      className="review-attached-thumb cursor-pointer hover:opacity-90 active:scale-95 transition"
+                                      onClick={handleOpenClearancePreview}
+                                      title="Click to preview clearance document"
                                     />
                                   )}
                                   <div className="review-attached-info">
@@ -2743,7 +2864,14 @@ export default function RequestDocumentPage() {
                                       {clearanceFile ? clearanceFile.name : 'Attached Clearance'}
                                     </span>
                                     <span className="review-attached-badge">
-                                      ✓ Attached
+                                      <span>✓ Attached</span>
+                                      <button
+                                        type="button"
+                                        onClick={handleOpenClearancePreview}
+                                        className="text-indigo-600 hover:text-indigo-800 font-semibold underline text-xs ml-1 bg-transparent border-0 cursor-pointer p-0"
+                                      >
+                                        (Preview)
+                                      </button>
                                     </span>
                                   </div>
                                 </div>
@@ -2821,7 +2949,9 @@ export default function RequestDocumentPage() {
                                     <img
                                       src={photoPreview}
                                       alt="Passport Photo"
-                                      className="review-attached-thumb"
+                                      className="review-attached-thumb cursor-pointer hover:opacity-90 active:scale-95 transition"
+                                      onClick={handleOpenPhotoPreview}
+                                      title="Click to preview passport photo"
                                     />
                                     <div className="review-attached-info">
                                       <span className="review-attached-title">Passport / 2x2 Photo</span>
@@ -2829,7 +2959,14 @@ export default function RequestDocumentPage() {
                                         {photoFile ? photoFile.name : 'Passport Photo'}
                                       </span>
                                       <span className="review-attached-badge">
-                                        ✓ Attached
+                                        <span>✓ Attached</span>
+                                        <button
+                                          type="button"
+                                          onClick={handleOpenPhotoPreview}
+                                          className="text-indigo-600 hover:text-indigo-800 font-semibold underline text-xs ml-1 bg-transparent border-0 cursor-pointer p-0"
+                                        >
+                                          (Preview)
+                                        </button>
                                       </span>
                                     </div>
                                   </div>
@@ -2955,6 +3092,16 @@ export default function RequestDocumentPage() {
               </button>
               <button
                 type="button"
+                onClick={() => {
+                  setCurrentStep(1);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="btn-complete-track !bg-emerald-600 hover:!bg-emerald-700 !text-white"
+              >
+                New Request
+              </button>
+              <button
+                type="button"
                 onClick={() => navigate(ROUTES.STUDENT.DASHBOARD)}
                 className="btn-complete-home"
               >
@@ -3010,6 +3157,16 @@ export default function RequestDocumentPage() {
           </div>
         </div>
       )}
+
+      {/* Lightbox Document Preview Modal */}
+      <DocumentPreviewModal
+        isOpen={previewModal.isOpen}
+        onClose={handleClosePreviewModal}
+        title={previewModal.title}
+        src={previewModal.src}
+        fileName={previewModal.fileName}
+        isPdf={previewModal.isPdf}
+      />
     </div>
   );
 }
