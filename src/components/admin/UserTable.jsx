@@ -472,6 +472,7 @@ export default function UserTable({
         isOpen={!!editingUser}
         onClose={() => setEditingUser(null)}
         onUserUpdated={handleUserUpdated}
+        existingUsers={users}
       />
 
       <UserDeleteDialog

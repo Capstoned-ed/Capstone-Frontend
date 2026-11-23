@@ -282,6 +282,7 @@ export default function StudentTableCard({ users = [], onStudentUpdated, onStude
         isOpen={!!selectedStudent}
         onClose={() => setSelectedStudent(null)}
         onStudentUpdated={handleUpdate}
+        existingUsers={students}
       />
 
       {/* Deactivate Confirmation Dialog */}

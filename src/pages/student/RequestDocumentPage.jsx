@@ -1315,7 +1315,8 @@ export default function RequestDocumentPage() {
         structuredItems.length > 1
           ? `[Copies: ${totalCopiesToSubmit} | ${structuredItems.map((it) => `${it.name}: ${it.copies}`).join(', ')}]`
           : `[Copies: ${totalCopiesToSubmit}]`;
-      const formattedRemarks = `[${exactDocTitle}] ${cleanPurpose} ${copiesTag}`;
+      const gradTag = isAlumnus && dateOfGraduation ? ` [Graduation: ${dateOfGraduation}]` : '';
+      const formattedRemarks = `[${exactDocTitle}] ${cleanPurpose} ${copiesTag}${gradTag}`.trim();
       const docCode = resolveDocCodes(selectedDocs, credentialTypes);
 
       // Submit directly to backend API so it persists in the database for Admin and Staff.
@@ -1329,6 +1330,7 @@ export default function RequestDocumentPage() {
             document_items: structuredItems,
             total_amount: totalAmountToSubmit,
             remarks: formattedRemarks,
+            ...(isAlumnus && dateOfGraduation ? { date_of_graduation: dateOfGraduation } : {}),
           };
           if (selectedDocs.length > 1 && docCode) {
             createPayload.custom_doc_code = docCode;

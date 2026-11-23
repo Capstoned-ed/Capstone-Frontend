@@ -5,7 +5,7 @@ import CourseSelectDropdown, { USTP_COURSE_CODE_MAP } from './CourseSelectDropdo
 import CustomSelectDropdown from '../common/CustomSelectDropdown';
 import CompactDatePicker from '../common/CompactDatePicker';
 
-function StudentEditForm({ student, onClose, onStudentUpdated }) {
+function StudentEditForm({ student, onClose, onStudentUpdated, existingUsers = [] }) {
   const toast = useToast();
   const cachedProfile = (() => {
     try {
@@ -31,13 +31,41 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
   });
 
   const [contactError, setContactError] = useState('');
+  const [studentIdError, setStudentIdError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const checkStudentIdDuplicate = (val) => {
+    const clean = String(val || '').trim();
+    if (!clean) return 'Student ID cannot be blank.';
+    const candidateUsers = (existingUsers && existingUsers.length > 0)
+      ? existingUsers
+      : (() => {
+          try {
+            return JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
+          } catch {
+            return [];
+          }
+        })();
+    const isDup = candidateUsers.some((u) => {
+      if (!u) return false;
+      const uId = String(u.id || '');
+      const targetId = String(student.id || '');
+      if (uId && targetId && uId === targetId) return false;
+      const candUname = String(u.username || u.student_id || '').trim().toLowerCase();
+      return candUname === clean.toLowerCase();
+    });
+    if (isDup) return 'This Student ID is already registered to another user.';
+    return '';
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    if (loading || name === 'student_id') return;
+    if (loading) return;
     if (name === 'contact_number') {
       setContactError(value && /\D/.test(value) ? 'Contact Number must contain numbers only.' : '');
+    }
+    if (name === 'student_id') {
+      setStudentIdError(checkStudentIdDuplicate(value));
     }
     setFormData((prev) => ({
       ...prev,
@@ -47,6 +75,12 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const idErr = checkStudentIdDuplicate(formData.student_id);
+    if (idErr) {
+      setStudentIdError(idErr);
+      toast.error(idErr);
+      return;
+    }
     if (formData.contact_number.trim() && /\D/.test(formData.contact_number.trim())) {
       const msg = 'Contact Number must contain numbers only.';
       setContactError(msg);
@@ -65,8 +99,11 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
       const nameParts = [firstName, middleName, lastName].filter(Boolean);
       let fullName = nameParts.join(' ').trim();
       if (nameExtension) fullName = `${fullName} ${nameExtension}`.trim();
+      const cleanStudentId = formData.student_id.trim();
 
       const payload = {
+        username: cleanStudentId,
+        student_id: cleanStudentId,
         first_name: firstName,
         middle_name: middleName,
         last_name: lastName,
@@ -84,13 +121,13 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
       // Merge local extended profile info including edited student ID, birthdate, and contact number
       const merged = {
         ...updated,
-        student_id: formData.student_id.trim() || student.username,
-        username: formData.student_id.trim() || student.username,
+        student_id: cleanStudentId || student.username,
+        username: cleanStudentId || student.username,
         first_name: firstName,
         middle_name: middleName,
         last_name: lastName,
         name_extension: nameExtension,
-        full_name: fullName || firstName || student.username,
+        full_name: fullName || firstName || cleanStudentId,
         birth_date: formData.birth_date,
         birthdate: formData.birth_date,
         contact_number: formData.contact_number.trim(),
@@ -119,8 +156,15 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
       const resData = err.response?.data;
       let errMsg = 'Failed to update student profile.';
       if (resData && typeof resData === 'object') {
-        const firstErr = Object.values(resData)[0];
-        errMsg = Array.isArray(firstErr) ? firstErr.join(' ') : String(firstErr);
+        if (resData.student_id || resData.username) {
+          const idErr = resData.student_id || resData.username;
+          const idErrMsg = Array.isArray(idErr) ? idErr.join(' ') : String(idErr);
+          setStudentIdError(idErrMsg);
+          errMsg = idErrMsg;
+        } else {
+          const firstErr = Object.values(resData)[0];
+          errMsg = Array.isArray(firstErr) ? firstErr.join(' ') : String(firstErr);
+        }
       }
       toast.error(errMsg);
     } finally {
@@ -230,20 +274,23 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                Student ID
+                Student ID <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 name="student_id"
                 value={formData.student_id}
-                disabled
-                readOnly
-                tabIndex={-1}
-                aria-disabled="true"
-                onChange={() => {}}
+                onChange={handleChange}
                 placeholder="Student ID (e.g. 2023123456)"
-                className="w-full px-3 py-2 text-xs bg-slate-100 border border-slate-200 rounded-lg text-slate-500 font-mono font-semibold cursor-not-allowed select-text outline-none"
+                className={`w-full px-3 py-2 text-xs bg-white border rounded-lg text-slate-800 font-mono font-semibold focus:outline-hidden focus:ring-2 ${
+                  studentIdError
+                    ? 'border-rose-400 focus:ring-rose-200'
+                    : 'border-slate-200 focus:ring-blue-500/20 focus:border-blue-500'
+                }`}
               />
+              {studentIdError && (
+                <p className="text-xs text-rose-500 mt-1 font-medium">{studentIdError}</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -363,7 +410,13 @@ function StudentEditForm({ student, onClose, onStudentUpdated }) {
   );
 }
 
-export default function StudentEditModal({ student, isOpen, onClose, onStudentUpdated }) {
+export default function StudentEditModal({
+  student,
+  isOpen,
+  onClose,
+  onStudentUpdated,
+  existingUsers = [],
+}) {
   if (!isOpen || !student) return null;
   return (
     <StudentEditForm
@@ -371,6 +424,7 @@ export default function StudentEditModal({ student, isOpen, onClose, onStudentUp
       student={student}
       onClose={onClose}
       onStudentUpdated={onStudentUpdated}
+      existingUsers={existingUsers}
     />
   );
 }

@@ -18,7 +18,7 @@ const getNumericError = (val, label = 'Contact Number') => {
   return /\D/.test(val) ? `${label} must contain numbers only.` : '';
 };
 
-function EditUserForm({ user, onClose, onUserUpdated }) {
+function EditUserForm({ user, onClose, onUserUpdated, existingUsers = [] }) {
   const toast = useToast();
   const { user: currentUser } = useAuth();
   const isSelf = currentUser && (
@@ -26,6 +26,19 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
     String(user.id) === String(currentUser.userId) ||
     (user.username && currentUser.username && user.username.toLowerCase() === currentUser.username.toLowerCase())
   );
+  const isAdmin = currentUser && (
+    String(currentUser.role || '').toLowerCase() === 'admin' ||
+    currentUser.role === ROLES.ADMIN
+  );
+  const canEditUserId = isAdmin && !isSelf;
+
+  const targetRole = String(user.role || '').toLowerCase();
+  const userIdLabel = targetRole === 'student'
+    ? 'Student ID'
+    : targetRole === 'staff' || targetRole === 'registrar'
+    ? 'Staff / Employee ID'
+    : 'User ID';
+
   const cachedStaff = (() => {
     try {
       const profiles = JSON.parse(localStorage.getItem('regquest_staff_profiles') || '{}');
@@ -36,6 +49,7 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
   })();
 
   const [formData, setFormData] = useState({
+    username: user.username || user.student_id || user.employee_id || '',
     first_name: user.first_name || cachedStaff.first_name || '',
     middle_name: user.middle_name || cachedStaff.middle_name || '',
     last_name: user.last_name || cachedStaff.last_name || '',
@@ -50,17 +64,44 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
+  const checkUserIdDuplicate = (val) => {
+    const clean = String(val || '').trim();
+    if (!clean) return `${userIdLabel} cannot be blank.`;
+    const candidateUsers = (existingUsers && existingUsers.length > 0)
+      ? existingUsers
+      : (() => {
+          try {
+            return JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
+          } catch {
+            return [];
+          }
+        })();
+    const isDup = candidateUsers.some((u) => {
+      if (!u) return false;
+      const uId = String(u.id || '');
+      const targetId = String(user.id || '');
+      if (uId && targetId && uId === targetId) return false;
+      const candUname = String(u.username || u.student_id || u.employee_id || '').trim().toLowerCase();
+      return candUname === clean.toLowerCase();
+    });
+    if (isDup) return `This ${userIdLabel} is already registered to another user.`;
+    return '';
+  };
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     if (loading) return;
     if (isSelf && (name === 'is_active' || name === 'role')) return;
+    if (!canEditUserId && name === 'username') return;
     const nextVal = type === 'checkbox' ? checked : value;
     setFormData((prev) => ({
       ...prev,
       [name]: nextVal,
     }));
 
-    if (name === 'first_name') {
+    if (name === 'username' && canEditUserId) {
+      setErrors((prev) => ({ ...prev, username: checkUserIdDuplicate(value) || null }));
+    } else if (name === 'first_name') {
       setErrors((prev) => ({ ...prev, first_name: getNameError(value, 'First Name') || null }));
     } else if (name === 'last_name') {
       setErrors((prev) => ({ ...prev, last_name: getNameError(value, 'Last Name') || null }));
@@ -74,6 +115,10 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const validationErrors = {};
+    if (canEditUserId) {
+      const idErr = checkUserIdDuplicate(formData.username);
+      if (idErr) validationErrors.username = idErr;
+    }
     const firstErr = getNameError(formData.first_name, 'First Name');
     const lastErr = getNameError(formData.last_name, 'Last Name');
     const contactErr = getNumericError(formData.contact_number, 'Contact Number');
@@ -102,8 +147,10 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
       let fullName = nameParts.join(' ').trim();
       if (nameExtension) fullName = `${fullName} ${nameExtension}`.trim();
       const emailLower = formData.email.trim().toLowerCase();
+      const cleanUsername = formData.username.trim();
 
       const payload = {
+        ...(canEditUserId && cleanUsername ? { username: cleanUsername, student_id: cleanUsername, employee_id: cleanUsername } : {}),
         first_name: firstName,
         middle_name: middleName,
         last_name: lastName,
@@ -118,6 +165,9 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
       const updated = await usersApi.update(user.id, payload);
       const merged = {
         ...updated,
+        username: cleanUsername || updated.username || user.username,
+        student_id: cleanUsername || updated.student_id || user.student_id || user.username,
+        employee_id: cleanUsername || updated.employee_id || user.employee_id || user.username,
         first_name: firstName,
         middle_name: middleName,
         last_name: lastName,
@@ -287,8 +337,40 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
         </div>
       </div>
 
-      {/* Email & Contact Number */}
+      {/* User ID & Institutional Email */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">
+            {userIdLabel} <span className="text-rose-500">*</span>
+            {!canEditUserId && (
+              <span className="text-slate-400 font-normal ml-1">
+                ({isSelf ? 'Cannot edit own ID' : 'Locked'})
+              </span>
+            )}
+          </label>
+          <input
+            type="text"
+            name="username"
+            value={formData.username}
+            disabled={!canEditUserId}
+            readOnly={!canEditUserId}
+            tabIndex={canEditUserId ? 0 : -1}
+            aria-disabled={!canEditUserId}
+            onChange={handleChange}
+            placeholder={userIdLabel}
+            className={`w-full px-3 py-2 border rounded-lg text-sm font-mono font-semibold ${
+              !canEditUserId
+                ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed select-text'
+                : errors.username
+                ? 'bg-white border-rose-400 focus:ring-rose-200 text-slate-800'
+                : 'bg-white border-slate-300 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800'
+            }`}
+          />
+          {errors.username && (
+            <p className="text-xs text-rose-500 mt-1 font-medium">{errors.username}</p>
+          )}
+        </div>
+
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1">
             Institutional Email <span className="text-rose-500">*</span>
@@ -308,7 +390,10 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
             <p className="text-xs text-rose-500 mt-1 font-medium">{errors.email}</p>
           )}
         </div>
+      </div>
 
+      {/* Contact Number & Birthdate */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1">
             Contact Number
@@ -330,10 +415,7 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
             <p className="text-xs text-rose-500 mt-1 font-medium">{errors.contact_number}</p>
           )}
         </div>
-      </div>
 
-      {/* Birthdate & Role Selector */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1">
             Birthdate
@@ -350,33 +432,34 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
             className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
           />
         </div>
+      </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">
-            Select Role Assignment <span className="text-rose-500">*</span>
-          </label>
-          <CustomSelectDropdown
-            disabled={isSelf || loading}
-            value={formData.role}
-            onChange={(val) => {
-              if (isSelf || loading) return;
-              setFormData((prev) => ({ ...prev, role: val }));
-            }}
-            buttonClassName={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${isSelf ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
-            options={[
-              { value: ROLES.REGISTRAR, label: 'Registrar' },
-              { value: ROLES.STAFF, label: 'Staff' },
-              { value: ROLES.ADMIN, label: 'Admin' },
-            ]}
-          />
-          <p className="text-[11px] text-slate-500 mt-1">
-            {formData.role === ROLES.REGISTRAR
-              ? 'Review and approve/reject credential requests'
-              : formData.role === ROLES.ADMIN
-              ? 'Manage user accounts, assign roles, system settings & reports'
-              : 'Process approved requests, prepare documents, and update statuses'}
-          </p>
-        </div>
+      {/* Role Assignment */}
+      <div>
+        <label className="block text-xs font-semibold text-slate-700 mb-1">
+          Select Role Assignment <span className="text-rose-500">*</span>
+        </label>
+        <CustomSelectDropdown
+          disabled={isSelf || loading}
+          value={formData.role}
+          onChange={(val) => {
+            if (isSelf || loading) return;
+            setFormData((prev) => ({ ...prev, role: val }));
+          }}
+          buttonClassName={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${isSelf ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
+          options={[
+            { value: ROLES.REGISTRAR, label: 'Registrar' },
+            { value: ROLES.STAFF, label: 'Staff' },
+            { value: ROLES.ADMIN, label: 'Admin' },
+          ]}
+        />
+        <p className="text-[11px] text-slate-500 mt-1">
+          {formData.role === ROLES.REGISTRAR
+            ? 'Review and approve/reject credential requests'
+            : formData.role === ROLES.ADMIN
+            ? 'Manage user accounts, assign roles, system settings & reports'
+            : 'Process approved requests, prepare documents, and update statuses'}
+        </p>
       </div>
 
       {/* Active Status Checkbox */}
@@ -430,7 +513,13 @@ function EditUserForm({ user, onClose, onUserUpdated }) {
   );
 }
 
-export default function UserEditModal({ user, isOpen, onClose, onUserUpdated }) {
+export default function UserEditModal({
+  user,
+  isOpen,
+  onClose,
+  onUserUpdated,
+  existingUsers = [],
+}) {
   if (!isOpen || !user) return null;
 
   const displayName = user.first_name && user.last_name
@@ -475,6 +564,7 @@ export default function UserEditModal({ user, isOpen, onClose, onUserUpdated }) 
           user={user}
           onClose={onClose}
           onUserUpdated={onUserUpdated}
+          existingUsers={existingUsers}
         />
       </div>
     </div>

@@ -240,8 +240,123 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
     (requestData?.created_at ? requestData.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
   const birthDate = requestData?.birth_date || '2002-05-15';
   const contactNo = requestData?.contact_no || '09123456789';
-  const userCategory = requestData?.user_category || 'student';
-  const dateOfGraduation = requestData?.date_of_graduation || '';
+
+  // Safe helper to determine whether the requester is an Alumnus / Graduate or Enrolled Student
+  const isRequesterAlumnus = useMemo(() => {
+    // 1. Direct flags or fields on requestData
+    const reqCategory = String(
+      requestData?.user_category ||
+      requestData?.userCategory ||
+      requestData?.classification ||
+      requestData?.category ||
+      ''
+    ).trim().toLowerCase();
+    if (reqCategory === 'alumnus' || reqCategory === 'alumni' || reqCategory === 'graduate') return true;
+
+    // Helper to test if a year_level indicates alumnus / graduate
+    const checkYearLevel = (val) => {
+      if (!val) return false;
+      const s = String(val).trim().toLowerCase();
+      return s.includes('alumn') || s.includes('grad');
+    };
+
+    // 2. Year level fields on requestData or nested user
+    if (checkYearLevel(requestData?.year_level)) return true;
+    if (checkYearLevel(requestData?.yearLevel)) return true;
+    if (checkYearLevel(requestData?.student_year_level)) return true;
+    if (checkYearLevel(requestData?.student?.year_level)) return true;
+    if (checkYearLevel(requestData?.user?.year_level)) return true;
+    if (checkYearLevel(requestData?.user_details?.year_level)) return true;
+
+    // 3. Authenticated user object (only when requester is the authenticated user or student)
+    const isAuthUserRequester = Boolean(
+      user && (
+        (user.id && (user.id === requestData?.user || String(user.id) === String(requestData?.user))) ||
+        (user.username && (
+          user.username === requestData?.student_id ||
+          user.username === requestData?.student_name
+        )) ||
+        (!requestData?.user && !requestData?.student_id)
+      )
+    );
+    if (isAuthUserRequester) {
+      if (checkYearLevel(user?.year_level)) return true;
+      const userRoleOrCat = String(user?.user_category || user?.classification || user?.role || '').toLowerCase();
+      if (userRoleOrCat === 'alumnus' || userRoleOrCat === 'alumni') return true;
+    }
+
+    // 4. Presence of date of graduation
+    const rawDateGrad = String(
+      requestData?.date_of_graduation ||
+      requestData?.dateOfGraduation ||
+      ''
+    ).trim();
+    if (rawDateGrad && rawDateGrad.toUpperCase() !== 'N/A' && !rawDateGrad.includes('Enrolled')) {
+      return true;
+    }
+
+    // 5. Remarks tag [Graduation: ...] or [Date of Graduation: ...]
+    const remarks = String(requestData?.remarks || requestData?.purpose || '');
+    if (/\[(?:Date of Graduation|Graduation Date|Graduation):\s*[^\]]+\]/i.test(remarks)) {
+      return true;
+    }
+
+    // 6. Check cached profiles and user cache in localStorage
+    try {
+      const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
+      const lookupKeys = [
+        requestData?.student_id,
+        requestData?.student_name,
+        requestData?.user,
+        requestData?.tracking_number,
+        isAuthUserRequester ? user?.username : null,
+        isAuthUserRequester ? user?.student_id : null,
+      ].filter(Boolean);
+
+      for (const k of lookupKeys) {
+        const p = profiles[k];
+        if (p && (checkYearLevel(p.year_level) || String(p.user_category || '').toLowerCase() === 'alumnus')) {
+          return true;
+        }
+      }
+    } catch {}
+
+    try {
+      const cachedUsers = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
+      if (Array.isArray(cachedUsers)) {
+        const match = cachedUsers.find(
+          (u) =>
+            (requestData?.student_id && String(u.username) === String(requestData.student_id)) ||
+            (requestData?.user && (u.id === requestData.user || String(u.id) === String(requestData.user))) ||
+            (isAuthUserRequester && user?.id && (u.id === user.id || String(u.id) === String(user.id)))
+        );
+        if (match && (checkYearLevel(match.year_level) || String(match.role || '').toLowerCase() === 'alumnus')) {
+          return true;
+        }
+      }
+    } catch {}
+
+    return false;
+  }, [requestData, user]);
+
+  const userCategory = isRequesterAlumnus ? 'alumnus' : 'student';
+
+  const resolvedDateOfGraduation = useMemo(() => {
+    const direct = requestData?.date_of_graduation || requestData?.dateOfGraduation;
+    if (direct && String(direct).trim() && !String(direct).includes('Enrolled') && String(direct).toUpperCase() !== 'N/A') {
+      return String(direct).trim();
+    }
+    const remarks = String(requestData?.remarks || requestData?.purpose || '');
+    const m = remarks.match(/\[(?:Date of Graduation|Graduation Date|Graduation):\s*([^\]]+)\]/i);
+    if (m && m[1] && m[1].trim()) {
+      return m[1].trim();
+    }
+    if (isRequesterAlumnus) {
+      return 'Graduated';
+    }
+    return '';
+  }, [requestData, isRequesterAlumnus]);
+
   const lastSemAttendance = requestData?.last_sem_attendance || '2nd Sem, AY 2025-2026';
   const verifiedByName = requestData?.verified_by_name || 'Front Desk Personnel';
   const dateOfRelease =
@@ -356,11 +471,11 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1.8' }}>
             <span className="ustp-checkbox-label">
-              <span className="ustp-box-check">{userCategory === 'student' ? <CheckMark /> : ''}</span>
+              <span className="ustp-box-check">{!isRequesterAlumnus ? <CheckMark /> : ''}</span>
               <span>Student (Undergrad/Graduate)</span>
             </span>
             <span className="ustp-checkbox-label">
-              <span className="ustp-box-check">{userCategory === 'alumnus' ? <CheckMark /> : ''}</span>
+              <span className="ustp-box-check">{isRequesterAlumnus ? <CheckMark /> : ''}</span>
               <span>Alumnus (High School/Undergrad/Graduate)</span>
             </span>
           </div>
@@ -408,7 +523,7 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
               If a graduate, state the <strong>Date of Graduation</strong>:
             </span>
             <span className="ustp-field-underline" style={{ flex: 1, fontWeight: '700' }}>
-              {dateOfGraduation || 'N/A (Enrolled)'}
+              {isRequesterAlumnus ? (resolvedDateOfGraduation || 'Graduated') : 'N/A (Enrolled)'}
             </span>
           </div>
 
