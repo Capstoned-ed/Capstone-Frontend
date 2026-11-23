@@ -443,7 +443,7 @@ export default function StudentProfilePage() {
                                 </button>
                               </td>
                               <td className="py-3.5 pr-5 text-slate-700 font-medium">
-                                <ExpandableDocList text={docType} maxItems={2} />
+                                <ExpandableDocList text={docType} maxItems={1} />
                               </td>
                               <td className="py-3.5 pr-5 text-slate-600 whitespace-nowrap">{dateStr}</td>
                               <td className="py-3.5 pr-5 text-slate-500 whitespace-nowrap text-xs">{timeStr}</td>

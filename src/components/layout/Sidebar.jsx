@@ -1,20 +1,13 @@
-import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import React from 'react';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { ROLES } from '../../constants/roles';
 import { ROUTES } from '../../constants/routes';
 import logoExpanded from '../../assets/RegQuest-Logo-USTP-2.png';
 import logoShrunk from '../../assets/RegQuest-Logo-USTP-3.png';
-import { useNotifications } from '../../context/NotificationContext';
-import StudentProfileModal from '../student/StudentProfileModal';
-import StaffProfileModal from '../staff/StaffProfileModal';
 
 export default function Sidebar({ isCollapsed, onToggle, onNavigate }) {
-  const { user, logout } = useAuth();
-  const { unreadCount } = useNotifications();
-  const navigate = useNavigate();
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
+  const { user } = useAuth();
 
   const userRole = user?.role;
 
@@ -214,23 +207,6 @@ export default function Sidebar({ isCollapsed, onToggle, onNavigate }) {
 
   const navLinks = getNavLinks();
 
-  const handleLogout = async () => {
-    setShowUserMenu(false);
-    await logout();
-    navigate(ROUTES.LOGIN);
-  };
-
-  const displayName =
-    user?.full_name ||
-    (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : null) ||
-    (user?.username && !/^\d{6,}$/.test(user.username) ? user.username : null) ||
-    (user?.username === '2023301564' ? 'Daisy Traya' : user?.username || 'Juan De Letchi');
-  const roleDisplay = userRole === ROLES.REGISTRAR
-    ? 'Registrar Frontdesk'
-    : userRole
-    ? userRole.charAt(0).toUpperCase() + userRole.slice(1)
-    : 'Student';
-
   return (
     <>
       <aside
@@ -351,117 +327,7 @@ export default function Sidebar({ isCollapsed, onToggle, onNavigate }) {
             ))}
           </nav>
         </div>
-
-        <div className={`pb-8 space-y-2 ${isCollapsed ? 'px-2' : 'px-4'}`}>
-          <NavLink
-            to={ROUTES.NOTIFICATIONS}
-            end
-            onClick={() => onNavigate?.()}
-            title={isCollapsed ? (unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications') : undefined}
-            className={({ isActive }) =>
-              `group flex items-center rounded-xl transition-all font-medium ${isCollapsed ? 'justify-center p-3' : 'px-4 py-3 gap-4 text-[15px]'
-              } ${isActive
-                ? 'bg-white/15 text-white shadow-sm font-semibold'
-                : 'text-white/80 hover:text-white hover:bg-white/10'
-              }`
-            }
-          >
-            <div className="relative flex items-center justify-center shrink-0">
-              <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950 ring-2 ring-[#0B0B36]">
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </span>
-              )}
-            </div>
-            {!isCollapsed && (
-              <div className="flex-1 flex items-center justify-between min-w-0">
-                <span className="truncate">Notifications</span>
-                {unreadCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950">
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </span>
-                )}
-              </div>
-            )}
-          </NavLink>
-
-          <button
-            type="button"
-            onClick={() => setShowUserMenu((prev) => !prev)}
-            title={isCollapsed ? `${displayName} (${roleDisplay})` : 'Profile Options'}
-            className={`w-full flex items-center rounded-xl transition-all text-left ${isCollapsed
-              ? 'justify-center p-2 hover:bg-white/10'
-              : 'px-4 py-2.5 gap-4 hover:bg-white/10'
-              }`}
-          >
-            <div className="w-10 h-10 rounded-full bg-[#64748B] flex items-center justify-center overflow-hidden flex-shrink-0 text-white shadow-inner">
-              <svg className="w-7 h-7 text-white mt-1" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-              </svg>
-            </div>
-
-            {!isCollapsed && (
-              <div className="flex-1 min-w-0">
-                <p className="text-[15px] font-bold text-white truncate leading-tight">
-                  {displayName}
-                </p>
-                <p className="text-xs text-slate-300 font-normal capitalize mt-0.5">
-                  {roleDisplay}
-                </p>
-              </div>
-            )}
-          </button>
-
-          {showUserMenu && (
-            <div className={`space-y-1 pt-1 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
-              <button
-                type="button"
-                onClick={() => setShowProfileModal(true)}
-                title={isCollapsed ? 'My Profile' : undefined}
-                className={`w-full flex items-center rounded-xl transition-all font-medium text-white/90 hover:text-white hover:bg-white/10 ${isCollapsed ? 'justify-center p-3' : 'px-4 py-2.5 gap-4 text-[15px]'
-                  }`}
-              >
-                <div className="w-6 h-6 flex items-center justify-center shrink-0">
-                  <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                  </svg>
-                </div>
-                {!isCollapsed && <span className="truncate">My Profile</span>}
-              </button>
-
-              <button
-                type="button"
-                onClick={handleLogout}
-                title={isCollapsed ? 'Logout' : undefined}
-                className={`w-full flex items-center rounded-xl transition-all font-medium text-white/90 hover:text-white hover:bg-white/10 ${isCollapsed ? 'justify-center p-3' : 'px-4 py-2.5 gap-4 text-[15px]'
-                  }`}
-              >
-                <div className="w-6 h-6 flex items-center justify-center shrink-0">
-                  <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
-                  </svg>
-                </div>
-                {!isCollapsed && <span className="truncate">Logout</span>}
-              </button>
-            </div>
-          )}
-        </div>
       </aside>
-
-      {userRole === ROLES.STUDENT ? (
-        <StudentProfileModal
-          isOpen={showProfileModal}
-          onClose={() => setShowProfileModal(false)}
-        />
-      ) : (
-        <StaffProfileModal
-          isOpen={showProfileModal}
-          onClose={() => setShowProfileModal(false)}
-        />
-      )}
     </>
   );
 }

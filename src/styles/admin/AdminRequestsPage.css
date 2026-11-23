@@ -1,7 +1,7 @@
 .admin-req-container {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
   width: 100%;
   padding-bottom: 3rem;
 }
@@ -403,6 +403,20 @@
   background-color: #f8fafc;
 }
 
+.custom-data-table.compact-assign-table {
+  min-width: 0;
+}
+
+.custom-data-table.compact-assign-table th {
+  padding: 0.625rem 0.5rem;
+  font-size: 0.65rem;
+}
+
+.custom-data-table.compact-assign-table td {
+  padding: 0.625rem 0.5rem;
+  font-size: 0.78rem;
+}
+
 .req-id-text {
   font-weight: 800;
   color: #0f172a;
@@ -455,7 +469,7 @@
   border-radius: 0.5rem;
   outline: none;
   cursor: pointer;
-  min-width: 9rem;
+  min-width: 0;
 }
 
 .badge-assigned {
@@ -484,7 +498,14 @@
 
 .status-pill,
 .status-badge {
-  @apply inline-flex items-center justify-center px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap;
+  @apply inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap;
+}
+
+.compact-assign-table .badge-assigned,
+.compact-assign-table .badge-unassigned {
+  padding: 0.1875rem 0.45rem;
+  font-size: 0.6875rem;
+  gap: 0.25rem;
 }
 
 .status-pill.pending,
@@ -652,14 +673,14 @@
 .btn-view-req {
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
-  padding: 0.3125rem 0.75rem;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
   border: 1px solid #cbd5e1;
   background-color: #ffffff;
   color: #334155;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border-radius: 0.375rem;
+  border-radius: 0.5rem;
   cursor: pointer;
   transition: all 0.15s ease-in-out;
 }

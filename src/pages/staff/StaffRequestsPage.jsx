@@ -1472,7 +1472,7 @@ export default function StaffRequestsPage() {
               setSelectedIds(new Set());
               loadData();
             }}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${activeTab === 'active'
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'active'
                 ? 'bg-[#0B0B36] text-white shadow-sm'
                 : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
               }`}
@@ -1489,12 +1489,12 @@ export default function StaffRequestsPage() {
               setStatusFilter('');
               loadData();
             }}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${activeTab === 'history'
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'history'
                 ? 'bg-[#0B0B36] text-white shadow-sm'
                 : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
               }`}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <span>Request History</span>
@@ -1671,7 +1671,7 @@ export default function StaffRequestsPage() {
               <button
                 type="button"
                 onClick={() => setBatchModalOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold transition-all shadow-sm cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#1e3a8a] hover:bg-[#172554] text-white text-xs sm:text-sm font-bold transition-all shadow-sm cursor-pointer"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
 import { ROLES } from '../../constants/roles';
 import { useAuth } from '../../hooks/useAuth';
+import ExpandableDocList from '../common/ExpandableDocList';
 
 function formatEventTitle(eventType) {
   switch (eventType) {
@@ -272,7 +273,24 @@ export default function NotificationItem({
         </div>
 
         <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-normal">
-          {message}
+          {(() => {
+            const rawMsg = String(message || '');
+            const match = rawMsg.match(/(Requested Document:\s*|Document:\s*)([^•]+)/i);
+            if (!match || match.index === undefined) return rawMsg;
+            const prefixEnd = match.index + match[1].length;
+            const docStart = prefixEnd;
+            const docEnd = match.index + match[0].length;
+            const prefix = rawMsg.slice(0, docStart);
+            const docPart = match[2].trim();
+            const suffix = rawMsg.slice(docEnd);
+            return (
+              <>
+                {prefix}
+                <ExpandableDocList text={docPart} maxItems={1} />
+                {suffix ? ` ${suffix}` : ''}
+              </>
+            );
+          })()}
         </p>
 
         {/* Footer Meta & Actions */}

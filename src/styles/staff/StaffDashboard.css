@@ -3,7 +3,7 @@
 }
 
 .staff-dash-hero {
-  @apply relative bg-[#0B0B36] text-white overflow-hidden py-10 px-6 sm:px-10 lg:px-12 select-none;
+  @apply relative bg-[#0B0B36] text-white overflow-hidden pt-3 pb-14 px-6 sm:pt-3 sm:pb-16 sm:px-10 lg:px-12 select-none;
 }
 
 .staff-dash-hero-bg {

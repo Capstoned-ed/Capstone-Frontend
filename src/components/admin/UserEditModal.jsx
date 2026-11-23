@@ -501,7 +501,7 @@ function EditUserForm({ user, onClose, onUserUpdated, existingUsers = [] }) {
         <button
           type="submit"
           disabled={loading}
-          className="px-5 py-2 bg-[#2563EB] hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center gap-2 disabled:opacity-60"
+          className="px-5 py-2 bg-[#1e3a8a] hover:bg-[#172554] text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center gap-2 disabled:opacity-60"
         >
           {loading && (
             <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />

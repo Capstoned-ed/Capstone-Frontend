@@ -149,6 +149,7 @@ export default function StudentPaymentsPage() {
   const [credentialTypes, setCredentialTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [copiedId, setCopiedId] = useState('');
 
   // View Mode: 'active' | 'history'
@@ -427,6 +428,24 @@ export default function StudentPaymentsPage() {
                 ? 'Review your past verified and completed cashier payments.'
                 : 'Download your assessed official request form for Over-The-Counter Cashier payment and attach your Official Receipt (O.R.) proof of payment.'}
             </p>
+            {viewMode === 'active' && (
+              <button
+                type="button"
+                onClick={() => setShowHowItWorks((prev) => !prev)}
+                aria-expanded={showHowItWorks}
+                className={`mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                  showHowItWorks
+                    ? 'bg-amber-100 text-amber-950 border-amber-300'
+                    : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4m0-4h.01" />
+                </svg>
+                <span>How it works?</span>
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap shrink-0">
@@ -464,7 +483,39 @@ export default function StudentPaymentsPage() {
           </div>
         </div>
 
-
+        {/* Collapsible Over-The-Counter Cashier Payment Instructions */}
+        {showHowItWorks && (
+          <div className="mb-4 p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-950 shadow-2xs">
+            <span className="shrink-0 mt-0.5">
+              <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
+              </svg>
+            </span>
+            <div className="flex-1 min-w-0">
+              <strong className="font-bold">Over-The-Counter Cashier Payment Instructions:</strong>
+              <ul className="text-[11px] sm:text-xs text-amber-900 mt-1 space-y-1 list-disc pl-4 leading-relaxed">
+                <li>
+                  After printing your assessed form, go to the <strong>Registrar&apos;s Office first to have it signed</strong> before proceeding to the <strong>USTP Cashier&apos;s Office</strong> to pay.
+                </li>
+                <li>
+                  Upload a clear photo of your <strong>Official Receipt (O.R.)</strong> and enter your O.R. Number when attaching payment proof so Registrar Staff can verify and begin processing.
+                </li>
+                <li>
+                  <strong>Keep your Official Receipt (O.R.) safe</strong> — do not lose it, as you must bring it together with your <strong>Claim Stub</strong> when claiming your requested document(s).
+                </li>
+              </ul>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowHowItWorks(false)}
+              className="text-amber-700 hover:text-amber-950 text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer shrink-0"
+              aria-label="Hide instructions"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Filter Tabs (Active View Only) */}
         {viewMode === 'active' && (

@@ -7,7 +7,7 @@ import { ROUTES } from '../../constants/routes';
 export default function NotificationDropdown({
   isOpen,
   onClose,
-  dropdownPositionClass = 'top-full right-0 mt-2',
+  dropdownPositionClass = 'fixed left-3 right-3 top-16 sm:absolute sm:left-auto sm:top-full sm:right-0 sm:mt-2',
 }) {
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
@@ -57,7 +57,7 @@ export default function NotificationDropdown({
   return (
     <div
       ref={dropdownRef}
-      className={`absolute z-50 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200/90 overflow-hidden animate-fadeIn text-slate-800 ${dropdownPositionClass}`}
+      className={`z-50 w-auto sm:w-96 max-w-[calc(100vw-1.5rem)] bg-white rounded-2xl shadow-2xl border border-slate-200/90 overflow-hidden animate-fadeIn text-slate-800 ${dropdownPositionClass}`}
       role="region"
       aria-label="Notifications Dropdown"
     >

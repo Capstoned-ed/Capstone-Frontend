@@ -698,7 +698,7 @@ export default function StaffProfileModal({ isOpen, onClose }) {
                               {/* Role or Document Type */}
                               <td className="py-3 px-4">
                                 {item.documentType ? (
-                                  <ExpandableDocList text={item.documentType} maxItems={2} />
+                                  <ExpandableDocList text={item.documentType} maxItems={1} />
                                 ) : (
                                   <span
                                     className={`px-2 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap ${

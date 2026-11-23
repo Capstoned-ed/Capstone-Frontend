@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export function formatCompactDocText(text, maxItems = 2) {
+export function formatCompactDocText(text, maxItems = 1) {
   const raw = String(text || '');
   const parts = raw
     .split(',')
@@ -12,7 +12,7 @@ export function formatCompactDocText(text, maxItems = 2) {
 
 export default function ExpandableDocList({
   text,
-  maxItems = 2,
+  maxItems = 1,
   className = '',
   badgeClassName = '',
 }) {
@@ -27,24 +27,50 @@ export default function ExpandableDocList({
     return <span className={className}>{raw}</span>;
   }
 
-  const visibleText = expanded ? raw : parts.slice(0, maxItems).join(', ');
   const extraCount = parts.length - maxItems;
+  const pillClass =
+    badgeClassName ||
+    'px-1.5 py-0 rounded-full text-[10px] font-bold leading-4 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 cursor-pointer transition-colors whitespace-nowrap';
+
+  if (expanded) {
+    return (
+      <div className={`flex flex-col items-start gap-1 ${className}`} title={raw}>
+        <ul className="w-full space-y-0.5 max-h-36 overflow-y-auto pr-1 text-xs leading-snug">
+          {parts.map((part, idx) => (
+            <li key={`${part}-${idx}`} className="flex items-start gap-1.5">
+              <span className="text-blue-500 select-none">•</span>
+              <span>{part}</span>
+            </li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(false);
+          }}
+          className={pillClass}
+        >
+          Show less
+        </button>
+      </div>
+    );
+  }
+
+  const visibleText = parts.slice(0, maxItems).join(', ');
 
   return (
-    <span className={`inline-flex flex-wrap items-center gap-1.5 ${className}`} title={raw}>
+    <span className={`inline-flex flex-wrap items-center gap-1 ${className}`} title={raw}>
       <span>{visibleText}</span>
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          setExpanded((prev) => !prev);
+          setExpanded(true);
         }}
-        className={
-          badgeClassName ||
-          'px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 cursor-pointer transition-colors whitespace-nowrap'
-        }
+        className={pillClass}
       >
-        {expanded ? 'Show less' : `+${extraCount} more`}
+        +{extraCount}
       </button>
     </span>
   );

@@ -116,7 +116,7 @@
   align-items: center;
   justify-content: center;
   padding: 0.5rem 0.9rem;
-  background-color: #1e40af;
+  background-color: #1e3a8a;
   color: #ffffff;
   font-size: 0.75rem;
   font-weight: 700;
@@ -129,7 +129,7 @@
 }
 
 .btn-view-update:hover {
-  background-color: #1d4ed8;
+  background-color: #172554;
 }
 
 .btn-view-update:active {

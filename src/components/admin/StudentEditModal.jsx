@@ -396,7 +396,7 @@ function StudentEditForm({ student, onClose, onStudentUpdated, existingUsers = [
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-1.5 text-xs font-bold bg-[#0B0B36] hover:bg-indigo-950 text-white rounded-lg transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
+              className="px-4 py-1.5 text-xs font-bold bg-[#1e3a8a] hover:bg-[#172554] text-white rounded-lg transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
             >
               {loading && (
                 <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />

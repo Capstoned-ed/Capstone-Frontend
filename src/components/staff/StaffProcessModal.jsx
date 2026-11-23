@@ -263,7 +263,7 @@ export default function StaffProcessModal({
               <button
                 type="button"
                 onClick={() => setIsPrintModalOpen(true)}
-                className="px-3 py-1.5 bg-[#0B0B36] hover:bg-[#1E1E6B] text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 bg-[#1e3a8a] hover:bg-[#172554] text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
                 title="Prepare & print official credential request form"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -456,7 +456,7 @@ export default function StaffProcessModal({
                                 href={clearanceDoc?.url || selectedRequest.clearance_preview}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                                className="px-3 py-1.5 text-xs font-bold bg-[#1e3a8a] text-white rounded-lg hover:bg-[#172554] transition"
                               >
                                 Open PDF Document in New Tab
                               </a>
