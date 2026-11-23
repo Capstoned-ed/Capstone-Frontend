@@ -445,11 +445,13 @@ export default function ProcessRequestModal({
   );
 
   const [localIsApproved, setLocalIsApproved] = useState(() => Boolean(requestItem?.is_approved));
-  const [localApprovedByName, setLocalApprovedByName] = useState(() => requestItem?.approved_by_name || '');
+  const [localApprovedByName, setLocalApprovedByName] = useState(
+    () => requestItem?.approved_by_name || 'Jonalin T. Lagrada, MPSM'
+  );
 
   useEffect(() => {
     setLocalIsApproved(Boolean(requestItem?.is_approved));
-    setLocalApprovedByName(requestItem?.approved_by_name || '');
+    setLocalApprovedByName(requestItem?.approved_by_name || 'Jonalin T. Lagrada, MPSM');
   }, [requestItem?.is_approved, requestItem?.approved_by_name]);
 
   const isApproved = localIsApproved;
@@ -1041,6 +1043,8 @@ export default function ProcessRequestModal({
       if (isBackendId) {
         const opRemarks = mergeStaffNoteIntoRemarks(requestItem, '');
         const targetRelDate = dateOfRelease || requestItem?.release_date || requestItem?.date_of_release || null;
+        const targetApprovedBy = localApprovedByName.trim() || 'Jonalin T. Lagrada, MPSM';
+        const targetVerifiedBy = verifiedByName || defaultStaffName;
         try {
           transitionRes = await requestsApi.transition(
             targetRawId,
@@ -1049,6 +1053,8 @@ export default function ProcessRequestModal({
               remarks: opRemarks,
               release_date: targetRelDate,
               date_of_release: targetRelDate,
+              approved_by_name: targetApprovedBy,
+              verified_by_name: targetVerifiedBy,
             },
             { throwOnError: true }
           );
@@ -1056,18 +1062,24 @@ export default function ProcessRequestModal({
           try {
             await requestsApi.transition(
               targetRawId,
-              { status: 'REQUIREMENTS_VERIFICATION', remarks: opRemarks, release_date: targetRelDate, date_of_release: targetRelDate },
+              { status: 'REQUIREMENTS_VERIFICATION', remarks: opRemarks, release_date: targetRelDate, date_of_release: targetRelDate, approved_by_name: targetApprovedBy, verified_by_name: targetVerifiedBy },
               { throwOnError: true }
             );
           } catch {}
           try {
             transitionRes = await requestsApi.transition(
               targetRawId,
-              { status: 'PAYMENT_PENDING', remarks: opRemarks, release_date: targetRelDate, date_of_release: targetRelDate },
+              { status: 'PAYMENT_PENDING', remarks: opRemarks, release_date: targetRelDate, date_of_release: targetRelDate, approved_by_name: targetApprovedBy, verified_by_name: targetVerifiedBy },
               { throwOnError: true }
             );
           } catch (err2) {
-            console.warn('Backend transition notice:', apiErr, err2);
+            console.error('Backend transition failed:', apiErr, err2);
+            const msg =
+              err2?.response?.data?.detail ||
+              apiErr?.response?.data?.detail ||
+              'Failed to confirm request on server. Please try again.';
+            toast.error(msg);
+            return;
           }
         }
       }
@@ -1080,8 +1092,9 @@ export default function ProcessRequestModal({
         transitionRes?.is_approved ?? localIsApproved
       );
       const resolvedApprovedByName =
+        localApprovedByName.trim() ||
         transitionRes?.approved_by_name ||
-        (resolvedIsApproved ? (localApprovedByName || activeSignatoryName || 'University Registrar') : '');
+        'Jonalin T. Lagrada, MPSM';
 
       const patch = {
         status: displayNextStatus,
@@ -1850,7 +1863,7 @@ export default function ProcessRequestModal({
               <button
                 type="button"
                 onClick={() => setIsPrintModalOpen(true)}
-                className="px-2 sm:px-3 py-1 sm:py-1.5 bg-[#0B0B36] hover:bg-[#1E1E6B] text-white text-[11px] sm:text-xs font-bold rounded-lg transition-colors flex items-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                className="px-2 sm:px-3 py-1 sm:py-1.5 bg-[#1e3a8a] hover:bg-[#172554] text-white text-[11px] sm:text-xs font-bold rounded-lg transition-colors flex items-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                 title="View & print official updated request form"
               >
                 <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -2109,7 +2122,7 @@ export default function ProcessRequestModal({
                               href={clearanceDoc?.url || requestItem.clearance_preview}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                              className="px-3 py-1.5 text-xs font-bold bg-[#1e3a8a] text-white rounded-lg hover:bg-[#172554] transition"
                             >
                               Open PDF Document in New Tab
                             </a>
@@ -2255,50 +2268,24 @@ export default function ProcessRequestModal({
                   </div>
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Approved by</label>
-                    {isApproved ? (
-                      <div
-                        data-testid="approved-by-display"
-                        className="px-3 py-2 text-xs bg-emerald-50 border border-emerald-200 text-emerald-900 font-semibold rounded-lg flex items-center justify-between shadow-2xs"
-                      >
-                        <span className="truncate" title={approvedByName}>
-                          {approvedByName || 'University Registrar'}
-                        </span>
-                        <span className="text-[10px] bg-emerald-200/80 text-emerald-900 font-extrabold px-1.5 py-0.5 rounded shrink-0 ml-1">
-                          Approved
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div
-                          data-testid="approved-by-display"
-                          className="px-3 py-2 text-xs bg-amber-50 border border-amber-200 text-amber-800 font-semibold rounded-lg flex-1 min-w-[180px]"
-                        >
-                          Pending Registrar Approval
-                        </div>
-                        {isRegistrarOrAdmin && (
-                          <button
-                            type="button"
-                            data-testid="approve-request-btn"
-                            disabled={approvingRequest || isPersistedTerminal || isAdmin}
-                            aria-disabled={approvingRequest || isPersistedTerminal || isAdmin ? 'true' : undefined}
-                            tabIndex={approvingRequest || isPersistedTerminal || isAdmin ? -1 : undefined}
-                            onClick={handleApproveRequest}
-                            className={`px-3 py-2 font-bold text-xs rounded-lg shadow-sm transition-all whitespace-nowrap ${
-                              isAdmin || approvingRequest || isPersistedTerminal
-                                ? 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
-                                : 'bg-indigo-900 hover:bg-indigo-950 text-white cursor-pointer'
-                            }`}
-                            title={
-                              isAdmin
-                                ? 'View Only (Admin): Admins cannot approve requests'
-                                : 'Approve this credential request'
-                            }
-                          >
-                            {approvingRequest ? 'Approving...' : 'Approve Request'}
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    <input
+                      type="text"
+                      value={approvedByName}
+                      disabled={isAssessmentLocked}
+                      readOnly={isAssessmentLocked}
+                      tabIndex={isAssessmentLocked ? -1 : undefined}
+                      aria-disabled={isAssessmentLocked ? 'true' : undefined}
+                      onChange={(e) => {
+                        if (isAssessmentLocked) return;
+                        setLocalApprovedByName(e.target.value);
+                      }}
+                      placeholder="Jonalin T. Lagrada, MPSM"
+                      className={`w-full px-3 py-2 text-xs border rounded-lg focus:outline-none ${
+                        isAssessmentLocked
+                          ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed'
+                          : 'border-slate-300 focus:border-indigo-600 bg-white'
+                      }`}
+                    />
                   </div>
                 </div>
 
@@ -2394,7 +2381,7 @@ export default function ProcessRequestModal({
                         onClick={handleConfirmAssessmentAndIssuePayment}
                         className={`w-full sm:w-auto justify-center px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
                           isClearanceVerified && !confirmingAssessment && !isWaitingForRegistrarApproval && !isAssessmentLocked
-                            ? 'bg-indigo-900 hover:bg-indigo-950 text-white shadow-md cursor-pointer'
+                            ? 'bg-[#1e3a8a] hover:bg-[#172554] text-white shadow-md cursor-pointer'
                             : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none pointer-events-none opacity-50'
                         }`}
                         title={
@@ -2526,7 +2513,7 @@ export default function ProcessRequestModal({
                               href={displayReceiptImage}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                              className="px-3 py-1.5 text-xs font-bold bg-[#1e3a8a] text-white rounded-lg hover:bg-[#172554] transition"
                             >
                               Open Receipt in New Tab
                             </a>
@@ -2802,7 +2789,7 @@ export default function ProcessRequestModal({
                     type="button"
                     onClick={handleAdminRestore}
                     disabled={loading}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
                     title="Restore request back to active processing queue"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

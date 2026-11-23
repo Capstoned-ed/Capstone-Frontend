@@ -179,7 +179,7 @@ export default function StudentDashboard() {
         </div>
 
         {/* Hero Content */}
-        <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-12 lg:px-16 py-8 sm:py-11 w-full">
+        <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-12 lg:px-16 pt-4 pb-12 sm:pt-3 sm:pb-16 w-full">
           <div className="max-w-xl">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight leading-tight">
               Your Credentials,<br />

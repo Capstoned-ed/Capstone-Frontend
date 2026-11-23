@@ -2409,10 +2409,11 @@ export default function RequestDocumentPage() {
                 </div>
 
                 <div className="ustp-signoff-officials-grid">
+                  <div className="hidden sm:block" aria-hidden="true" />
                   <div className="ustp-signoff-approved">
-                    <span className="ustp-signoff-label">Approved:</span>
+                    <span className="ustp-signoff-label ustp-approved-label">Approved:</span>
                     <div className="ustp-registrar-name">
-                      <p className="ustp-registrar-title">{activeRegistrarName || 'Jonalin T. Lagrada, MPSM'}</p>
+                      <p className="ustp-registrar-title">Jonalin T. Lagrada, MPSM</p>
                       <p className="ustp-registrar-role">University Registrar</p>
                     </div>
                   </div>

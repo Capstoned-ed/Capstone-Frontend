@@ -160,12 +160,12 @@ function StaffAssignDropdown({
   });
 
   return (
-    <div ref={containerRef} className="relative w-[155px] sm:w-[180px]">
+    <div ref={containerRef} className="relative w-[105px] sm:w-[115px]">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         title="Assign or reassign staff"
-        className="staff-select-dropdown w-full flex items-center justify-between gap-2 text-left cursor-pointer"
+        className="staff-select-dropdown w-full flex items-center justify-between gap-1 text-left cursor-pointer !px-2 !py-1 !text-xs"
       >
         <span className="truncate">{value || '-- Unassigned --'}</span>
         <svg className="w-3.5 h-3.5 text-slate-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -174,7 +174,7 @@ function StaffAssignDropdown({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 w-full max-h-44 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-40 py-1">
+        <div className="absolute right-0 top-full mt-1 min-w-[160px] w-max max-w-[220px] max-h-44 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-40 py-1">
           {options.map((opt) => {
             const isSelected = (value || '') === opt;
             return (
@@ -1419,18 +1419,18 @@ export default function RegistrarRequestsPage() {
   return (
     <div className="admin-req-container">
       {/* Queue View Tabs: Active Requests vs Request History */}
-      <div className="flex items-center justify-end gap-2 border-b border-slate-200 pb-3 mb-6">
+      <div className="flex items-center justify-end gap-2 -mb-1">
         <button
           type="button"
           onClick={() => setActiveTab('active')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'active'
               ? 'bg-[#0B0B36] text-white shadow-sm'
               : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
           <span>Active Requests</span>
-          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
             activeTab === 'active' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
           }`}>
             {activeTotalCount}
@@ -1443,13 +1443,13 @@ export default function RegistrarRequestsPage() {
             setActiveTab('history');
             setStatusFilter('');
           }}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'history'
               ? 'bg-[#0B0B36] text-white shadow-sm'
               : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span>Request History</span>
@@ -1650,7 +1650,7 @@ export default function RegistrarRequestsPage() {
                       <button
                         type="button"
                         onClick={() => handleOpenProcess(item)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-900 hover:bg-indigo-950 shadow-sm transition-all cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-[#1e3a8a] hover:bg-[#172554] shadow-sm transition-all cursor-pointer"
                         title="Verify clearance & payment"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
@@ -1766,17 +1766,12 @@ export default function RegistrarRequestsPage() {
         <div
           ref={batchTableRef}
           className="table-responsive"
-          style={
-            totalBatchPages > 1 && lockedBatchTableHeight
-              ? { minHeight: `${lockedBatchTableHeight}px` }
-              : undefined
-          }
         >
-          <table className="custom-data-table">
+          <table className="custom-data-table compact-assign-table">
             <thead>
               <tr>
                 {isSelectionMode && (
-                  <th className="w-10 px-3 text-center">
+                  <th className="w-9 px-2 text-center">
                     <input
                       type="checkbox"
                       checked={
@@ -1795,13 +1790,13 @@ export default function RegistrarRequestsPage() {
                   </th>
                 )}
                 <th className="whitespace-nowrap">Request ID</th>
-                <th className="min-w-[140px]">Student</th>
-                <th className="min-w-[190px] max-w-[260px]">Document Type</th>
+                <th className="min-w-[110px]">Student</th>
+                <th className="min-w-[140px] max-w-[200px]">Document Type</th>
                 <th className="whitespace-nowrap">Status</th>
                 <th className="whitespace-nowrap">Release Date</th>
-                <th className="w-[195px] whitespace-nowrap">Assigned Staff</th>
-                <th className="whitespace-nowrap">Assignment Status</th>
-                <th className="text-right whitespace-nowrap min-w-[140px]">Actions</th>
+                <th className="text-center whitespace-nowrap">View / Action</th>
+                <th className="w-[115px] whitespace-nowrap">Assigned Staff</th>
+                <th className="whitespace-nowrap">Assignment</th>
               </tr>
             </thead>
             <tbody>
@@ -1853,13 +1848,50 @@ export default function RegistrarRequestsPage() {
                       </td>
                       <td>
                         <div className="doc-name-text">
-                          <ExpandableDocList text={item.document_type} maxItems={2} />
+                          <ExpandableDocList text={item.document_type} maxItems={1} />
                         </div>
                         <div className="doc-copies-sub">{item.copies}</div>
                       </td>
                       <td>{getStatusBadge(item.batch_status || item.status)}</td>
                       <td className="font-semibold text-slate-800 whitespace-nowrap">
                         {item.release_date || item.date_of_release || '—'}
+                      </td>
+                      <td className="text-center whitespace-nowrap">
+                        <div className="inline-flex items-center justify-center gap-1.5 flex-nowrap whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenProcess(item)}
+                            className="staff-btn-view"
+                            title="View request details"
+                            aria-label="View request details"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <circle cx="12" cy="12" r="3" strokeWidth={2} />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          </button>
+                          {isClaimedStatus(item.batch_status || item.status) && !isRequestArchived(item, archivedMap) && (
+                            <button
+                              type="button"
+                              onClick={() => handleArchiveRequest(item)}
+                              className="staff-btn-archive"
+                              title="Document claimed: Mark as Done and move to History"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span>Done</span>
+                            </button>
+                          )}
+                          {isRequestArchived(item, archivedMap) && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                              <svg className="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span>Done</span>
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td>
                         <StaffAssignDropdown
@@ -1883,43 +1915,6 @@ export default function RegistrarRequestsPage() {
                             <span>Unassigned</span>
                           </span>
                         )}
-                      </td>
-                      <td className="text-right whitespace-nowrap">
-                        <div className="inline-flex items-center justify-end gap-2 flex-nowrap whitespace-nowrap">
-                          {isClaimedStatus(item.batch_status || item.status) && !isRequestArchived(item, archivedMap) && (
-                            <button
-                              type="button"
-                              onClick={() => handleArchiveRequest(item)}
-                              className="staff-btn-archive"
-                              title="Document claimed: Mark as Done and move to History"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                              </svg>
-                              <span>Done</span>
-                            </button>
-                          )}
-                          {isRequestArchived(item, archivedMap) && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                              <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                              </svg>
-                              <span>Done</span>
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleOpenProcess(item)}
-                            className="staff-btn-view"
-                            title="View request details"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <circle cx="12" cy="12" r="3" strokeWidth={2} />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                            <span>View</span>
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   );
@@ -2027,13 +2022,8 @@ export default function RegistrarRequestsPage() {
             <div
               ref={historyBatchTableRef}
               className="table-responsive"
-              style={
-                totalHistoryBatchPages > 1 && lockedHistoryBatchHeight
-                  ? { minHeight: `${lockedHistoryBatchHeight}px` }
-                  : undefined
-              }
             >
-              <table className="custom-data-table">
+              <table className="custom-data-table compact-assign-table">
                 <thead>
                   <tr>
                     {isSelectionMode && (
@@ -2056,9 +2046,9 @@ export default function RegistrarRequestsPage() {
                     <th>Student</th>
                     <th>Document Type</th>
                     <th>Status</th>
+                    <th className="text-center whitespace-nowrap">View / Action</th>
                     <th>Assigned Staff</th>
                     <th>Assignment Status</th>
-                    <th className="text-right whitespace-nowrap min-w-[170px]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2100,11 +2090,40 @@ export default function RegistrarRequestsPage() {
                         </td>
                         <td>
                           <div className="doc-name-text">
-                        <ExpandableDocList text={item.document_type} maxItems={2} />
+                        <ExpandableDocList text={item.document_type} maxItems={1} />
                       </div>
                           <div className="doc-copies-sub">{item.copies}</div>
                         </td>
                         <td>{getStatusBadge(item.batch_status || item.status)}</td>
+                        <td className="text-center whitespace-nowrap">
+                          <div className="inline-flex items-center justify-center gap-1.5 flex-nowrap whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenProcess(item)}
+                              className="staff-btn-view"
+                              title="View request details"
+                              aria-label="View request details"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="3" strokeWidth={2} />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                            </button>
+                            {String(currentUser?.role || '').toUpperCase() === 'ADMIN' && (
+                              <button
+                                type="button"
+                                onClick={() => handleRestoreRequest(item)}
+                                className="staff-btn-restore"
+                                title="Restore back to Active Processing queue"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                <span>Restore</span>
+                              </button>
+                            )}
+                          </div>
+                        </td>
                         <td>
                           <div className="font-semibold text-slate-800 text-sm">
                             {item.assigned_staff || item.verified_by_name || item.processed_by || item.archived_by || (
@@ -2146,35 +2165,6 @@ export default function RegistrarRequestsPage() {
                               </span>
                             );
                           })()}
-                        </td>
-                        <td className="text-right whitespace-nowrap">
-                          <div className="inline-flex items-center justify-end gap-2 flex-nowrap whitespace-nowrap">
-                            {String(currentUser?.role || '').toUpperCase() === 'ADMIN' && (
-                              <button
-                                type="button"
-                                onClick={() => handleRestoreRequest(item)}
-                                className="staff-btn-restore"
-                                title="Restore back to Active Processing queue"
-                              >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                </svg>
-                                <span>Restore</span>
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenProcess(item)}
-                              className="staff-btn-view"
-                              title="View request details"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <circle cx="12" cy="12" r="3" strokeWidth={2} />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                              </svg>
-                              <span>View</span>
-                            </button>
-                          </div>
                         </td>
                       </tr>
                     ))
@@ -2275,7 +2265,7 @@ export default function RegistrarRequestsPage() {
             <button
               type="button"
               onClick={() => setBatchModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold transition-all shadow-sm cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#1e3a8a] hover:bg-[#172554] text-white text-xs sm:text-sm font-bold transition-all shadow-sm cursor-pointer"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />

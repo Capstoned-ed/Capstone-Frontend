@@ -1510,36 +1510,38 @@
   grid-template-columns: 1fr;
   gap: 1rem;
   align-items: flex-end;
+  padding-top: 0.25rem;
 }
 
 @media (min-width: 640px) {
   .ustp-signoff-officials-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 0.7fr 1.15fr 1fr;
   }
 }
 
 .ustp-signoff-approved {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 0.125rem;
   text-align: center;
 }
 
+.ustp-approved-label {
+  align-self: center;
+}
+
 @media (min-width: 640px) {
-  .ustp-signoff-approved {
-    text-align: left;
+  .ustp-approved-label {
+    align-self: flex-start;
+    padding-left: 0.5rem;
   }
 }
 
 .ustp-registrar-name {
   padding-left: 0;
   padding-top: 0.25rem;
-}
-
-@media (min-width: 640px) {
-  .ustp-registrar-name {
-    padding-left: 1.5rem;
-  }
+  text-align: center;
 }
 
 .ustp-registrar-title {
@@ -1547,22 +1549,31 @@
   font-size: 0.75rem;
   color: #0f172a;
   letter-spacing: 0.025em;
+  border-bottom: 1px solid #334155;
+  padding: 0 0.5rem 0.125rem;
+  display: inline-block;
 }
 
 .ustp-registrar-role {
   font-size: 0.6875rem;
   color: #475569;
+  margin-top: 0.125rem;
+  text-align: center;
 }
 
 .ustp-signoff-cashier {
   display: flex;
   flex-direction: column;
   align-items: center;
+  width: 100%;
+  max-width: 12rem;
+  justify-self: center;
 }
 
 @media (min-width: 640px) {
   .ustp-signoff-cashier {
-    align-items: flex-end;
+    justify-self: end;
+    align-items: center;
   }
 }
 

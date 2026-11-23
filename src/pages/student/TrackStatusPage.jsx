@@ -677,7 +677,7 @@ export default function TrackStatusPage() {
 
         {/* Queue View Tabs: Active Requests vs Request History */}
         {studentRequests.length > 0 && (
-          <div className="flex items-center gap-2 mb-3.5">
+          <div className="flex items-center gap-2 mb-3">
             <button
               type="button"
               onClick={() => {
@@ -692,14 +692,14 @@ export default function TrackStatusPage() {
                   setSelectedTrackId('');
                 }
               }}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${activeQueueTab === 'active'
-                  ? 'bg-[#0B0B36] text-white shadow-md'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeQueueTab === 'active'
+                  ? 'bg-[#0B0B36] text-white shadow-sm'
                   : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                 }`}
             >
               <span>Active Requests</span>
               <span
-                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${activeQueueTab === 'active'
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${activeQueueTab === 'active'
                     ? 'bg-amber-400 text-slate-900'
                     : 'bg-slate-200 text-slate-700'
                   }`}
@@ -722,14 +722,14 @@ export default function TrackStatusPage() {
                   setSelectedTrackId('');
                 }
               }}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${activeQueueTab === 'history'
-                  ? 'bg-[#0B0B36] text-white shadow-md'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeQueueTab === 'history'
+                  ? 'bg-[#0B0B36] text-white shadow-sm'
                   : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                 }`}
             >
               <span>Request History</span>
               <span
-                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${activeQueueTab === 'history'
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${activeQueueTab === 'history'
                     ? 'bg-amber-400 text-slate-900'
                     : 'bg-slate-200 text-slate-700'
                   }`}
@@ -799,7 +799,7 @@ export default function TrackStatusPage() {
                           {code}
                         </span>
                         <span className="text-xs opacity-80 break-words max-w-full sm:max-w-[320px]" title={docTitle}>
-                          ({formatCompactDocText(docTitle, 2)})
+                          ({formatCompactDocText(docTitle, 1)})
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0 pl-4 sm:pl-0">

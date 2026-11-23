@@ -196,7 +196,7 @@ export default function BatchUpdateModal({
               className={`flex items-center gap-2 px-5 py-2 text-xs sm:text-sm font-bold text-white rounded-xl shadow-sm transition-all cursor-pointer ${
                 !hasAnyChange || isSubmitting
                   ? 'bg-slate-300 cursor-not-allowed opacity-70'
-                  : 'bg-[#0B0B36] hover:bg-indigo-900 shadow-indigo-950/20'
+                  : 'bg-[#1e3a8a] hover:bg-[#172554] shadow-blue-950/20'
               }`}
             >
               {isSubmitting ? (

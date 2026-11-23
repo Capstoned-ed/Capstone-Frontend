@@ -6,7 +6,7 @@ export default function NotificationBell({
   variant = 'dark', // 'dark' (for sidebar/mobile dark header) or 'light' (for white navbars)
   showLabel = false,
   isCollapsed = false,
-  dropdownPositionClass = 'top-full right-0 mt-2',
+  dropdownPositionClass = 'fixed left-3 right-3 top-16 sm:absolute sm:left-auto sm:top-full sm:right-0 sm:mt-2',
   className = '',
 }) {
   const { unreadCount } = useNotifications();

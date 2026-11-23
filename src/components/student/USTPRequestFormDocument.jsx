@@ -358,7 +358,12 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
   }, [requestData, isRequesterAlumnus]);
 
   const lastSemAttendance = requestData?.last_sem_attendance || '2nd Sem, AY 2025-2026';
-  const verifiedByName = requestData?.verified_by_name || 'Front Desk Personnel';
+  const verifiedByName =
+    requestData?.verified_by_name ||
+    requestData?.verifiedByName ||
+    requestData?.assigned_staff_name ||
+    requestData?.assigned_staff ||
+    'Front Desk Personnel';
   const dateOfRelease =
     requestData?.date_of_release ||
     requestData?.release_date ||
