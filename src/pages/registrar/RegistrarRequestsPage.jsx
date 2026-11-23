@@ -102,7 +102,13 @@ function CustomSelectDropdown({
   );
 }
 
-function StaffAssignDropdown({ value, staffMembers = [], onChange }) {
+function StaffAssignDropdown({
+  value,
+  staffMembers = [],
+  onChange,
+  disabled = false,
+  disabledTooltip = '',
+}) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -120,6 +126,28 @@ function StaffAssignDropdown({ value, staffMembers = [], onChange }) {
       document.removeEventListener('touchstart', handleOutside);
     };
   }, [open]);
+
+  if (disabled) {
+    return (
+      <div
+        className="relative w-[155px] sm:w-[180px]"
+        title={disabledTooltip || 'Verify clearance & payment first before assigning staff'}
+      >
+        <button
+          type="button"
+          disabled
+          aria-disabled="true"
+          title={disabledTooltip || 'Verify clearance & payment first before assigning staff'}
+          className="staff-select-dropdown w-full flex items-center justify-between gap-2 text-left opacity-50 cursor-not-allowed bg-slate-100 border-slate-200 text-slate-400 select-none shadow-none"
+        >
+          <span className="truncate">{value || '-- Unassigned --'}</span>
+          <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        </button>
+      </div>
+    );
+  }
 
   // Options always include unassigned ('') plus all available staff members
   const options = [''];
@@ -240,7 +268,47 @@ export default function RegistrarRequestsPage() {
   }, [currentUser]);
 
 
-  const handleToggleSelect = (rawOrId) => {
+  const isUnverified = (item) => {
+    if (!item) return false;
+    if (isRequestArchived(item, archivedMap)) return false;
+    const raw = String(item.rawStatus || item.raw?.status || item.status || '')
+      .trim()
+      .toUpperCase()
+      .replace(/[\s-]+/g, '_');
+
+    if (
+      raw === 'PROCESSING' ||
+      raw === 'READY_FOR_RELEASE' ||
+      raw === 'READY_FOR_PICKUP' ||
+      raw === 'FOR_RELEASE' ||
+      raw === 'RELEASED' ||
+      raw === 'CLAIMED' ||
+      raw === 'COMPLETED' ||
+      raw === 'REJECTED' ||
+      raw === 'CANCELLED'
+    ) {
+      return false;
+    }
+
+    return (
+      raw === 'PENDING' ||
+      raw === 'REQUIREMENTS_VERIFICATION' ||
+      raw === 'REQUIREMENTS_REJECTED' ||
+      raw === 'PAYMENT_PENDING' ||
+      raw === 'FOR_VERIFICATION' ||
+      raw === 'SUBMITTED' ||
+      raw === 'PENDING_PAYMENT' ||
+      raw === 'FOR_PAYMENT' ||
+      raw.includes('PENDING') ||
+      raw.includes('VERIF')
+    );
+  };
+
+  const handleToggleSelect = (rawOrId, item) => {
+    if (item && isUnverified(item)) {
+      toast.error('Verify clearance & payment first before assigning staff.');
+      return;
+    }
     const key = String(rawOrId);
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -255,14 +323,16 @@ export default function RegistrarRequestsPage() {
 
   const handleToggleSelectAll = (items) => {
     if (!items || items.length === 0) return;
-    const allSelected = items.every((i) =>
+    const selectable = items.filter((i) => !isUnverified(i));
+    if (selectable.length === 0) return;
+    const allSelected = selectable.every((i) =>
       selectedIds.has(String(i.id)) ||
       selectedIds.has(String(i.rawId)) ||
       (i.tracking_number && selectedIds.has(String(i.tracking_number)))
     );
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      items.forEach((i) => {
+      selectable.forEach((i) => {
         const key = String(i.rawId || i.id);
         const idKey = String(i.id);
         const trackKey = i.tracking_number ? String(i.tracking_number) : null;
@@ -821,6 +891,28 @@ export default function RegistrarRequestsPage() {
     safeBatchPage * BATCH_PAGE_SIZE
   );
 
+  const unverifiedRequests = useMemo(() => {
+    let unv = requests.filter((r) => isUnverified(r));
+    if (selectedBatch !== 'ALL') {
+      unv = unv.filter((r) => r.batchId === selectedBatch);
+    }
+    return unv.sort(sortRequestsNewestFirst);
+  }, [requests, selectedBatch, archivedMap]);
+
+  const [verificationPage, setVerificationPage] = useState(1);
+  const VERIFICATION_PAGE_SIZE = 5;
+
+  useEffect(() => {
+    setVerificationPage(1);
+  }, [selectedBatch]);
+
+  const totalVerificationPages = Math.max(1, Math.ceil(unverifiedRequests.length / VERIFICATION_PAGE_SIZE));
+  const safeVerificationPage = Math.min(verificationPage, totalVerificationPages);
+  const paginatedVerificationRequests = unverifiedRequests.slice(
+    (safeVerificationPage - 1) * VERIFICATION_PAGE_SIZE,
+    safeVerificationPage * VERIFICATION_PAGE_SIZE
+  );
+
   const historyBatchRequests = useMemo(() => {
     const histReqs = requests.filter((r) => isRequestArchived(r, archivedMap));
     let filtered = selectedBatch === 'ALL' ? histReqs : histReqs.filter((r) => r.batchId === selectedBatch);
@@ -854,6 +946,18 @@ export default function RegistrarRequestsPage() {
   }, [requests, selectedBatch, archivedMap, assignmentHistorySearch, assignmentHistoryDocType]);
 
   const handleAssignStaff = async (requestId, rawId, staffName) => {
+    const targetItem = requests.find(
+      (r) =>
+        String(r.id) === String(requestId) ||
+        String(r.rawId) === String(rawId) ||
+        String(r.tracking_number) === String(requestId) ||
+        String(r.tracking_number) === String(rawId)
+    );
+    if (staffName && isUnverified(targetItem)) {
+      toast.error('Verify clearance & payment first before assigning staff.');
+      return;
+    }
+
     setAssignments((prev) => {
       const updated = { ...prev };
       if (staffName) {
@@ -1164,12 +1268,14 @@ export default function RegistrarRequestsPage() {
 
   const selectedRequestsList = useMemo(() => {
     if (selectedIds.size === 0) return [];
-    return requests.filter((r) =>
-      selectedIds.has(String(r.id)) ||
-      selectedIds.has(String(r.rawId)) ||
-      (r.tracking_number && selectedIds.has(String(r.tracking_number)))
-    );
-  }, [requests, selectedIds]);
+    return requests
+      .filter((r) => !isUnverified(r))
+      .filter((r) =>
+        selectedIds.has(String(r.id)) ||
+        selectedIds.has(String(r.rawId)) ||
+        (r.tracking_number && selectedIds.has(String(r.tracking_number)))
+      );
+  }, [requests, selectedIds, archivedMap]);
 
   const handleBatchUpdate = async ({ newStatus, releasingDate, note }) => {
     if (selectedRequestsList.length === 0) return;
@@ -1465,6 +1571,124 @@ export default function RegistrarRequestsPage() {
         )}
       </div>
 
+      {/* Primary Top Table: Pending Verification Queue */}
+      <div className="assign-table-card mb-6" style={{ overflowAnchor: 'none' }}>
+        <div className="flex items-center justify-between flex-wrap gap-3 pb-3 mb-3 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 shadow-sm shrink-0">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="assign-table-title !mb-0 text-slate-900 font-bold">
+                  Pending Verification Queue (Clearance &amp; Payment)
+                </h3>
+                {unverifiedRequests.length > 0 ? (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                    {unverifiedRequests.length} awaiting verification
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Queue Clear
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Review clearance and verify cashier payments to advance requests into processing.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="table-responsive">
+          <table className="custom-data-table">
+            <thead>
+              <tr>
+                <th className="whitespace-nowrap">REQUEST ID</th>
+                <th className="min-w-[140px]">STUDENT</th>
+                <th className="min-w-[190px] max-w-[260px]">DOCUMENT TYPE</th>
+                <th className="whitespace-nowrap">STATUS</th>
+                <th className="whitespace-nowrap">DATE SUBMITTED</th>
+                <th className="text-right whitespace-nowrap min-w-[100px]">ACTION</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-sm text-slate-400">
+                    Loading pending verifications...
+                  </td>
+                </tr>
+              ) : unverifiedRequests.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-sm text-slate-500">
+                    <div className="flex flex-col items-center justify-center gap-1.5 py-2">
+                      <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-1">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <span className="font-bold text-slate-800 text-sm">All requests are verified!</span>
+                      <span className="text-xs text-slate-400">
+                        There are currently no requests awaiting clearance or payment verification.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                paginatedVerificationRequests.map((item) => (
+                  <tr key={`verify-${item.rawId || item.id}`}>
+                    <td className="req-id-text">
+                      <ExpandableRequestId id={item.id} />
+                    </td>
+                    <td>
+                      <div className="student-name-text">{item.student_name}</div>
+                      <div className="student-id-sub">{item.student_id}</div>
+                    </td>
+                    <td>
+                      <div className="doc-name-text">
+                        <ExpandableDocList text={item.document_type} maxItems={2} />
+                      </div>
+                      <div className="doc-copies-sub">{item.copies}</div>
+                    </td>
+                    <td>{getStatusBadge(item.batch_status || item.status)}</td>
+                    <td className="font-semibold text-slate-800 whitespace-nowrap text-xs sm:text-sm">
+                      {item.request_date && item.request_date !== 'N/A'
+                        ? item.request_date
+                        : (item.created_at ? item.created_at.split('T')[0] : 'N/A')}
+                    </td>
+                    <td className="text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenProcess(item)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-900 hover:bg-indigo-950 shadow-sm transition-all cursor-pointer"
+                        title="Verify clearance & payment"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        <span>Verify</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {!loading && unverifiedRequests.length > VERIFICATION_PAGE_SIZE && (
+          <TablePagination
+            currentPage={safeVerificationPage}
+            totalItems={unverifiedRequests.length}
+            pageSize={VERIFICATION_PAGE_SIZE}
+            onPageChange={setVerificationPage}
+            accentColor="blue"
+          />
+        )}
+      </div>
+
       <div className="req-search-card">
         <h4 className="req-search-title">Search</h4>
         <div className="req-search-controls">
@@ -1569,14 +1793,17 @@ export default function RegistrarRequestsPage() {
                     <input
                       type="checkbox"
                       checked={
-                        paginatedBatchRequests.length > 0 &&
-                        paginatedBatchRequests.every((item) => isItemSelected(item))
+                        paginatedBatchRequests.some((item) => !isUnverified(item)) &&
+                        paginatedBatchRequests
+                          .filter((item) => !isUnverified(item))
+                          .every((item) => isItemSelected(item))
                       }
                       onChange={() =>
                         handleToggleSelectAll(paginatedBatchRequests)
                       }
-                      className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
-                      title="Select all"
+                      disabled={!paginatedBatchRequests.some((item) => !isUnverified(item))}
+                      className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Select all verified requests"
                     />
                   </th>
                 )}
@@ -1606,95 +1833,110 @@ export default function RegistrarRequestsPage() {
                   </td>
                 </tr>
               ) : (
-                paginatedBatchRequests.map((item) => (
-                  <tr key={item.rawId || item.id} className={isItemSelected(item) && isSelectionMode ? 'bg-indigo-50/50' : ''}>
-                    {isSelectionMode && (
-                      <td className="w-10 px-3 text-center">
-                        <input
-                          type="checkbox"
-                          checked={isItemSelected(item)}
-                          onChange={() => handleToggleSelect(item.rawId || item.id)}
-                          className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                paginatedBatchRequests.map((item) => {
+                  const itemUnverified = isUnverified(item);
+                  return (
+                    <tr key={item.rawId || item.id} className={isItemSelected(item) && isSelectionMode ? 'bg-indigo-50/50' : ''}>
+                      {isSelectionMode && (
+                        <td className="w-10 px-3 text-center">
+                          {itemUnverified ? (
+                            <span title="Verify clearance & payment first before assigning staff">
+                              <input
+                                type="checkbox"
+                                disabled
+                                className="w-4 h-4 rounded text-slate-300 border-slate-200 bg-slate-100 cursor-not-allowed opacity-50"
+                              />
+                            </span>
+                          ) : (
+                            <input
+                              type="checkbox"
+                              checked={isItemSelected(item)}
+                              onChange={() => handleToggleSelect(item.rawId || item.id, item)}
+                              className="w-4 h-4 rounded text-indigo-900 border-slate-300 focus:ring-indigo-950 cursor-pointer"
+                            />
+                          )}
+                        </td>
+                      )}
+                      <td className="req-id-text">
+                        <ExpandableRequestId id={item.id} />
+                      </td>
+                      <td>
+                        <div className="student-name-text">{item.student_name}</div>
+                        <div className="student-id-sub">{item.student_id}</div>
+                      </td>
+                      <td>
+                        <div className="doc-name-text">
+                          <ExpandableDocList text={item.document_type} maxItems={2} />
+                        </div>
+                        <div className="doc-copies-sub">{item.copies}</div>
+                      </td>
+                      <td>{getStatusBadge(item.batch_status || item.status)}</td>
+                      <td className="font-semibold text-slate-800 whitespace-nowrap">
+                        {item.release_date || item.date_of_release || '—'}
+                      </td>
+                      <td>
+                        <StaffAssignDropdown
+                          value={item.assigned_staff || ''}
+                          staffMembers={staffMembers}
+                          disabled={itemUnverified}
+                          disabledTooltip="Verify clearance & payment first before assigning staff"
+                          onChange={(nextStaff) => handleAssignStaff(item.id, item.rawId, nextStaff)}
                         />
                       </td>
-                    )}
-                    <td className="req-id-text">
-                      <ExpandableRequestId id={item.id} />
-                    </td>
-                    <td>
-                      <div className="student-name-text">{item.student_name}</div>
-                      <div className="student-id-sub">{item.student_id}</div>
-                    </td>
-                    <td>
-                      <div className="doc-name-text">
-                        <ExpandableDocList text={item.document_type} maxItems={2} />
-                      </div>
-                      <div className="doc-copies-sub">{item.copies}</div>
-                    </td>
-                    <td>{getStatusBadge(item.batch_status || item.status)}</td>
-                    <td className="font-semibold text-slate-800 whitespace-nowrap">
-                      {item.release_date || item.date_of_release || '—'}
-                    </td>
-                    <td>
-                      <StaffAssignDropdown
-                        value={item.assigned_staff || ''}
-                        staffMembers={staffMembers}
-                        onChange={(nextStaff) => handleAssignStaff(item.id, item.rawId, nextStaff)}
-                      />
-                    </td>
-                    <td>
-                      {item.assigned_staff ? (
-                        <span className="badge-assigned">
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>Assigned</span>
-                        </span>
-                      ) : (
-                        <span className="badge-unassigned">
-                          <span>Unassigned</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="text-right whitespace-nowrap">
-                      <div className="inline-flex items-center justify-end gap-2 flex-nowrap whitespace-nowrap">
-                        {isClaimedStatus(item.batch_status || item.status) && !isRequestArchived(item, archivedMap) && (
-                          <button
-                            type="button"
-                            onClick={() => handleArchiveRequest(item)}
-                            className="staff-btn-archive"
-                            title="Document claimed: Mark as Done and move to History"
-                          >
+                      <td>
+                        {item.assigned_staff ? (
+                          <span className="badge-assigned">
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                             </svg>
-                            <span>Done</span>
-                          </button>
-                        )}
-                        {isRequestArchived(item, archivedMap) && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                            <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                            </svg>
-                            <span>Done</span>
+                            <span>Assigned</span>
+                          </span>
+                        ) : (
+                          <span className="badge-unassigned">
+                            <span>Unassigned</span>
                           </span>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => handleOpenProcess(item)}
-                          className="staff-btn-view"
-                          title="View request details"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <circle cx="12" cy="12" r="3" strokeWidth={2} />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                          <span>View</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="text-right whitespace-nowrap">
+                        <div className="inline-flex items-center justify-end gap-2 flex-nowrap whitespace-nowrap">
+                          {isClaimedStatus(item.batch_status || item.status) && !isRequestArchived(item, archivedMap) && (
+                            <button
+                              type="button"
+                              onClick={() => handleArchiveRequest(item)}
+                              className="staff-btn-archive"
+                              title="Document claimed: Mark as Done and move to History"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span>Done</span>
+                            </button>
+                          )}
+                          {isRequestArchived(item, archivedMap) && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                              <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span>Done</span>
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenProcess(item)}
+                            className="staff-btn-view"
+                            title="View request details"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <circle cx="12" cy="12" r="3" strokeWidth={2} />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                            <span>View</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
