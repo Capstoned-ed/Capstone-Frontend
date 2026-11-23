@@ -1,7 +1,6 @@
 import { jwtDecode } from 'jwt-decode';
 import apiClient from './client';
 import credentialTypesApi from './credentialTypes';
-import { saveStoredNotification } from './notifications';
 import { saveClearanceAttachment, getClearanceAttachment } from './clearances';
 import { getStoredPaymentProof } from './payments';
 import {
@@ -857,26 +856,7 @@ export function updateStoredRequest(idOrTracking, patch, options = {}) {
     const targetMatched = options.fallbackItem || patch || {};
     const previousStatus = targetMatched.status || 'Pending';
 
-    // Exactly ONE notification per real status change (sent to the student).
-    const statusChanged =
-      patch.status &&
-      String(previousStatus || '').trim().toLowerCase() !== String(patch.status).trim().toLowerCase();
 
-    if (statusChanged && !options.silentNotify) {
-      const trackingCode = targetMatched.tracking_number || targetMatched.trackingId || targetMatched.id || idOrTracking;
-      const docTitle = targetMatched.document_type || 'Document';
-
-      saveStoredNotification({
-        event_type: 'REQUEST_STATUS_CHANGED',
-        message: `Status update: Your request (${trackingCode}) for ${docTitle} has moved to ${patch.status}.`,
-        related_object_type: 'CredentialRequest',
-        related_object_id: trackingCode,
-        target_user_id: targetMatched.user || null,
-        target_username: targetMatched.student_name || null,
-        target_student_id: targetMatched.student_id || null,
-        target_role: 'student',
-      });
-    }
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(

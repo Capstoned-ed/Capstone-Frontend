@@ -380,18 +380,16 @@ export function isNotificationForUser(notification, user) {
 export function purgeHallucinatedNotifications() {
   if (typeof window === 'undefined') return;
   try {
-    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        const cleaned = parsed.filter((item) => !isHallucinatedNotification(item));
-        if (cleaned.length !== parsed.length) {
-          localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(cleaned));
-        }
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('regquest_notifications_') || k === NOTIFICATIONS_STORAGE_KEY)) {
+        keysToRemove.push(k);
       }
     }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
   } catch (e) {
-    console.warn('Failed to purge hallucinated notifications:', e);
+    console.warn('Failed to purge legacy mock notifications:', e);
   }
 }
 
@@ -444,119 +442,17 @@ export function markAllNotificationIdsAsRead(ids = [], user = null) {
  * Strictly enforces isNotificationForUser so student items never leak to staff/admin,
  * and staff/admin items never leak to students.
  */
-export function getStoredNotifications(user = null) {
-  try {
-    purgeHallucinatedNotifications();
-
-    if (!user) return [];
-
-    const key = getNotificationsStorageKey(user);
-    const rawSaved = localStorage.getItem(key);
-    const savedNotifications = rawSaved ? JSON.parse(rawSaved) : [];
-
-    const readIds = getReadNotificationIds(user);
-
-    // Strictly filter notifications relevant to this specific user
-    const filtered = savedNotifications.filter((n) => {
-      if (!n || isHallucinatedNotification(n)) return false;
-      return isNotificationForUser(n, user);
-    });
-
-    // Deduplicate by unique notification ID
-    const uniqueMap = new Map();
-    filtered.forEach((item) => {
-      if (item && item.id && !uniqueMap.has(item.id)) {
-        uniqueMap.set(item.id, {
-          ...item,
-          is_read: Boolean(item.is_read || readIds.has(String(item.id))),
-        });
-      }
-    });
-
-    return Array.from(uniqueMap.values());
-  } catch (err) {
-    console.warn('Failed to load stored notifications:', err);
-    return [];
-  }
+export function getStoredNotifications() {
+  purgeHallucinatedNotifications();
+  return [];
 }
 
 /**
- * Save a genuine real-time notification into local storage and notify active listeners.
- * Explicitly infers and sets target_role and target_roles to prevent cross-role leaks.
+ * Save a genuine real-time notification into local storage (deprecated: backend authoritative).
  */
-export function saveStoredNotification(notification, user = null) {
-  if (!notification || !notification.message) return null;
-  if (isHallucinatedNotification(notification)) return null;
-
-  try {
-    const targetUser = user || (notification.target_user_id ? { id: notification.target_user_id } : null);
-    const key = getNotificationsStorageKey(targetUser);
-    const raw = localStorage.getItem(key);
-    const existing = raw ? JSON.parse(raw) : [];
-
-    const msg = String(notification.message || '').trim();
-    const isPersonal =
-      msg.startsWith('Your credential request') ||
-      msg.startsWith('Your request') ||
-      msg.startsWith('Your student clearance') ||
-      msg.startsWith('Your academic clearance') ||
-      msg.startsWith('Your OTC payment') ||
-      msg.startsWith('Your payment') ||
-      msg.startsWith('Status update: Your request');
-
-    const inferredTargetRole = notification.target_role || (isPersonal ? 'student' : 'staff');
-    const inferredTargetRoles =
-      notification.target_roles ||
-      (isPersonal ? ['student'] : ['admin', 'staff', 'registrar']);
-
-    // Deduplicate: prevent saving duplicate event for the same related object or message within 5 minutes
-    const now = Date.now();
-    const isDuplicate = existing.some((item) => {
-      const sameType = item.event_type === notification.event_type;
-      const sameObj =
-        Boolean(notification.related_object_id) &&
-        Boolean(item.related_object_id) &&
-        String(item.related_object_id).trim().toLowerCase() ===
-          String(notification.related_object_id).trim().toLowerCase();
-      const sameMsg = item.message === notification.message;
-      const timeDiff = Math.abs(now - new Date(item.created_at || 0).getTime());
-      return sameType && (sameObj || sameMsg) && timeDiff < 300000;
-    });
-
-    if (isDuplicate) {
-      return null;
-    }
-
-    const item = {
-      id: notification.id || `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      event_type: notification.event_type || 'REQUEST_STATUS_CHANGED',
-      title: notification.title || null,
-      message: notification.message,
-      related_object_type: notification.related_object_type || 'CredentialRequest',
-      related_object_id: notification.related_object_id || '',
-      is_read: false,
-      created_at: notification.created_at || new Date().toISOString(),
-      target_user_id: notification.target_user_id || null,
-      target_username: notification.target_username || null,
-      target_name: notification.target_name || null,
-      target_student_id: notification.target_student_id || null,
-      target_role: inferredTargetRole,
-      target_roles: inferredTargetRoles,
-    };
-
-    const updated = [item, ...existing];
-    localStorage.setItem(key, JSON.stringify(updated));
-
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('regquest_notification_created', { detail: item }));
-      window.dispatchEvent(new CustomEvent('regquest_requests_updated', { detail: item }));
-      notifyRealtimeUpdate({ reason: 'notification_created', item });
-    }
-    return item;
-  } catch (err) {
-    console.warn('Failed to save stored notification:', err);
-    return null;
-  }
+export function saveStoredNotification() {
+  // Authoritative notifications are generated exclusively by the Django backend.
+  return null;
 }
 
 /**

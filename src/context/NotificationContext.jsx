@@ -1,11 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import notificationsApi, {
-  getStoredNotifications,
   markStoredNotificationRead,
   markAllStoredNotificationsRead,
   notifyRealtimeUpdate,
   purgeHallucinatedNotifications,
-  isNotificationForUser,
 } from '../api/notifications';
 import { useAuth } from '../hooks/useAuth';
 
@@ -32,30 +30,34 @@ export function NotificationProvider({ children }) {
 
         // 1. Fetch genuine database notifications from Django Backend
         const backendData = await notificationsApi.list();
-        // 2. Fetch any real locally-saved actions strictly targeted to this user
-        const localData = getStoredNotifications(user);
-
-        const seenIds = new Set();
+        const currentRole = String(user?.role || '').toLowerCase();
         const combined = [];
 
-        // 1. Backend notifications are primary source of truth (isolated per authenticated user by Django)
-        const currentRole = String(user?.role || '').toLowerCase();
+        // Backend notifications are the single authoritative source of truth
         if (Array.isArray(backendData)) {
           backendData.forEach((item) => {
             if (item && item.id) {
-              // Enforce strict role isolation: Admin never receives operational request processing alerts
-              if (currentRole === 'admin') {
-                const isRequestProcessingEvent =
+              // Staff must NOT receive or see unverified intake/verification alerts
+              if (currentRole === 'staff') {
+                const isUnverifiedIntakeEvent =
                   item.event_type === 'REQUEST_CREATED' ||
                   item.event_type === 'CLEARANCE_SUBMITTED' ||
-                  item.event_type === 'PAYMENT_SUBMITTED' ||
-                  item.related_object_type === 'CredentialRequest' ||
-                  item.related_object_type === 'StudentClearance' ||
-                  item.related_object_type === 'Payment';
-                if (isRequestProcessingEvent) return;
+                  item.event_type === 'PAYMENT_SUBMITTED';
+                if (isUnverifiedIntakeEvent) return;
               }
-              const idStr = String(item.id);
-              seenIds.add(idStr);
+              // Students only see their own request status milestones
+              if (currentRole === 'student') {
+                const isStudentEvent =
+                  item.event_type === 'REQUEST_CREATED' ||
+                  item.event_type === 'REQUEST_STATUS_CHANGED' ||
+                  item.event_type === 'PAYMENT_VERIFIED' ||
+                  item.event_type === 'PAYMENT_REJECTED' ||
+                  item.event_type === 'CLEARANCE_APPROVED' ||
+                  item.event_type === 'CLEARANCE_REJECTED' ||
+                  item.event_type === 'ACCOUNT_CREATED' ||
+                  item.event_type === 'PASSWORD_RESET';
+                if (!isStudentEvent) return;
+              }
               combined.push({
                 ...item,
                 id: item.id,
@@ -65,32 +67,7 @@ export function NotificationProvider({ children }) {
           });
         }
 
-        // 2. Add legitimate local notifications (strictly verified for user role)
-        localData.forEach((item) => {
-          if (!item || !item.id || !isNotificationForUser(item, user)) return;
-          const idStr = String(item.id);
-          if (seenIds.has(idStr)) return;
-
-          // Check if identical event exists from backend for this related object or message
-          const isDuplicate = combined.some(
-            (c) =>
-              c.event_type === item.event_type &&
-              (
-                (Boolean(item.related_object_id) &&
-                  Boolean(c.related_object_id) &&
-                  String(c.related_object_id).trim().toLowerCase() ===
-                    String(item.related_object_id).trim().toLowerCase()) ||
-                c.message === item.message
-              )
-          );
-
-          if (!isDuplicate) {
-            seenIds.add(idStr);
-            combined.push(item);
-          }
-        });
-
-        // 3. Sort chronologically (newest first)
+        // Sort chronologically (newest first)
         combined.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
         setNotifications(combined);
