@@ -53,7 +53,7 @@ const formatStatus = (statusStr) => {
 };
 
 export default function StudentProfileModal({ isOpen, onClose }) {
-  const { user, logout, refreshProfile } = useAuth();
+  const { user, logout, refreshProfile, updateUser } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -154,30 +154,30 @@ export default function StudentProfileModal({ isOpen, onClose }) {
       setEditableEmail(activeEmail);
       setEditableMobile(
         me?.contact_number ||
-        cachedProfile?.contact_number ||
-        cachedProfile?.mobile_number ||
-        cachedProfile?.phone ||
         user?.contact_number ||
         user?.phone ||
         user?.mobile_number ||
+        cachedProfile?.contact_number ||
+        cachedProfile?.mobile_number ||
+        cachedProfile?.phone ||
         cachedUser?.contact_number ||
         cachedUser?.phone ||
         ''
       );
       setEditableBirthDate(
         me?.birth_date ||
-        cachedProfile?.birth_date ||
-        cachedProfile?.birthdate ||
         user?.birth_date ||
         user?.birthdate ||
+        cachedProfile?.birth_date ||
+        cachedProfile?.birthdate ||
         cachedUser?.birth_date ||
         cachedUser?.birthdate ||
         ''
       );
       setEditableYearLevel(
         me?.year_level ||
-        cachedProfile?.year_level ||
         user?.year_level ||
+        cachedProfile?.year_level ||
         cachedUser?.year_level ||
         '1st year'
       );
@@ -268,22 +268,19 @@ export default function StudentProfileModal({ isOpen, onClose }) {
 
     setIsSaving(true);
     try {
-      let updatedMe = null;
-      try {
-        updatedMe = await usersApi.updateMe({
-          email: editableEmail.trim(),
-          contact_number: editableMobile.trim(),
-          birth_date: editableBirthDate || null,
-          year_level: editableYearLevel,
-        });
-      } catch (apiErr) {
-        console.warn('Backend self-profile update notice:', apiErr);
-      }
+      const payload = {
+        email: editableEmail.trim(),
+        contact_number: editableMobile.trim(),
+        birth_date: editableBirthDate || null,
+        year_level: editableYearLevel,
+      };
 
+      const updatedMe = await usersApi.updateMe(payload);
+      if (updateUser) {
+        updateUser(updatedMe);
+      }
       if (refreshProfile) {
-        try {
-          await refreshProfile();
-        } catch {}
+        await refreshProfile().catch(() => {});
       }
 
       const profiles = JSON.parse(localStorage.getItem('regquest_student_profiles') || '{}');
@@ -292,6 +289,7 @@ export default function StudentProfileModal({ isOpen, onClose }) {
 
       const updated = {
         ...existing,
+        ...updatedMe,
         full_name: displayName,
         student_id: studentId,
         program: academicProgram,
@@ -302,7 +300,6 @@ export default function StudentProfileModal({ isOpen, onClose }) {
         birth_date: editableBirthDate,
         birthdate: editableBirthDate,
         year_level: editableYearLevel,
-        ...(updatedMe || {}),
       };
 
       profiles[userKey] = updated;
@@ -330,8 +327,14 @@ export default function StudentProfileModal({ isOpen, onClose }) {
       toast.success('Information updated successfully!');
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
-      console.warn('Could not save profile:', err);
-      toast.error('Failed to save profile changes.');
+      console.error('Could not save profile:', err);
+      const resData = err.response?.data;
+      let errMsg = 'Failed to save profile changes.';
+      if (resData && typeof resData === 'object') {
+        const firstErr = Object.values(resData)[0];
+        errMsg = Array.isArray(firstErr) ? firstErr.join(' ') : String(firstErr);
+      }
+      toast.error(errMsg);
     } finally {
       setIsSaving(false);
     }

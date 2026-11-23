@@ -14,7 +14,7 @@ import ExpandableDocList from '../common/ExpandableDocList';
 import ExpandableRequestId from '../common/ExpandableRequestId';
 
 export default function StaffProfileModal({ isOpen, onClose }) {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshProfile, updateUser } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -103,13 +103,13 @@ export default function StaffProfileModal({ isOpen, onClose }) {
           (isAdmin ? 'admin@ustp.edu.ph' : 'staff@ustp.edu.ph')
         );
         setEditablePhone(
-          profile.contact_number ||
-          profile.phone ||
           user?.contact_number ||
           user?.phone ||
+          profile.contact_number ||
+          profile.phone ||
           cachedUser?.contact_number ||
           cachedUser?.phone ||
-          '0917-555-0199'
+          ''
         );
         setEditableBirthDate(
           profile.birth_date ||
@@ -254,34 +254,30 @@ export default function StaffProfileModal({ isOpen, onClose }) {
 
     setIsSavingInfo(true);
     try {
+      const payload = {
+        first_name: firstName,
+        last_name: lastName,
+        email: editableEmail.trim(),
+        contact_number: editablePhone.trim(),
+        birth_date: editableBirthDate || null,
+      };
+
+      let updatedMe = null;
+      if (isAdmin && user?.id) {
+        updatedMe = await usersApi.update(user.id, payload);
+      } else {
+        updatedMe = await usersApi.updateMe(payload);
+      }
+
+      if (updateUser && updatedMe) {
+        updateUser(updatedMe);
+      }
+      if (refreshProfile) {
+        await refreshProfile().catch(() => {});
+      }
+
       const staffProfiles = JSON.parse(localStorage.getItem('regquest_staff_profiles') || '{}');
       const userKey = user?.id || user?.username || employeeId;
-
-      if (isAdmin && user?.id) {
-        try {
-          await usersApi.update(user.id, {
-            first_name: firstName,
-            last_name: lastName,
-            email: editableEmail.trim(),
-            contact_number: editablePhone.trim(),
-            birth_date: editableBirthDate || null,
-          });
-        } catch (apiErr) {
-          console.warn('Could not sync admin profile to backend:', apiErr);
-        }
-      } else {
-        try {
-          await usersApi.updateMe({
-            first_name: firstName,
-            last_name: lastName,
-            email: editableEmail.trim(),
-            contact_number: editablePhone.trim(),
-            birth_date: editableBirthDate || null,
-          });
-        } catch (apiErr) {
-          console.warn('Could not sync staff profile to backend:', apiErr);
-        }
-      }
 
       const updated = {
         first_name: firstName,
@@ -296,6 +292,7 @@ export default function StaffProfileModal({ isOpen, onClose }) {
         employee_id: employeeId,
         role: user?.role,
         updatedAt: new Date().toISOString(),
+        ...(updatedMe || {}),
       };
 
       staffProfiles[userKey] = updated;
@@ -304,6 +301,17 @@ export default function StaffProfileModal({ isOpen, onClose }) {
 
       localStorage.setItem('regquest_staff_profiles', JSON.stringify(staffProfiles));
 
+      try {
+        const usersCache = JSON.parse(localStorage.getItem('regquest_users_cache') || '[]');
+        const uIdx = usersCache.findIndex(
+          (x) => x.username && x.username.toLowerCase() === (user?.username || '').toLowerCase()
+        );
+        if (uIdx !== -1) {
+          usersCache[uIdx] = { ...usersCache[uIdx], ...updated };
+          localStorage.setItem('regquest_users_cache', JSON.stringify(usersCache));
+        }
+      } catch {}
+
       // Dispatch event to inform sidebar and other components
       window.dispatchEvent(new CustomEvent('regquest_profile_updated', { detail: updated }));
 
@@ -311,8 +319,14 @@ export default function StaffProfileModal({ isOpen, onClose }) {
       toast.success('Profile information updated successfully!');
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
-      console.warn('Could not save staff profile:', err);
-      toast.error('Failed to update profile information.');
+      console.error('Could not save staff profile:', err);
+      const resData = err.response?.data;
+      let errMsg = 'Failed to update profile information.';
+      if (resData && typeof resData === 'object') {
+        const firstErr = Object.values(resData)[0];
+        errMsg = Array.isArray(firstErr) ? firstErr.join(' ') : String(firstErr);
+      }
+      toast.error(errMsg);
     } finally {
       setIsSavingInfo(false);
     }

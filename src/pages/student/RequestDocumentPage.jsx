@@ -1422,29 +1422,6 @@ export default function RequestDocumentPage() {
         saveClearanceAttachment(trackingCode, clearancePreview, clMeta);
       }
 
-      // Create notification for student that document request has been created
-      saveStoredNotification({
-        event_type: 'REQUEST_CREATED',
-        message: `Your credential request (${trackingCode}) for ${currentDocDetails.title} has been created.`,
-        related_object_type: 'CredentialRequest',
-        related_object_id: trackingCode,
-        target_role: 'student',
-        target_roles: ['student'],
-        target_user_id: user?.userId || user?.id || null,
-        target_username: user?.username || fullName,
-        target_student_id: studentId || null,
-      });
-
-      // Create notification for Admin and Staff
-      saveStoredNotification({
-        event_type: 'REQUEST_CREATED',
-        message: `New credential request submitted by ${fullName} (${studentId || 'Student'}): ${currentDocDetails.title} (${trackingCode}).`,
-        related_object_type: 'CredentialRequest',
-        related_object_id: trackingCode,
-        target_role: 'staff',
-        target_roles: ['staff', 'registrar'],
-      });
-
       toast.success('Your credential request was successfully submitted!');
       try {
         sessionStorage.removeItem(draftKey);

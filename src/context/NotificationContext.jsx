@@ -71,12 +71,17 @@ export function NotificationProvider({ children }) {
           const idStr = String(item.id);
           if (seenIds.has(idStr)) return;
 
-          // Check if identical event/message exists from backend
+          // Check if identical event exists from backend for this related object or message
           const isDuplicate = combined.some(
             (c) =>
               c.event_type === item.event_type &&
-              String(c.related_object_id || '') === String(item.related_object_id || '') &&
-              c.message === item.message
+              (
+                (Boolean(item.related_object_id) &&
+                  Boolean(c.related_object_id) &&
+                  String(c.related_object_id).trim().toLowerCase() ===
+                    String(item.related_object_id).trim().toLowerCase()) ||
+                c.message === item.message
+              )
           );
 
           if (!isDuplicate) {

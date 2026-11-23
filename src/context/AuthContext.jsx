@@ -94,30 +94,44 @@ export function AuthProvider({ children }) {
 
   const mergeWithMe = useCallback((baseUser, me) => {
     if (!me) return baseUser;
-    const fullName =
-      [me.first_name, me.last_name].filter(Boolean).join(' ').trim() ||
-      me.full_name ||
-      baseUser?.full_name ||
-      '';
+    const firstName = me.first_name !== undefined ? me.first_name : (baseUser?.first_name || '');
+    const middleName = me.middle_name !== undefined ? me.middle_name : (baseUser?.middle_name || '');
+    const lastName = me.last_name !== undefined ? me.last_name : (baseUser?.last_name || '');
+    const nameExtension = me.name_extension !== undefined ? me.name_extension : (baseUser?.name_extension || '');
+    const nameParts = [firstName, middleName, lastName].filter(Boolean);
+    let fullName = nameParts.join(' ').trim();
+    if (nameExtension) fullName = `${fullName} ${nameExtension}`.trim();
+    if (!fullName) fullName = me.full_name || baseUser?.full_name || '';
+
     return {
       ...baseUser,
       ...me,
       role: normalizeRole(me.role || baseUser?.role),
       userId: me.id || baseUser?.userId,
       id: me.id || baseUser?.id,
-      student_id: me.username || baseUser?.student_id,
-      first_name: me.first_name || baseUser?.first_name || '',
-      last_name: me.last_name || baseUser?.last_name || '',
+      student_id: me.username || me.student_id || baseUser?.student_id || baseUser?.username,
+      first_name: firstName,
+      middle_name: middleName,
+      last_name: lastName,
+      name_extension: nameExtension,
       full_name: fullName,
-      program: me.course_name || baseUser?.program || '',
+      program: me.course_name || me.program || baseUser?.program || '',
       course_name: me.course_name || baseUser?.course_name || '',
       course_code: me.course_code || baseUser?.course_code || '',
-      birth_date: me.birth_date || baseUser?.birth_date || '',
-      birthdate: me.birth_date || baseUser?.birthdate || '',
-      contact_number: me.contact_number || baseUser?.contact_number || '',
+      birth_date: me.birth_date !== undefined ? me.birth_date : (baseUser?.birth_date || ''),
+      birthdate: me.birth_date !== undefined ? me.birth_date : (baseUser?.birthdate || ''),
+      contact_number: me.contact_number !== undefined ? me.contact_number : (baseUser?.contact_number || ''),
       year_level: me.year_level || baseUser?.year_level || '1st year',
     };
   }, []);
+
+  const updateUser = useCallback((updatedData) => {
+    if (!updatedData) return;
+    setUser((prev) => {
+      if (!prev) return updatedData;
+      return mergeWithMe(prev, updatedData);
+    });
+  }, [mergeWithMe]);
 
   const logout = useCallback(async () => {
     const refreshToken = localStorage.getItem('refresh_token');
@@ -357,9 +371,10 @@ export function AuthProvider({ children }) {
     login,
     logout,
     refreshProfile,
+    updateUser,
     isStaffOrRegistrar: user?.role === ROLES.STAFF || user?.role === ROLES.REGISTRAR,
     isAdminOrRegistrar: user?.role === ROLES.ADMIN || user?.role === ROLES.REGISTRAR,
-  }), [user, loading, login, logout, refreshProfile]);
+  }), [user, loading, login, logout, refreshProfile, updateUser]);
 
   return (
     <AuthContext.Provider value={value}>

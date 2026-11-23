@@ -509,14 +509,18 @@ export function saveStoredNotification(notification, user = null) {
       notification.target_roles ||
       (isPersonal ? ['student'] : ['admin', 'staff', 'registrar']);
 
-    // Deduplicate: prevent saving identical event + related object + message within recent timeframe
+    // Deduplicate: prevent saving duplicate event for the same related object or message within 5 minutes
     const now = Date.now();
     const isDuplicate = existing.some((item) => {
       const sameType = item.event_type === notification.event_type;
-      const sameObj = String(item.related_object_id || '') === String(notification.related_object_id || '');
+      const sameObj =
+        Boolean(notification.related_object_id) &&
+        Boolean(item.related_object_id) &&
+        String(item.related_object_id).trim().toLowerCase() ===
+          String(notification.related_object_id).trim().toLowerCase();
       const sameMsg = item.message === notification.message;
       const timeDiff = Math.abs(now - new Date(item.created_at || 0).getTime());
-      return sameType && sameObj && sameMsg && timeDiff < 10000;
+      return sameType && (sameObj || sameMsg) && timeDiff < 300000;
     });
 
     if (isDuplicate) {
