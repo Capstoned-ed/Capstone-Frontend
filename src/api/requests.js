@@ -755,27 +755,8 @@ export function saveStoredRequest(requestItem, user = null) {
     const docTitle = requestItem.document_type || requestItem.credential_type_details?.name || 'Document';
     const studentName = requestItem.student_name || 'Student';
 
-    // 1. Notification for Student (Personal status & confirmation)
-    saveStoredNotification({
-      event_type: 'REQUEST_CREATED',
-      message: `Your credential request (${trackingCode}) for ${docTitle} has been submitted. Status: Pending.`,
-      related_object_type: 'CredentialRequest',
-      related_object_id: trackingCode,
-      target_user_id: requestItem.user || null,
-      target_username: requestItem.student_name || null,
-      target_student_id: requestItem.student_id || null,
-      target_role: 'student',
-    });
-
-    // 2. Notification for Staff & Registrar (Operational queue alert; Admin excluded)
-    saveStoredNotification({
-      event_type: 'REQUEST_CREATED',
-      message: `Incoming Request: ${studentName} (${requestItem.student_id || 'Student'}) requested ${docTitle} (${trackingCode}).`,
-      related_object_type: 'CredentialRequest',
-      related_object_id: trackingCode,
-      target_roles: ['staff', 'registrar'],
-      target_role: 'staff',
-    });
+    // Note: Request creation notifications are created authoritatively on the backend
+    // via NotificationService.send_request_notification. Client-side duplicate is omitted.
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('regquest_requests_updated', { detail: requestItem }));
