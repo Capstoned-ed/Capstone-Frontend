@@ -268,6 +268,10 @@ export default function RequestDocumentPage() {
   });
   const [otherPurpose, setOtherPurpose] = useState(() => initialDraft?.otherPurpose || '');
 
+  // Photo Upload State (Part 3)
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+
   // Clear graduation date and photo if user is an enrolled student (not alumnus)
   useEffect(() => {
     if (!isAlumnus && dateOfGraduation) {
@@ -280,10 +284,6 @@ export default function RequestDocumentPage() {
       clearDraftFiles(draftUserId, 'photo');
     }
   }, [isAlumnus, dateOfGraduation, photoFile, photoPreview, user]);
-
-  // Photo Upload State (Part 3)
-  const [photoFile, setPhotoFile] = useState(null);
-  const [photoPreview, setPhotoPreview] = useState(null);
 
   // In-Page Document Preview Lightbox Modal State
   const [previewModal, setPreviewModal] = useState({
