@@ -101,6 +101,7 @@ export default function RegistrarDashboard() {
     monthlyStaffColumns,
     dailyVolume,
     monthlyVolume,
+    volumeSeries,
   } = useDashboardData();
 
   const [staffMetricsMode, setStaffMetricsMode] = useState('weekly');
@@ -184,7 +185,7 @@ export default function RegistrarDashboard() {
   };
 
   const activeRequests = useMemo(() => {
-    return requests.filter((r) => !isRequestArchived(r, archivedMap));
+    return requests.filter((r) => !isClaimedStatus(r.status) && !isRequestArchived(r, archivedMap));
   }, [requests, archivedMap]);
 
   const handleOpenProcess = (req) => {
@@ -589,6 +590,7 @@ export default function RegistrarDashboard() {
           <RequestVolumeCard
             dailyData={dailyVolume}
             monthlyData={monthlyVolume}
+            seriesList={volumeSeries}
             loading={loading}
             viewMoreRoute={ROUTES.REGISTRAR.ANALYTICS}
           />

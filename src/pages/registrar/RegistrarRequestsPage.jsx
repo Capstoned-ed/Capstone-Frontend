@@ -818,7 +818,9 @@ export default function RegistrarRequestsPage() {
   }, [requests]);
 
   const batchRequests = useMemo(() => {
-    let activeReqs = requests.filter((r) => !isRequestArchived(r, archivedMap));
+    let activeReqs = requests.filter(
+      (r) => !isClaimedStatus(r.batch_status || r.status) && !isRequestArchived(r, archivedMap)
+    );
     if (selectedBatch !== 'ALL') {
       activeReqs = activeReqs.filter((r) => r.batchId === selectedBatch);
     }
@@ -909,7 +911,9 @@ export default function RegistrarRequestsPage() {
   );
 
   const historyBatchRequests = useMemo(() => {
-    const histReqs = requests.filter((r) => isRequestArchived(r, archivedMap));
+    const histReqs = requests.filter(
+      (r) => isClaimedStatus(r.batch_status || r.status) || isRequestArchived(r, archivedMap)
+    );
     let filtered = selectedBatch === 'ALL' ? histReqs : histReqs.filter((r) => r.batchId === selectedBatch);
 
     if (assignmentHistorySearch.trim()) {
@@ -1885,12 +1889,11 @@ export default function RegistrarRequestsPage() {
                         {item.release_date || item.date_of_release || '—'}
                       </td>
                       <td className="text-center whitespace-nowrap">
-                        <div className="inline-grid grid-cols-[68px_auto_68px] items-center gap-1.5 whitespace-nowrap">
-                          <span aria-hidden="true" />
+                        <div className="inline-flex items-center justify-center whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() => handleOpenProcess(item)}
-                            className="staff-btn-view justify-self-center"
+                            className="staff-btn-view"
                             title="View request details"
                             aria-label="View request details"
                           >
@@ -1899,29 +1902,6 @@ export default function RegistrarRequestsPage() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
                           </button>
-                          <div className="flex items-center justify-start">
-                            {isClaimedStatus(item.batch_status || item.status) && !isRequestArchived(item, archivedMap) && (
-                              <button
-                                type="button"
-                                onClick={() => handleArchiveRequest(item)}
-                                className="staff-btn-archive"
-                                title="Document claimed: Mark as Done and move to History"
-                              >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                </svg>
-                                <span>Done</span>
-                              </button>
-                            )}
-                            {isRequestArchived(item, archivedMap) && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                                <svg className="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                </svg>
-                                <span>Done</span>
-                              </span>
-                            )}
-                          </div>
                         </div>
                       </td>
                       <td>
