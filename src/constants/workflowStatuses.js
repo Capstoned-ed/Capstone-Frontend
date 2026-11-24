@@ -123,17 +123,57 @@ export const BACKEND_STATUS_MAP = Object.freeze({
   'CANCELED': REQUEST_STATUS.CANCELLED,
 });
 
+export const UNVERIFIED_STATUSES = Object.freeze([
+  REQUEST_STATUS.PENDING,
+  REQUEST_STATUS.REQUIREMENTS_VERIFICATION,
+  REQUEST_STATUS.REQUIREMENTS_REJECTED,
+  REQUEST_STATUS.PAYMENT_PENDING,
+  REQUEST_STATUS.FOR_VERIFICATION,
+]);
+
+export const VERIFIED_STATUSES = Object.freeze([
+  REQUEST_STATUS.PAYMENT_VERIFIED,
+  REQUEST_STATUS.PROCESSING,
+  REQUEST_STATUS.READY_FOR_RELEASE,
+  REQUEST_STATUS.RELEASED,
+]);
+
 /**
  * Normalizes any status input (enum or UI label) to canonical backend REQUEST_STATUS.
  */
 export function normalizeToBackendStatus(status) {
   if (!status) return REQUEST_STATUS.PENDING;
-  if (BACKEND_STATUS_MAP[status]) return BACKEND_STATUS_MAP[status];
-  const s = String(status).trim();
+  const raw = typeof status === 'object'
+    ? (status.rawStatus || status.raw?.status || status.status || status.batch_status)
+    : status;
+  if (!raw) return REQUEST_STATUS.PENDING;
+  if (BACKEND_STATUS_MAP[raw]) return BACKEND_STATUS_MAP[raw];
+  const s = String(raw).trim();
   if (BACKEND_STATUS_MAP[s]) return BACKEND_STATUS_MAP[s];
   const upper = s.toUpperCase().replace(/[-\s/]+/g, '_');
   if (BACKEND_STATUS_MAP[upper]) return BACKEND_STATUS_MAP[upper];
-  return REQUEST_STATUS.PENDING;
+  return upper;
+}
+
+/**
+ * Checks if a status strictly represents an unverified intake request.
+ * Strictly includes: Pending, Requirements Verification, Payment Pending, For Verification.
+ * Strictly excludes: Processing, Ready for Release / Pickup, Released, Completed, Rejected, Cancelled.
+ */
+export function isUnverifiedStatus(statusOrItem) {
+  if (!statusOrItem) return false;
+  const norm = normalizeToBackendStatus(statusOrItem);
+  return UNVERIFIED_STATUSES.includes(norm);
+}
+
+/**
+ * Checks if a status represents a verified fulfillment request.
+ * Strictly includes: Processing, Payment Verified, Ready for Release / Pickup, Released / Claimed.
+ */
+export function isVerifiedStatus(statusOrItem) {
+  if (!statusOrItem) return false;
+  const norm = normalizeToBackendStatus(statusOrItem);
+  return VERIFIED_STATUSES.includes(norm);
 }
 
 /**

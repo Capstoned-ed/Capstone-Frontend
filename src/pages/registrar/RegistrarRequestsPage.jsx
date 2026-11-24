@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, getStaffAssignmentTimestamps, recordStaffAssignmentTimestamp, getRequestActivityTimestamps, recordRequestActivityTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived, preserveDocTagInRemarks, mergeReleaseDateIntoRemarks, formatCleanPurpose } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
@@ -17,6 +17,8 @@ import {
   normalizeToBackendStatus,
   formatStatusDisplay,
   isClaimedStatus,
+  isUnverifiedStatus,
+  isVerifiedStatus,
 } from '../../constants/workflowStatuses';
 import '../../styles/admin/AdminRequestsPage.css';
 import '../../styles/staff/StaffRequestsPage.css';
@@ -273,37 +275,7 @@ export default function RegistrarRequestsPage() {
   const isUnverified = (item) => {
     if (!item) return false;
     if (isRequestArchived(item, archivedMap)) return false;
-    const raw = String(item.rawStatus || item.raw?.status || item.status || '')
-      .trim()
-      .toUpperCase()
-      .replace(/[\s-]+/g, '_');
-
-    if (
-      raw === 'PROCESSING' ||
-      raw === 'READY_FOR_RELEASE' ||
-      raw === 'READY_FOR_PICKUP' ||
-      raw === 'FOR_RELEASE' ||
-      raw === 'RELEASED' ||
-      raw === 'CLAIMED' ||
-      raw === 'COMPLETED' ||
-      raw === 'REJECTED' ||
-      raw === 'CANCELLED'
-    ) {
-      return false;
-    }
-
-    return (
-      raw === 'PENDING' ||
-      raw === 'REQUIREMENTS_VERIFICATION' ||
-      raw === 'REQUIREMENTS_REJECTED' ||
-      raw === 'PAYMENT_PENDING' ||
-      raw === 'FOR_VERIFICATION' ||
-      raw === 'SUBMITTED' ||
-      raw === 'PENDING_PAYMENT' ||
-      raw === 'FOR_PAYMENT' ||
-      raw.includes('PENDING') ||
-      raw.includes('VERIF')
-    );
+    return isUnverifiedStatus(item);
   };
 
   const handleToggleSelect = (rawOrId, item) => {
@@ -433,54 +405,50 @@ export default function RegistrarRequestsPage() {
     }
   };
 
-  useEffect(() => {
-    let ignore = false;
-    async function loadData() {
+  const loadData = useCallback(async () => {
+    try {
+      const [requestsRes, credTypesRes, clearancesRes] = await Promise.all([
+        requestsApi.list().catch((err) => {
+          console.error('Failed requestsApi.list:', err);
+          return [];
+        }),
+        requestsApi.getCredentialTypes().catch((err) => {
+          console.error('Failed getCredentialTypes:', err);
+          return [];
+        }),
+        clearancesApi.list().catch((err) => {
+          console.error('Failed clearancesApi.list:', err);
+          return [];
+        }),
+      ]);
+
+      let usersRes = [];
       try {
-        const [requestsRes, credTypesRes, clearancesRes] = await Promise.all([
-          requestsApi.list().catch((err) => {
-            console.error('Failed requestsApi.list:', err);
-            return [];
-          }),
-          requestsApi.getCredentialTypes().catch((err) => {
-            console.error('Failed getCredentialTypes:', err);
-            return [];
-          }),
-          clearancesApi.list().catch((err) => {
-            console.error('Failed clearancesApi.list:', err);
-            return [];
-          }),
-        ]);
-
-        let usersRes = [];
+        usersRes = await usersApi.getStaffUsers();
+        if (!usersRes || usersRes.length === 0) {
+          usersRes = await usersApi.getStaffDirectory();
+        }
+      } catch {
         try {
-          usersRes = await usersApi.getStaffUsers();
-          if (!usersRes || usersRes.length === 0) {
-            usersRes = await usersApi.getStaffDirectory();
-          }
+          usersRes = await usersApi.getStaffDirectory();
         } catch {
-          try {
-            usersRes = await usersApi.getStaffDirectory();
-          } catch {
-            usersRes = [];
-          }
-        }
-
-        if (!ignore) {
-          setRawRequests(Array.isArray(requestsRes) ? requestsRes : []);
-          setUsers(Array.isArray(usersRes) ? usersRes : []);
-          setCredentialTypes(Array.isArray(credTypesRes) ? credTypesRes : []);
-          setClearances(Array.isArray(clearancesRes) ? clearancesRes : []);
-          setLoading(false);
-        }
-      } catch (err) {
-        if (!ignore) {
-          console.error('Failed to load requests data:', err);
-          setError('Unable to load document requests from server.');
-          setLoading(false);
+          usersRes = [];
         }
       }
+
+      setRawRequests(Array.isArray(requestsRes) ? requestsRes : []);
+      setUsers(Array.isArray(usersRes) ? usersRes : []);
+      setCredentialTypes(Array.isArray(credTypesRes) ? credTypesRes : []);
+      setClearances(Array.isArray(clearancesRes) ? clearancesRes : []);
+      setLoading(false);
+    } catch (err) {
+      console.error('Failed to load requests data:', err);
+      setError('Unable to load document requests from server.');
+      setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
     loadData();
 
     const handleSync = () => {
@@ -500,14 +468,13 @@ export default function RegistrarRequestsPage() {
     window.addEventListener('storage', handleActivitySync);
 
     return () => {
-      ignore = true;
       window.removeEventListener('regquest_requests_updated', handleSync);
       window.removeEventListener('regquest_assignments_updated', handleAssignmentsSync);
       window.removeEventListener('regquest_activity_updated', handleActivitySync);
       window.removeEventListener('storage', handleAssignmentsSync);
       window.removeEventListener('storage', handleActivitySync);
     };
-  }, []);
+  }, [loadData]);
 
   const userMap = useMemo(() => {
     const map = new Map();
@@ -1148,6 +1115,7 @@ export default function RegistrarRequestsPage() {
               ...updatedReq,
               updated_at: updatedReq.updated_at || nowIso,
               status: updatedReq.status,
+              rawStatus: updatedReq.rawStatus || updatedReq.status,
               remarks: updatedReq.remarks ?? r.remarks,
               payment_status: updatedReq.payment_status ?? r.payment_status,
               or_number: updatedReq.or_number ?? r.or_number,
@@ -1163,6 +1131,7 @@ export default function RegistrarRequestsPage() {
           : r
       )
     );
+    loadData();
   };
 
   const handleOpenProcess = (req) => {
