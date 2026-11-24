@@ -66,7 +66,7 @@ function getStatusBadge(status) {
     case REQUEST_STATUS.PROCESSING:
       return <span className="status-badge processing">Processing</span>;
     case REQUEST_STATUS.READY_FOR_RELEASE:
-      return <span className="status-badge releasing">Releasing</span>;
+      return <span className="status-badge releasing">For Release</span>;
     case REQUEST_STATUS.RELEASED:
       return <span className="status-badge for-release bg-sky-100 text-sky-900 border border-sky-200">Released</span>;
     case REQUEST_STATUS.REJECTED:
@@ -1075,6 +1075,9 @@ export default function StaffRequestsPage() {
         return <span className="status-pill processing">Processing</span>;
       case 'For release':
       case 'For Release':
+      case 'For Release':
+      case 'For release':
+      case 'FOR RELEASE':
       case 'Releasing':
       case 'RELEASING':
       case 'READY_FOR_RELEASE':
@@ -1529,7 +1532,7 @@ export default function StaffRequestsPage() {
                   statusFilter={statusFilter}
                   setStatusFilter={setStatusFilter}
                   credentialTypes={credentialTypes}
-                  requestStatuses={['Processing', 'Releasing']}
+                  requestStatuses={['Processing', 'For Release']}
                   showStatusFilter={true}
                 />
               }
@@ -1575,7 +1578,7 @@ export default function StaffRequestsPage() {
                   statusFilter={unassignedStatus}
                   setStatusFilter={setUnassignedStatus}
                   credentialTypes={credentialTypes}
-                  requestStatuses={['Processing', 'Releasing']}
+                  requestStatuses={['Processing', 'For Release']}
                   showStatusFilter={true}
                 />
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">

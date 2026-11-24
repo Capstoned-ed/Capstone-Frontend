@@ -1231,7 +1231,7 @@ export default function StaffDashboard() {
                 statusFilter={dashboardStatus}
                 setStatusFilter={setDashboardStatus}
                 credentialTypes={credentialTypes}
-                requestStatuses={['Processing', 'Releasing']}
+                requestStatuses={['Processing', 'For Release']}
                 showStatusFilter={true}
               />
             }

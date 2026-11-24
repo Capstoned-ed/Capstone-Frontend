@@ -398,6 +398,7 @@
   padding: 7px 11px;
 }
 
+.ustp-long-bondpaper .ustp-part2-grid,
 .download-form-page-root .ustp-part2-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

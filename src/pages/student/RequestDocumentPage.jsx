@@ -46,6 +46,31 @@ export default function RequestDocumentPage() {
   const [currentStep, setCurrentStep] = useState(() =>
     initialDraft?.currentStep === 2 ? 2 : 1
   );
+  const prevStepRef = useRef(currentStep);
+
+  useEffect(() => {
+    if (prevStepRef.current === currentStep) return;
+    prevStepRef.current = currentStep;
+
+    const scrollToTop = () => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    };
+
+    // Wait for the new step's DOM to commit & layout to settle so shrinking
+    // page height (e.g. Step 1 -> Step 2/3 on mobile) doesn't clamp scroll to the footer.
+    scrollToTop();
+    let nestedRafId = 0;
+    const rafId = requestAnimationFrame(() => {
+      scrollToTop();
+      nestedRafId = requestAnimationFrame(scrollToTop);
+    });
+    return () => {
+      cancelAnimationFrame(rafId);
+      cancelAnimationFrame(nestedRafId);
+    };
+  }, [currentStep]);
   const [credentialTypes, setCredentialTypes] = useState([]);
   const [activeRegistrarName, setActiveRegistrarName] = useState('Jonalin T. Lagrada, MPSM');
 
@@ -1280,7 +1305,6 @@ export default function RequestDocumentPage() {
       '';
     setPurposeInput(chosenPurpose);
     setCurrentStep(2);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Step 2 -> Step 3 (Submit Request)
@@ -1533,7 +1557,6 @@ export default function RequestDocumentPage() {
       setPrevDateRequested('');
 
       setCurrentStep(3);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       console.error('Request submission failed:', err);
       toast.error('Failed to submit request. Please try again.');
@@ -3122,7 +3145,6 @@ export default function RequestDocumentPage() {
                 type="button"
                 onClick={() => {
                   setCurrentStep(1);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
                 className="btn-complete-track !bg-emerald-600 hover:!bg-emerald-700 !text-white"
               >

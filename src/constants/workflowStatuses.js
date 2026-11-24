@@ -69,10 +69,11 @@ export const BACKEND_STATUS_MAP = Object.freeze({
   'DOCUMENT PREPARATION': REQUEST_STATUS.PROCESSING,
   'DOCUMENT_PREPARATION': REQUEST_STATUS.PROCESSING,
 
-  // Ready for Release / Releasing
+  // Ready for Release / Releasing / For Release
   'Releasing': REQUEST_STATUS.READY_FOR_RELEASE,
   'RELEASING': REQUEST_STATUS.READY_FOR_RELEASE,
   'For release': REQUEST_STATUS.READY_FOR_RELEASE,
+  'For Release': REQUEST_STATUS.READY_FOR_RELEASE,
   'FOR RELEASE': REQUEST_STATUS.READY_FOR_RELEASE,
   'FOR_RELEASE': REQUEST_STATUS.READY_FOR_RELEASE,
   'Ready for Pickup': REQUEST_STATUS.READY_FOR_RELEASE,
@@ -222,8 +223,8 @@ export const STATUS_CONFIG = Object.freeze({
     badgeColor: 'bg-sky-100 text-sky-900 border-sky-200',
   },
   [REQUEST_STATUS.READY_FOR_RELEASE]: {
-    label: 'Ready for Pickup',
-    detailLabel: 'Releasing',
+    label: 'For Release',
+    detailLabel: 'For Release',
     badgeClass: 'releasing',
     badgeColor: 'bg-violet-100 text-violet-900 border-violet-200',
   },
@@ -256,7 +257,7 @@ export function formatStatusDisplay(rawStatus, options = {}) {
   const cfg = STATUS_CONFIG[norm];
   if (!cfg) return 'Pending';
   if (options.useReleasing && norm === REQUEST_STATUS.READY_FOR_RELEASE) {
-    return 'Releasing';
+    return 'For Release';
   }
   return cfg.label || 'Pending';
 }
@@ -279,7 +280,7 @@ export const REQUEST_STATUSES = Object.freeze([
   'Pending Payment',
   'For Verification',
   'Processing',
-  'Releasing',
+  'For Release',
   'Claimed',
   'On Hold',
   'Rejected',
@@ -291,6 +292,6 @@ export const REQUEST_STATUSES = Object.freeze([
  */
 export const STAFF_REQUEST_STATUSES = Object.freeze([
   'Processing',
-  'Releasing',
+  'For Release',
   'Claimed',
 ]);
