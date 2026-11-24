@@ -3,26 +3,59 @@
 }
 
 .staff-dash-hero {
-  @apply relative bg-[#0B0B36] text-white overflow-hidden pt-3 pb-14 px-6 sm:pt-3 sm:pb-16 sm:px-10 lg:px-12 select-none;
+  position: relative;
+  overflow: hidden;
+  background-color: #0B0B36;
+  color: #ffffff;
+  min-height: 140px;
+  display: flex;
+  align-items: flex-start;
+  padding: 0.75rem 1.5rem 2.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  user-select: none;
+}
+
+@media (min-width: 640px) {
+  .staff-dash-hero {
+    min-height: 160px;
+    padding: 0.75rem 2.5rem 2.75rem;
+  }
 }
 
 .staff-dash-hero-bg {
-  @apply absolute right-0 top-0 bottom-0 w-1/2 sm:w-3/5 lg:w-1/2 pointer-events-none overflow-hidden;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  pointer-events: none;
+  user-select: none;
+  overflow: hidden;
 }
 
 .staff-dash-hero-img {
-  @apply w-full h-full object-cover object-left opacity-40 sm:opacity-50;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  object-position: center right;
+  opacity: 0.38;
   mix-blend-mode: screen;
-  filter: brightness(1.08) contrast(1.08);
   transform: scale(1.05);
+  filter: brightness(1.04) contrast(1.06);
+}
+
+@media (min-width: 640px) {
+  .staff-dash-hero-img {
+    opacity: 0.44;
+  }
 }
 
 .staff-dash-hero-grad-r {
-  @apply absolute inset-0 bg-gradient-to-r from-[#0B0B36] via-[#0B0B36]/70 to-transparent;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, rgba(11, 11, 54, 0.95) 0%, rgba(11, 11, 54, 0.86) 45%, rgba(11, 11, 54, 0.48) 75%, rgba(11, 11, 54, 0.15) 100%);
 }
 
 .staff-dash-hero-grad-t {
-  @apply absolute inset-0 bg-gradient-to-t from-[#0B0B36]/60 via-transparent to-[#0B0B36]/30;
+  display: none;
 }
 
 .staff-dash-hero-content {

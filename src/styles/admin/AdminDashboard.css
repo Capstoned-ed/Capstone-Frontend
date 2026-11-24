@@ -25,10 +25,8 @@
 
 .admin-banner-overlay {
   position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 50%;
+  inset: 0;
+  width: 100%;
   pointer-events: none;
   user-select: none;
   overflow: hidden;
@@ -36,7 +34,7 @@
 
 @media (min-width: 640px) {
   .admin-banner-overlay {
-    width: 40%;
+    width: 100%;
   }
 }
 
@@ -44,23 +42,23 @@
   height: 100%;
   width: 100%;
   object-fit: cover;
-  object-position: left;
-  opacity: 0.45;
+  object-position: center right;
+  opacity: 0.38;
   mix-blend-mode: screen;
   transform: scale(1.05);
-  filter: brightness(1.08) contrast(1.08);
+  filter: brightness(1.04) contrast(1.06);
 }
 
 @media (min-width: 640px) {
   .admin-banner-img {
-    opacity: 0.52;
+    opacity: 0.44;
   }
 }
 
 .admin-banner-fade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to right, #0B0B36, rgba(11, 11, 54, 0.7), transparent);
+  background: linear-gradient(to right, rgba(11, 11, 54, 0.95) 0%, rgba(11, 11, 54, 0.86) 45%, rgba(11, 11, 54, 0.48) 75%, rgba(11, 11, 54, 0.15) 100%);
 }
 
 .admin-banner-content {

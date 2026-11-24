@@ -166,16 +166,24 @@ export default function StudentDashboard() {
     <div className="w-full flex flex-col min-h-screen bg-white">
       {/* 1. Hero Section */}
       <section className="relative overflow-hidden bg-[#0B0B36] text-white min-h-[220px] sm:min-h-[260px] flex items-center">
-        {/* USTP Building on the right with dark blue atmospheric gradient blend */}
-        <div className="absolute right-0 top-0 bottom-0 w-full sm:w-3/5 lg:w-1/2 pointer-events-none overflow-hidden select-none">
+        {/* USTP Building full-width matching Admin/Staff/Registrar banner color */}
+        <div className="absolute inset-0 w-full pointer-events-none overflow-hidden select-none">
           <img
             src={ustpBuilding}
             alt="USTP Campus Building"
-            className="w-full h-full object-cover object-center opacity-45 mix-blend-screen filter contrast-125 brightness-95 scale-105"
+            className="w-full h-full object-cover opacity-[0.38] sm:opacity-[0.44] mix-blend-screen scale-105"
+            style={{
+              objectPosition: 'center right',
+              filter: 'brightness(1.04) contrast(1.06)',
+            }}
           />
-          {/* Gradients blending building seamlessly into the dark navy blue background */}
-          <div className="absolute inset-0 bg-gradient-to-r from-[#0B0B36] via-[#0B0B36]/80 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B36] via-transparent to-[#0B0B36]/70" />
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                'linear-gradient(to right, rgba(11, 11, 54, 0.95) 0%, rgba(11, 11, 54, 0.86) 45%, rgba(11, 11, 54, 0.48) 75%, rgba(11, 11, 54, 0.15) 100%)',
+            }}
+          />
         </div>
 
         {/* Hero Content */}
