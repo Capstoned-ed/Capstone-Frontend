@@ -76,6 +76,9 @@ export const BACKEND_STATUS_MAP = Object.freeze({
   'For Release': REQUEST_STATUS.READY_FOR_RELEASE,
   'FOR RELEASE': REQUEST_STATUS.READY_FOR_RELEASE,
   'FOR_RELEASE': REQUEST_STATUS.READY_FOR_RELEASE,
+  'For Releasing': REQUEST_STATUS.READY_FOR_RELEASE,
+  'FOR RELEASING': REQUEST_STATUS.READY_FOR_RELEASE,
+  'FOR_RELEASING': REQUEST_STATUS.READY_FOR_RELEASE,
   'Ready for Pickup': REQUEST_STATUS.READY_FOR_RELEASE,
   'READY FOR PICKUP': REQUEST_STATUS.READY_FOR_RELEASE,
   'READY_FOR_PICKUP': REQUEST_STATUS.READY_FOR_RELEASE,
@@ -199,8 +202,8 @@ export const STATUS_CONFIG = Object.freeze({
     badgeColor: 'bg-rose-100 text-rose-700 border-rose-200',
   },
   [REQUEST_STATUS.PAYMENT_PENDING]: {
-    label: 'Pending Payment',
-    detailLabel: 'For Payment',
+    label: 'Payment Pending',
+    detailLabel: 'Payment Pending',
     badgeClass: 'for-payment',
     badgeColor: 'bg-amber-100 text-amber-900 border-amber-300',
   },
@@ -223,8 +226,8 @@ export const STATUS_CONFIG = Object.freeze({
     badgeColor: 'bg-sky-100 text-sky-900 border-sky-200',
   },
   [REQUEST_STATUS.READY_FOR_RELEASE]: {
-    label: 'For Release',
-    detailLabel: 'For Release',
+    label: 'For Releasing',
+    detailLabel: 'For Releasing',
     badgeClass: 'releasing',
     badgeColor: 'bg-violet-100 text-violet-900 border-violet-200',
   },
@@ -257,7 +260,7 @@ export function formatStatusDisplay(rawStatus, options = {}) {
   const cfg = STATUS_CONFIG[norm];
   if (!cfg) return 'Pending';
   if (options.useReleasing && norm === REQUEST_STATUS.READY_FOR_RELEASE) {
-    return 'For Release';
+    return 'For Releasing';
   }
   return cfg.label || 'Pending';
 }
@@ -269,7 +272,8 @@ export function isClaimedStatus(status) {
   if (!status) return false;
   const raw = typeof status === 'object' ? (status.batch_status || status.status || status.rawStatus || status.raw_status) : status;
   const s = String(raw || '').trim().toUpperCase();
-  return ['CLAIMED', 'COMPLETED'].includes(s) || s.includes('CLAIM');
+  const norm = normalizeToBackendStatus(raw);
+  return norm === REQUEST_STATUS.RELEASED || ['CLAIMED', 'COMPLETED', 'RELEASED'].includes(s) || s.includes('CLAIM') || s.includes('RELEASE');
 }
 
 /**
@@ -277,10 +281,10 @@ export function isClaimedStatus(status) {
  */
 export const REQUEST_STATUSES = Object.freeze([
   'Pending',
-  'Pending Payment',
+  'Payment Pending',
   'For Verification',
   'Processing',
-  'For Release',
+  'For Releasing',
   'Claimed',
   'On Hold',
   'Rejected',
@@ -292,6 +296,6 @@ export const REQUEST_STATUSES = Object.freeze([
  */
 export const STAFF_REQUEST_STATUSES = Object.freeze([
   'Processing',
-  'For Release',
+  'For Releasing',
   'Claimed',
 ]);

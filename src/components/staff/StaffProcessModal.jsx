@@ -121,7 +121,7 @@ export default function StaffProcessModal({
     const defaultStatuses = [
       'For Verification',
       'Processing',
-      'For Release',
+      'For Releasing',
       'Claimed',
     ];
     const base = (

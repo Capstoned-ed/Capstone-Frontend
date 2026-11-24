@@ -230,6 +230,31 @@ export default function NotificationItem({
 
     const trackParam = related_object_id ? `?trackId=${related_object_id}` : '';
 
+    const isStudentOrAlumni =
+      user?.role === ROLES.STUDENT ||
+      user?.role === ROLES.ALUMNI ||
+      !user?.role ||
+      user?.role === 'STUDENT' ||
+      user?.role === 'ALUMNI';
+
+    const isRejectedOrActionRequired =
+      event_type === 'CLEARANCE_REJECTED' ||
+      event_type === 'PAYMENT_REJECTED' ||
+      (title && (
+        title.toLowerCase().includes('action required') ||
+        title.toLowerCase().includes('action needed') ||
+        title.toLowerCase().includes('rejected')
+      )) ||
+      (message && (
+        message.toLowerCase().includes('action required') ||
+        message.toLowerCase().includes('requires action') ||
+        message.toLowerCase().includes('rejected')
+      ));
+
+    if (isStudentOrAlumni && isRejectedOrActionRequired) {
+      return { label: 'Document Request →', path: ROUTES.STUDENT.NEW_REQUEST };
+    }
+
     if (related_object_type === 'CredentialRequest') {
       if (user?.role === ROLES.REGISTRAR) {
         return { label: 'View Requests →', path: `${ROUTES.REGISTRAR.REQUESTS}${trackParam}` };
@@ -243,7 +268,7 @@ export default function NotificationItem({
           path: related_object_id ? `/student/form/${related_object_id}` : `${ROUTES.STUDENT.REQUESTS}${trackParam}`,
         };
       }
-      return { label: 'Track Request →', path: `${ROUTES.STUDENT.REQUESTS}${trackParam}` };
+      return { label: 'Track Status →', path: `${ROUTES.STUDENT.REQUESTS}${trackParam}` };
     }
     if (related_object_type === 'StudentClearance' || event_type === 'CLEARANCE_APPROVED') {
       if (user?.role === ROLES.REGISTRAR) {
@@ -261,7 +286,13 @@ export default function NotificationItem({
       if (user?.role === ROLES.STAFF) {
         return { label: 'Process Request →', path: ROUTES.STAFF.REQUESTS };
       }
+      return { label: 'Track Status →', path: `${ROUTES.STUDENT.REQUESTS}${trackParam}` };
     }
+
+    if (isStudentOrAlumni) {
+      return { label: 'Track Status →', path: `${ROUTES.STUDENT.REQUESTS}${trackParam}` };
+    }
+
     return null;
   };
 

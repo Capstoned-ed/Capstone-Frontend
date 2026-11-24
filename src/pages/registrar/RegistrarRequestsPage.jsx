@@ -888,9 +888,15 @@ export default function RegistrarRequestsPage() {
       });
     }
     if (verificationStatus) {
+      const filterNorm = normalizeToBackendStatus(verificationStatus);
+      const isFilterOnHold = verificationStatus.toLowerCase() === 'on hold' || filterNorm === REQUEST_STATUS.REQUIREMENTS_VERIFICATION;
       unv = unv.filter((r) => {
         const itemStatus = (r.batch_status || r.status || '').toLowerCase();
-        return itemStatus === verificationStatus.toLowerCase();
+        const itemNorm = normalizeToBackendStatus(r.batch_status || r.status);
+        if (isFilterOnHold) {
+          return itemStatus.includes('hold') || itemNorm === REQUEST_STATUS.REQUIREMENTS_VERIFICATION;
+        }
+        return itemStatus === verificationStatus.toLowerCase() || (itemNorm && filterNorm && itemNorm === filterNorm);
       });
     }
     return unv.sort(sortRequestsNewestFirst);
@@ -1613,8 +1619,9 @@ export default function RegistrarRequestsPage() {
               options={[
                 { value: '', label: 'All Statuses' },
                 { value: 'Pending', label: 'Pending' },
-                { value: 'Pending Payment', label: 'Pending Payment' },
+                { value: 'Payment Pending', label: 'Payment Pending' },
                 { value: 'For Verification', label: 'For Verification' },
+                { value: 'On Hold', label: 'On Hold' },
               ]}
             />
           </div>

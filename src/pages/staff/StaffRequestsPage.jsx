@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import requestsApi, {
   updateStoredRequest,
   isValidRequest,
@@ -154,47 +154,43 @@ export default function StaffRequestsPage() {
     });
   };
 
-  useEffect(() => {
-    let ignore = false;
-    async function loadData() {
+  const loadData = useCallback(async () => {
+    try {
+      const [requestsRes, credTypesRes, clearancesRes] = await Promise.all([
+        requestsApi.list().catch((err) => {
+          console.error('Failed requestsApi.list:', err);
+          return [];
+        }),
+        requestsApi.getCredentialTypes().catch((err) => {
+          console.error('Failed getCredentialTypes:', err);
+          return [];
+        }),
+        clearancesApi.list().catch((err) => {
+          console.error('Failed clearancesApi.list:', err);
+          return [];
+        }),
+      ]);
+
+      let usersRes = [];
       try {
-        const [requestsRes, credTypesRes, clearancesRes] = await Promise.all([
-          requestsApi.list().catch((err) => {
-            console.error('Failed requestsApi.list:', err);
-            return [];
-          }),
-          requestsApi.getCredentialTypes().catch((err) => {
-            console.error('Failed getCredentialTypes:', err);
-            return [];
-          }),
-          clearancesApi.list().catch((err) => {
-            console.error('Failed clearancesApi.list:', err);
-            return [];
-          }),
-        ]);
-
-        let usersRes = [];
-        try {
-          usersRes = await usersApi.getStaffDirectory();
-        } catch {
-          usersRes = [];
-        }
-
-        if (!ignore) {
-          setRawRequests(Array.isArray(requestsRes) ? requestsRes : []);
-          setUsers(Array.isArray(usersRes) ? usersRes : []);
-          setCredentialTypes(Array.isArray(credTypesRes) ? credTypesRes : []);
-          setClearances(Array.isArray(clearancesRes) ? clearancesRes : []);
-          setLoading(false);
-        }
-      } catch (err) {
-        if (!ignore) {
-          console.error('Failed to load staff requests data:', err);
-          setError('Unable to load document requests from server.');
-          setLoading(false);
-        }
+        usersRes = await usersApi.getStaffDirectory();
+      } catch {
+        usersRes = [];
       }
+
+      setRawRequests(Array.isArray(requestsRes) ? requestsRes : []);
+      setUsers(Array.isArray(usersRes) ? usersRes : []);
+      setCredentialTypes(Array.isArray(credTypesRes) ? credTypesRes : []);
+      setClearances(Array.isArray(clearancesRes) ? clearancesRes : []);
+      setLoading(false);
+    } catch (err) {
+      console.error('Failed to load staff requests data:', err);
+      setError('Unable to load document requests from server.');
+      setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
     loadData();
 
     const handleSync = () => {
@@ -220,7 +216,6 @@ export default function StaffRequestsPage() {
     window.addEventListener('storage', handleArchivedSync);
 
     return () => {
-      ignore = true;
       window.removeEventListener('regquest_requests_updated', handleSync);
       window.removeEventListener('regquest_assignments_updated', handleAssignmentsSync);
       window.removeEventListener('regquest_activity_updated', handleActivitySync);
@@ -229,7 +224,7 @@ export default function StaffRequestsPage() {
       window.removeEventListener('storage', handleActivitySync);
       window.removeEventListener('storage', handleArchivedSync);
     };
-  }, []);
+  }, [loadData]);
 
   const userMap = useMemo(() => {
     const map = new Map();
@@ -656,14 +651,23 @@ export default function StaffRequestsPage() {
     });
   };
 
-  // Active requests (not yet moved to History, and excluding Claimed / Released)
+  // Active requests (not yet moved to History, and strictly excluding Claimed / Released)
   const activeRequests = useMemo(() => {
-    return requests.filter((r) => !isClaimedStatus(r.rawStatus || r.status) && !isRequestArchived(r, archivedMap));
+    return requests.filter((r) => {
+      const norm = normalizeToBackendStatus(r.rawStatus || r.status);
+      if (norm === REQUEST_STATUS.RELEASED || isClaimedStatus(r) || isClaimedStatus(r.status) || isClaimedStatus(r.rawStatus)) {
+        return false;
+      }
+      return !isRequestArchived(r, archivedMap);
+    });
   }, [requests, archivedMap]);
 
   // Request History (documents claimed by students and archived)
   const historyRequests = useMemo(() => {
-    const archived = requests.filter((r) => isClaimedStatus(r.rawStatus || r.status) || isRequestArchived(r, archivedMap));
+    const archived = requests.filter((r) => {
+      const norm = normalizeToBackendStatus(r.rawStatus || r.status);
+      return norm === REQUEST_STATUS.RELEASED || isClaimedStatus(r) || isClaimedStatus(r.status) || isClaimedStatus(r.rawStatus) || isRequestArchived(r, archivedMap);
+    });
     return filterRequestsBySearch(archived, historySearch, historyDocType, '').sort((a, b) => {
       const timeA = archivedMap[a.id]?.archived_at || archivedMap[a.rawId]?.archived_at || a.created_at || 0;
       const timeB = archivedMap[b.id]?.archived_at || archivedMap[b.rawId]?.archived_at || b.created_at || 0;
@@ -671,10 +675,16 @@ export default function StaffRequestsPage() {
     });
   }, [requests, archivedMap, historySearch, historyDocType]);
 
-  // Card 1: Requests assigned to this staff member (from Active queue)
+  // Card 1: Requests assigned to this staff member (from Active queue: Processing up to For Releasing)
   // Sorted by: MOST RECENTLY UPDATED / ACCEPTED / ASSIGNED AT THE VERY TOP!
   const assignedRequests = useMemo(() => {
-    const assigned = activeRequests.filter((r) => isRequestAssignedToUser(r, user, assignments, users));
+    const assigned = activeRequests.filter((r) => {
+      const norm = normalizeToBackendStatus(r.rawStatus || r.status);
+      if (norm === REQUEST_STATUS.RELEASED || isClaimedStatus(r) || isClaimedStatus(r.status) || isClaimedStatus(r.rawStatus)) {
+        return false;
+      }
+      return isRequestAssignedToUser(r, user, assignments, users);
+    });
     return filterRequestsBySearch(assigned, searchQuery, docTypeFilter, statusFilter).sort(sortRequestsNewestFirst);
   }, [activeRequests, user, assignments, users, activityTimestamps, searchQuery, docTypeFilter, statusFilter]);
 
@@ -848,8 +858,9 @@ export default function StaffRequestsPage() {
       });
 
       // Backend API transition if applicable
-      if (statusToSet && targetId && !String(targetId).startsWith('fallback_')) {
-        const backendStatus = BACKEND_STATUS_MAP[statusToSet] || statusToSet;
+      if (targetId && !String(targetId).startsWith('fallback_')) {
+        const effectiveStatusToSet = statusToSet || item.rawStatus || item.status || 'PROCESSING';
+        const backendStatus = BACKEND_STATUS_MAP[effectiveStatusToSet] || normalizeToBackendStatus(effectiveStatusToSet);
         const batchRemarks = releasingDate
           ? mergeReleaseDateIntoRemarks(item, releasingDate, note || 'Batch updated by staff')
           : preserveDocTagInRemarks(item, note || 'Batch updated by staff');
@@ -858,6 +869,8 @@ export default function StaffRequestsPage() {
           {
             status: backendStatus,
             remarks: batchRemarks,
+            release_date: releasingDate || undefined,
+            date_of_release: releasingDate || undefined,
           },
           { throwOnError: false }
         );

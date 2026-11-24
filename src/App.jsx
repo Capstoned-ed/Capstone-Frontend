@@ -126,6 +126,8 @@ export default function App() {
                   <Route path={ROUTES.STUDENT.DASHBOARD} element={<StudentDashboard />} />
                   <Route path={ROUTES.STUDENT.CLEARANCE} element={<Navigate to={ROUTES.STUDENT.NEW_REQUEST} replace />} />
                   <Route path={ROUTES.STUDENT.NEW_REQUEST} element={<RequestDocumentPage />} />
+                  <Route path="/student/track" element={<Navigate to={ROUTES.STUDENT.REQUESTS} replace />} />
+                  <Route path="/student/track-status" element={<Navigate to={ROUTES.STUDENT.REQUESTS} replace />} />
                   <Route path={ROUTES.STUDENT.REQUESTS} element={<TrackStatusPage />} />
                   <Route path={ROUTES.STUDENT.PAYMENTS} element={<StudentPaymentsPage />} />
                   <Route path={ROUTES.STUDENT.CREDENTIALS} element={<Navigate to={ROUTES.STUDENT.NEW_REQUEST} replace />} />
