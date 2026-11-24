@@ -10,6 +10,7 @@ import requestsApi, {
 import credentialTypesApi from '../../api/credentialTypes';
 import settingsApi from '../../api/settings';
 import clearancesApi, { saveClearanceAttachment } from '../../api/clearances';
+import usersApi from '../../api/users';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
 import { extractApiErrorMessage } from '../../utils/errorUtils';

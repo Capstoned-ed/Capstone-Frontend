@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import requestsApi, {
   updateStoredRequest,
   isValidRequest,
@@ -154,47 +154,43 @@ export default function StaffRequestsPage() {
     });
   };
 
-  useEffect(() => {
-    let ignore = false;
-    async function loadData() {
+  const loadData = useCallback(async () => {
+    try {
+      const [requestsRes, credTypesRes, clearancesRes] = await Promise.all([
+        requestsApi.list().catch((err) => {
+          console.error('Failed requestsApi.list:', err);
+          return [];
+        }),
+        requestsApi.getCredentialTypes().catch((err) => {
+          console.error('Failed getCredentialTypes:', err);
+          return [];
+        }),
+        clearancesApi.list().catch((err) => {
+          console.error('Failed clearancesApi.list:', err);
+          return [];
+        }),
+      ]);
+
+      let usersRes = [];
       try {
-        const [requestsRes, credTypesRes, clearancesRes] = await Promise.all([
-          requestsApi.list().catch((err) => {
-            console.error('Failed requestsApi.list:', err);
-            return [];
-          }),
-          requestsApi.getCredentialTypes().catch((err) => {
-            console.error('Failed getCredentialTypes:', err);
-            return [];
-          }),
-          clearancesApi.list().catch((err) => {
-            console.error('Failed clearancesApi.list:', err);
-            return [];
-          }),
-        ]);
-
-        let usersRes = [];
-        try {
-          usersRes = await usersApi.getStaffDirectory();
-        } catch {
-          usersRes = [];
-        }
-
-        if (!ignore) {
-          setRawRequests(Array.isArray(requestsRes) ? requestsRes : []);
-          setUsers(Array.isArray(usersRes) ? usersRes : []);
-          setCredentialTypes(Array.isArray(credTypesRes) ? credTypesRes : []);
-          setClearances(Array.isArray(clearancesRes) ? clearancesRes : []);
-          setLoading(false);
-        }
-      } catch (err) {
-        if (!ignore) {
-          console.error('Failed to load staff requests data:', err);
-          setError('Unable to load document requests from server.');
-          setLoading(false);
-        }
+        usersRes = await usersApi.getStaffDirectory();
+      } catch {
+        usersRes = [];
       }
+
+      setRawRequests(Array.isArray(requestsRes) ? requestsRes : []);
+      setUsers(Array.isArray(usersRes) ? usersRes : []);
+      setCredentialTypes(Array.isArray(credTypesRes) ? credTypesRes : []);
+      setClearances(Array.isArray(clearancesRes) ? clearancesRes : []);
+      setLoading(false);
+    } catch (err) {
+      console.error('Failed to load staff requests data:', err);
+      setError('Unable to load document requests from server.');
+      setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
     loadData();
 
     const handleSync = () => {
@@ -220,7 +216,6 @@ export default function StaffRequestsPage() {
     window.addEventListener('storage', handleArchivedSync);
 
     return () => {
-      ignore = true;
       window.removeEventListener('regquest_requests_updated', handleSync);
       window.removeEventListener('regquest_assignments_updated', handleAssignmentsSync);
       window.removeEventListener('regquest_activity_updated', handleActivitySync);
@@ -229,7 +224,7 @@ export default function StaffRequestsPage() {
       window.removeEventListener('storage', handleActivitySync);
       window.removeEventListener('storage', handleArchivedSync);
     };
-  }, []);
+  }, [loadData]);
 
   const userMap = useMemo(() => {
     const map = new Map();
