@@ -30,7 +30,8 @@ const DEFAULT_TIMELINE_STEPS = [
   { id: 'pending_payment', name: 'For Payment', label: 'Pay at Cashier & Submit OR' },
   { id: 'for_verification', name: 'For Verification', label: 'Staff is verifying your submitted Official Receipt.' },
   { id: 'processing', name: 'Processing', label: 'Document Preparation & Printing' },
-  { id: 'releasing', name: 'For Release', label: 'Ready for Claiming' },
+  { id: 'releasing', name: 'For Releasing', label: 'Ready for Claiming' },
+  { id: 'claimed', name: 'Claimed', label: 'Document Released & Claimed' },
 ];
 
 function getStatusPillClass(status) {
@@ -1059,15 +1060,24 @@ export default function TrackStatusPage() {
                     }
                   } else if (index === 4) {
                     // Step 4: Releasing (Ready for Claiming)
-                    if (isCurrent) {
+                    if (currentStepIndex > 4) {
+                      dateText = 'Verified';
+                      stepDesc = 'Document made ready for release at the Registrar window.';
+                    } else if (isCurrent) {
                       dateText = 'Ready for Pickup';
                       stepDesc = 'Your credential is ready! You may claim your document at the Registrar window.';
-                    } else if (currentStepIndex > 4) {
-                      dateText = 'Claimed / Released';
-                      stepDesc = 'Document claimed and released to student.';
                     } else {
                       dateText = `Target: ${estimatedCompletion}`;
                       stepDesc = 'Document will be available for pickup once released.';
+                    }
+                  } else if (index === 5) {
+                    // Step 5: Claimed (Document Released & Claimed)
+                    if (isCurrent || currentStepIndex >= 5) {
+                      dateText = 'Completed';
+                      stepDesc = 'Document claimed and officially released to student.';
+                    } else {
+                      dateText = 'Pending Release';
+                      stepDesc = 'Document will be marked claimed upon student pickup.';
                     }
                   }
 

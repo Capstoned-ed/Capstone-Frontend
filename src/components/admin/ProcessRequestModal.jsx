@@ -46,9 +46,13 @@ function resolveModalTargetBackendStatus(label) {
     upper === 'APPROVED / FOR RELEASE' ||
     upper === 'APPROVED' ||
     upper === 'READY FOR RELEASE' ||
-    upper === 'FOR RELEASE'
+    upper === 'FOR RELEASE' ||
+    upper === 'FOR RELEASING'
   ) {
     return REQUEST_STATUS.READY_FOR_RELEASE;
+  }
+  if (upper === 'ON HOLD' || upper === 'ON_HOLD') {
+    return REQUEST_STATUS.REQUIREMENTS_VERIFICATION;
   }
   if (upper === 'RELEASED / COMPLETED' || upper === 'RELEASED') {
     return REQUEST_STATUS.RELEASED;
@@ -630,31 +634,32 @@ export default function ProcessRequestModal({
       // Admin has strictly read-only access to request status processing
       nextTransitions = [];
     } else if (role === 'REGISTRAR') {
-      // Registrar-specific approval & oversight transitions (never Staff's Pending Payment)
+      // Registrar-specific approval & oversight transitions (including On Hold for further verification)
       switch (currentPersisted) {
         case REQUEST_STATUS.PENDING:
         case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
         case REQUEST_STATUS.PAYMENT_PENDING:
         case REQUEST_STATUS.FOR_VERIFICATION:
           nextTransitions = [
-            'Approved / For Release',
-            'Returned to Staff / Processing',
+            'On Hold',
+            'Processing',
+            'For Releasing',
             'Rejected',
           ];
           break;
         case REQUEST_STATUS.PAYMENT_VERIFIED:
         case REQUEST_STATUS.PROCESSING:
           nextTransitions = [
-            'Approved / For Release',
+            'For Releasing',
             'Claimed',
-            'Returned to Staff / Processing',
+            'On Hold',
             'Rejected',
           ];
           break;
         case REQUEST_STATUS.READY_FOR_RELEASE:
           nextTransitions = [
             'Claimed',
-            'Returned to Staff / Processing',
+            'Processing',
             'Rejected',
           ];
           break;
@@ -662,7 +667,7 @@ export default function ProcessRequestModal({
           nextTransitions = [];
       }
     } else {
-      // Role: STAFF — valid Staff transitions only (never re-offering Pending Payment when already PAYMENT_PENDING)
+      // Role: STAFF — valid Staff transitions only
       if (isWaitingForRegistrarApproval) {
         nextTransitions = [];
       } else {
@@ -671,7 +676,7 @@ export default function ProcessRequestModal({
             nextTransitions = ['On Hold', 'Rejected'];
             break;
           case REQUEST_STATUS.REQUIREMENTS_VERIFICATION:
-            nextTransitions = ['Pending', 'Pending Payment', 'Rejected'];
+            nextTransitions = ['Pending', 'Payment Pending', 'Rejected'];
             break;
           case REQUEST_STATUS.PAYMENT_PENDING:
             nextTransitions = ['For Verification', 'Processing', 'Rejected'];
@@ -680,10 +685,10 @@ export default function ProcessRequestModal({
             nextTransitions = ['Processing', 'Rejected'];
             break;
           case REQUEST_STATUS.PAYMENT_VERIFIED:
-            nextTransitions = ['Processing', 'For Release'];
+            nextTransitions = ['Processing', 'For Releasing'];
             break;
           case REQUEST_STATUS.PROCESSING:
-            nextTransitions = ['For Release'];
+            nextTransitions = ['For Releasing', 'Claimed'];
             break;
           case REQUEST_STATUS.READY_FOR_RELEASE:
             nextTransitions = ['Claimed'];

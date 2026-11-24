@@ -129,9 +129,9 @@ export default function PredictedInsightCard() {
       case 'moderate':
       default:
         return {
-          badge: 'bg-orange-50 text-orange-700 border-orange-200',
-          dot: 'bg-orange-500',
-          text: 'text-orange-700',
+          badge: 'bg-yellow-50 text-yellow-800 border-yellow-300',
+          dot: 'bg-yellow-400',
+          text: 'text-yellow-800',
         };
     }
   };
@@ -228,32 +228,50 @@ export default function PredictedInsightCard() {
               </li>
             </ul>
 
-            {/* 5-Day Daily Outlook Chips */}
+            {/* 5-Day Daily Outlook Chips (Fixed Monday–Friday Order) */}
             {forecastList && forecastList.length > 0 && (
               <div className="mt-3.5 pt-3 border-t border-slate-200/80">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-semibold text-slate-500 mr-1">5-Day Outlook:</span>
-                  {forecastList.slice(0, 5).map((item, idx) => {
-                    const isPeak = item.weekday === peakDayName;
-                    const vol = Math.round(item.predicted_requests || 0);
-                    const dayTier = computeWorkloadTier(vol, 1);
-                    const tierStyle = getWorkloadTierStyle(dayTier);
+                  {(() => {
+                    const FIXED_WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+                    const dayMap = new Map();
+                    forecastList.forEach((item) => {
+                      if (item?.weekday) {
+                        const found = FIXED_WEEKDAYS.find(
+                          (w) => w.toLowerCase() === item.weekday.toLowerCase() ||
+                            item.weekday.toLowerCase().startsWith(w.slice(0, 3).toLowerCase())
+                        );
+                        if (found) dayMap.set(found, item);
+                      }
+                    });
 
-                    return (
-                      <div
-                        key={idx}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-sm border ${tierStyle.badge}`}
-                      >
-                        <span className="font-bold">{item.weekday.slice(0, 3)}:</span>
-                        <span className="font-semibold">~{vol}</span>
-                        {isPeak && (
-                          <span className="text-[10px] font-bold px-1 rounded bg-black/5 uppercase tracking-wide">
-                            Peak
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
+                    return FIXED_WEEKDAYS.map((wName, idx) => {
+                      const matchedItem = dayMap.get(wName) || {
+                        weekday: wName,
+                        predicted_requests: dailyAvg,
+                      };
+                      const isPeak = (matchedItem.weekday || wName) === peakDayName;
+                      const vol = Math.round(matchedItem.predicted_requests || 0);
+                      const dayTier = computeWorkloadTier(vol, 1);
+                      const tierStyle = getWorkloadTierStyle(dayTier);
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-sm border ${tierStyle.badge}`}
+                        >
+                          <span className="font-bold">{wName.slice(0, 3)}:</span>
+                          <span className="font-semibold">~{vol}</span>
+                          {isPeak && (
+                            <span className="text-[10px] font-bold px-1 rounded bg-black/5 uppercase tracking-wide">
+                              Peak
+                            </span>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
 
                 {/* Workload Legend */}
@@ -264,8 +282,8 @@ export default function PredictedInsightCard() {
                     <span className="text-blue-700 font-medium">Light (1–40/day)</span>
                   </div>
                   <div className="inline-flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-orange-500" />
-                    <span className="text-orange-700 font-medium">Moderate (41–70/day)</span>
+                    <span className="w-2 h-2 rounded-full bg-yellow-400" />
+                    <span className="text-yellow-700 font-medium">Moderate (41–70/day)</span>
                   </div>
                   <div className="inline-flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-red-500" />

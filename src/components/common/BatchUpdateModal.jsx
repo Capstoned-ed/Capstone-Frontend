@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import CompactDatePicker from './CompactDatePicker';
 
 const STATUS_OPTIONS = [
   { value: '', label: '-- No change (Keep current status) --' },
   { value: 'Pending', label: 'Pending' },
-  { value: 'Pending Payment', label: 'Pending Payment' },
+  { value: 'Payment Pending', label: 'Payment Pending' },
   { value: 'For Verification', label: 'For Verification' },
   { value: 'Processing', label: 'Processing' },
-  { value: 'For Release', label: 'For Release' },
+  { value: 'For Releasing', label: 'For Releasing' },
   { value: 'Claimed', label: 'Claimed' },
   { value: 'On Hold', label: 'On Hold' },
   { value: 'Rejected', label: 'Rejected' },
@@ -23,6 +23,15 @@ export default function BatchUpdateModal({
   const [releasingDate, setReleasingDate] = useState('');
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -52,11 +61,11 @@ export default function BatchUpdateModal({
   return (
     <div className="staff-process-backdrop" onClick={onClose}>
       <div
-        className="staff-process-dialog max-w-lg w-full !p-0 overflow-hidden shadow-2xl rounded-2xl"
+        className="staff-process-dialog max-w-lg w-full !p-0 overflow-hidden shadow-2xl rounded-2xl max-h-[90vh] flex flex-col overscroll-contain"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-[#0B0B36] to-[#1e1b4b] text-white">
+        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-[#0B0B36] to-[#1e1b4b] text-white shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -84,7 +93,7 @@ export default function BatchUpdateModal({
         </div>
 
         {/* Selected Requests Preview Tags */}
-        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200">
+        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 shrink-0">
           <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
             Selected Requests ({selectedRequests.length})
           </div>
@@ -103,7 +112,7 @@ export default function BatchUpdateModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto overscroll-contain flex-1">
           {/* Field 1: New Status */}
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
