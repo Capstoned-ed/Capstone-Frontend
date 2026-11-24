@@ -33,6 +33,7 @@ import {
   normalizeToBackendStatus,
   formatStatusDisplay,
   isClaimedStatus,
+  isVerifiedStatus,
 } from '../../constants/workflowStatuses';
 import '../../styles/staff/StaffDashboard.css';
 import '../../styles/staff/StaffRequestsPage.css';
@@ -274,13 +275,7 @@ export default function StaffDashboard() {
             return false;
           }
           if (String(user?.role || '').toLowerCase() === 'staff') {
-            const norm = normalizeToBackendStatus(r.rawStatus || r.status);
-            const verifiedStatuses = [
-              REQUEST_STATUS.PROCESSING,
-              REQUEST_STATUS.READY_FOR_RELEASE,
-              REQUEST_STATUS.RELEASED,
-            ];
-            return verifiedStatuses.includes(norm);
+            return isVerifiedStatus(r);
           }
           return true;
         })

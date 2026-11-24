@@ -962,6 +962,7 @@ export default function ProcessRequestModal({
         updated_at: nowIso,
       });
     }
+    window.dispatchEvent(new Event('regquest_requests_updated'));
 
     if (statusToSet === 'VERIFIED') {
       toast.success('Clearance verified successfully. Now complete the payment assessment below.');
@@ -1136,6 +1137,7 @@ export default function ProcessRequestModal({
           ...patch,
         });
       }
+      window.dispatchEvent(new Event('regquest_requests_updated'));
 
       toast.success(`Request confirmed! Status updated to "Pending Payment". Student notified to pay ₱${cleanAmount}.`);
     } finally {
@@ -1301,7 +1303,7 @@ export default function ProcessRequestModal({
 
       setPaymentStatus(isVerified ? 'VERIFIED' : 'REJECTED');
       const updatedStatus = isVerified ? 'Processing' : 'Pending Payment';
-      setPersistedStatus(isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING');
+      setPersistedStatus(isVerified ? 'PROCESSING' : 'PAYMENT_PENDING');
       setStatusDirectly(updatedStatus);
 
       const nowTime = Date.now();
@@ -1325,7 +1327,7 @@ export default function ProcessRequestModal({
             console.warn('Backend payment record verify notice:', payVerifyErr);
           }
         }
-        const targetPayStatus = isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING';
+        const targetPayStatus = isVerified ? 'PROCESSING' : 'PAYMENT_PENDING';
         try {
           await requestsApi.transition(
             targetRawId,
@@ -1337,7 +1339,7 @@ export default function ProcessRequestModal({
           );
         } catch (apiErr) {
           if (isVerified) {
-            for (const step of ['REQUIREMENTS_VERIFICATION', 'PAYMENT_PENDING', 'PAYMENT_VERIFIED']) {
+            for (const step of ['REQUIREMENTS_VERIFICATION', 'PAYMENT_PENDING', 'PAYMENT_VERIFIED', 'PROCESSING']) {
               try {
                 await requestsApi.transition(
                   targetRawId,
@@ -1363,7 +1365,7 @@ export default function ProcessRequestModal({
 
       const paymentPatch = {
         status: updatedStatus,
-        rawStatus: isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING',
+        rawStatus: isVerified ? 'PROCESSING' : 'PAYMENT_PENDING',
         batch_status: updatedStatus,
         payment_status: isVerified ? 'VERIFIED' : 'REJECTED',
         or_number: finalOrNumber,
@@ -1375,13 +1377,13 @@ export default function ProcessRequestModal({
       };
 
       requestItem.status = updatedStatus;
-      requestItem.rawStatus = isVerified ? 'PAYMENT_VERIFIED' : 'PAYMENT_PENDING';
+      requestItem.rawStatus = isVerified ? 'PROCESSING' : 'PAYMENT_PENDING';
       requestItem.batch_status = updatedStatus;
       requestItem.payment_status = isVerified ? 'VERIFIED' : 'REJECTED';
       requestItem.or_number = finalOrNumber;
       requestItem.updated_at = nowIso;
 
-      updateStoredRequest(targetId, paymentPatch, { fallbackItem: requestItem, silentNotify: true });
+      updateStoredRequest(targetId, paymentPatch, { fallbackItem: requestItem });
 
       if (onUpdated) {
         onUpdated({
@@ -1389,6 +1391,7 @@ export default function ProcessRequestModal({
           ...paymentPatch,
         });
       }
+      window.dispatchEvent(new Event('regquest_requests_updated'));
 
       logProcessedAction({
         actor: user?.username,
@@ -1651,6 +1654,7 @@ export default function ProcessRequestModal({
           ...finalPatch,
         });
       }
+      window.dispatchEvent(new Event('regquest_requests_updated'));
       onClose();
     } catch (err) {
       console.error('Failed to transition request:', err);

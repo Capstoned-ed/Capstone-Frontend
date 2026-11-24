@@ -40,6 +40,8 @@ import {
   normalizeToBackendStatus,
   formatStatusDisplay,
   isClaimedStatus,
+  isVerifiedStatus,
+  isUnverifiedStatus,
 } from '../../constants/workflowStatuses';
 import '../../styles/staff/StaffRequestsPage.css';
 
@@ -525,6 +527,7 @@ export default function StaffRequestsPage() {
           document_type: documentType,
           copies: r.copies || '1 copy',
           status: formatStatusDisplay(effectiveRawStatus),
+          rawStatus: effectiveRawStatus,
           created_at: r.created_at,
           request_date: requestDate,
           release_date: releaseDate,
@@ -618,13 +621,7 @@ export default function StaffRequestsPage() {
           return false;
         }
         // Strict separation of duties: Staff queue only displays verified requests (Processing and onward)
-        const norm = normalizeToBackendStatus(r.rawStatus || r.status);
-        const verifiedStatuses = [
-          REQUEST_STATUS.PROCESSING,
-          REQUEST_STATUS.READY_FOR_RELEASE,
-          REQUEST_STATUS.RELEASED,
-        ];
-        return verifiedStatuses.includes(norm);
+        return isVerifiedStatus(r);
       });
 
     return built.sort(sortRequestsNewestFirst);
