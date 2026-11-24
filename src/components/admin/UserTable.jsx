@@ -7,6 +7,7 @@ import useToast from '../../hooks/useToast';
 import UserEditModal from './UserEditModal';
 import UserDeleteDialog from './UserDeleteDialog';
 import TablePagination from '../common/TablePagination';
+import CustomSelectDropdown from '../common/CustomSelectDropdown';
 import { useAuth } from '../../hooks/useAuth';
 import '../../styles/admin/UserTable.css';
 
@@ -178,7 +179,7 @@ export default function UserTable({
   return (
     <div className="user-table-card" style={{ overflowAnchor: 'none' }}>
       {/* Card Header Bar (Light Blue/Periwinkle matching the photo) */}
-      <div className="user-table-header-bar flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+      <div className="user-table-header-bar !flex-col !items-stretch gap-3.5">
         {/* Left Title & Shield Icon */}
         <div className="user-table-header-left items-start sm:items-center min-w-0">
           <div className="w-8 h-8 text-[#3B82F6] flex items-center justify-center flex-shrink-0">
@@ -201,10 +202,10 @@ export default function UserTable({
         </div>
 
         {/* Search & Role Filter Controls */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full lg:w-auto">
-          <div className="relative w-full sm:w-60">
+        <div className="grid grid-cols-1 md:grid-cols-[2.5fr_1fr] gap-3 w-full items-center">
+          <div className="relative w-full flex items-center">
             <svg
-              className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -219,7 +220,7 @@ export default function UserTable({
                 setCurrentPage(1);
               }}
               placeholder="Search staff by name, ID, or email..."
-              className="w-full pl-9 pr-8 py-1.5 text-xs bg-white border border-blue-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              className="w-full h-[42px] pl-10 pr-8 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 shadow-xs focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
             />
             {searchQuery && (
               <button
@@ -236,30 +237,21 @@ export default function UserTable({
             )}
           </div>
 
-          {/* Role Filter Pills */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {[
-              { key: 'ALL', label: 'All Roles' },
-              { key: ROLES.REGISTRAR, label: 'Registrar Frontdesk' },
-              { key: ROLES.STAFF, label: 'Staff' },
-              { key: ROLES.ADMIN, label: 'Administrator' },
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => {
-                  setRoleFilter(tab.key);
-                  setCurrentPage(1);
-                }}
-                className={`px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-bold transition-colors cursor-pointer ${
-                  roleFilter === tab.key
-                    ? 'bg-[#0B0B36] text-white shadow-sm'
-                    : 'bg-white/80 text-slate-600 hover:bg-white border border-slate-200'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div className="w-full">
+            <CustomSelectDropdown
+              value={roleFilter}
+              onChange={(val) => {
+                setRoleFilter(val);
+                setCurrentPage(1);
+              }}
+              buttonClassName="w-full h-[42px] px-3.5 py-2 text-xs sm:text-sm font-semibold bg-white border border-slate-200 rounded-lg text-slate-700 shadow-xs hover:border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+              options={[
+                { value: 'ALL', label: 'All Roles' },
+                { value: ROLES.REGISTRAR, label: 'Registrar Frontdesk' },
+                { value: ROLES.STAFF, label: 'Staff' },
+                { value: ROLES.ADMIN, label: 'Administrator' },
+              ]}
+            />
           </div>
         </div>
       </div>

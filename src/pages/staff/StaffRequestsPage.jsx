@@ -98,7 +98,12 @@ export default function StaffRequestsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [docTypeFilter, setDocTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [unassignedSearch, setUnassignedSearch] = useState('');
+  const [unassignedDocType, setUnassignedDocType] = useState('');
+  const [unassignedStatus, setUnassignedStatus] = useState('');
   const [unassignedCourseFilter, setUnassignedCourseFilter] = useState('');
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyDocType, setHistoryDocType] = useState('');
 
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [newStatus, setNewStatus] = useState('Pending');
@@ -625,83 +630,86 @@ export default function StaffRequestsPage() {
     return built.sort(sortRequestsNewestFirst);
   }, [rawRequests, userMap, credTypeMap, clearanceMap, assignments, assignmentTimestamps]);
 
-  const allFilteredRequests = useMemo(() => {
-    return requests.filter((r) => {
-      const q = searchQuery.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        r.id.toLowerCase().includes(q) ||
-        r.student_name.toLowerCase().includes(q) ||
-        r.student_id.toLowerCase().includes(q);
+  const filterRequestsBySearch = (list, query, docType, status) => {
+    const q = (query || '').toLowerCase().trim();
+    const docLowFilter = (docType || '').toLowerCase();
+    const statusLowFilter = (status || '').toLowerCase();
+    return list.filter((r) => {
+      if (q) {
+        const matchesSearch =
+          (r.id && r.id.toLowerCase().includes(q)) ||
+          (r.student_name && r.student_name.toLowerCase().includes(q)) ||
+          (r.student_id && r.student_id.toLowerCase().includes(q)) ||
+          (r.document_type && r.document_type.toLowerCase().includes(q));
+        if (!matchesSearch) return false;
+      }
 
-      if (!matchesSearch) return false;
-
-      if (docTypeFilter) {
-        const filterLow = docTypeFilter.toLowerCase();
+      if (docLowFilter) {
         const docLow = (r.document_type || '').toLowerCase();
-        if (!docLow.includes(filterLow) && !filterLow.includes(docLow)) {
+        if (!docLow.includes(docLowFilter) && !docLowFilter.includes(docLow)) {
           return false;
         }
       }
 
-      if (statusFilter && r.status.toLowerCase() !== statusFilter.toLowerCase()) {
+      if (statusLowFilter && (r.status || '').toLowerCase() !== statusLowFilter) {
         return false;
       }
 
       return true;
-    }).sort(sortRequestsNewestFirst);
-  }, [requests, searchQuery, docTypeFilter, statusFilter]);
+    });
+  };
 
   // Active requests (not yet moved to History)
-  const activeFilteredRequests = useMemo(() => {
-    return allFilteredRequests.filter((r) => !isRequestArchived(r, archivedMap));
-  }, [allFilteredRequests, archivedMap]);
+  const activeRequests = useMemo(() => {
+    return requests.filter((r) => !isRequestArchived(r, archivedMap));
+  }, [requests, archivedMap]);
 
   // Request History (documents claimed by students and archived)
   const historyRequests = useMemo(() => {
-    return allFilteredRequests
-      .filter((r) => isRequestArchived(r, archivedMap))
-      .sort((a, b) => {
-        const timeA = archivedMap[a.id]?.archived_at || archivedMap[a.rawId]?.archived_at || a.created_at || 0;
-        const timeB = archivedMap[b.id]?.archived_at || archivedMap[b.rawId]?.archived_at || b.created_at || 0;
-        return new Date(timeB).getTime() - new Date(timeA).getTime();
-      });
-  }, [allFilteredRequests, archivedMap]);
+    const archived = requests.filter((r) => isRequestArchived(r, archivedMap));
+    return filterRequestsBySearch(archived, historySearch, historyDocType, '').sort((a, b) => {
+      const timeA = archivedMap[a.id]?.archived_at || archivedMap[a.rawId]?.archived_at || a.created_at || 0;
+      const timeB = archivedMap[b.id]?.archived_at || archivedMap[b.rawId]?.archived_at || b.created_at || 0;
+      return new Date(timeB).getTime() - new Date(timeA).getTime();
+    });
+  }, [requests, archivedMap, historySearch, historyDocType]);
 
   // Card 1: Requests assigned to this staff member (from Active queue)
   // Sorted by: MOST RECENTLY UPDATED / ACCEPTED / ASSIGNED AT THE VERY TOP!
   const assignedRequests = useMemo(() => {
-    return activeFilteredRequests
-      .filter((r) => isRequestAssignedToUser(r, user, assignments, users))
-      .sort(sortRequestsNewestFirst);
-  }, [activeFilteredRequests, user, assignments, users, activityTimestamps]);
+    const assigned = activeRequests.filter((r) => isRequestAssignedToUser(r, user, assignments, users));
+    return filterRequestsBySearch(assigned, searchQuery, docTypeFilter, statusFilter).sort(sortRequestsNewestFirst);
+  }, [activeRequests, user, assignments, users, activityTimestamps, searchQuery, docTypeFilter, statusFilter]);
 
   // Card 2: All unassigned requests (from Active queue)
   const unassignedRequestsBase = useMemo(() => {
-    return activeFilteredRequests
+    return activeRequests
       .filter((r) => {
         const isAssigned = isRequestAssignedToUser(r, user, assignments, users);
         const hasStaff = Boolean(r.assigned_staff && r.assigned_staff.trim() !== '' && r.assigned_staff.toLowerCase() !== 'unassigned');
         return !isAssigned && !hasStaff;
       })
       .sort(sortRequestsNewestFirst);
-  }, [activeFilteredRequests, user, assignments, users, activityTimestamps]);
+  }, [activeRequests, user, assignments, users, activityTimestamps]);
 
   const unassignedRequests = useMemo(() => {
-    if (!unassignedCourseFilter) return unassignedRequestsBase;
-    const selectedCode = (USTP_COURSE_CODE_MAP[unassignedCourseFilter] || unassignedCourseFilter).toLowerCase();
-    const selectedName = unassignedCourseFilter.toLowerCase();
-    return unassignedRequestsBase.filter((r) => {
-      const rCode = String(r.student_course_code || '').toLowerCase();
-      const rName = String(r.student_course || '').toLowerCase();
-      return (
-        rCode === selectedCode ||
-        rName === selectedName ||
-        rName.includes(selectedCode) ||
-        rName.includes(selectedName)
-      );
-    });
-  }, [unassignedRequestsBase, unassignedCourseFilter]);
+    let filtered = filterRequestsBySearch(unassignedRequestsBase, unassignedSearch, unassignedDocType, unassignedStatus);
+    if (unassignedCourseFilter) {
+      const selectedCode = (USTP_COURSE_CODE_MAP[unassignedCourseFilter] || unassignedCourseFilter).toLowerCase();
+      const selectedName = unassignedCourseFilter.toLowerCase();
+      filtered = filtered.filter((r) => {
+        const rCode = String(r.student_course_code || '').toLowerCase();
+        const rName = String(r.student_course || '').toLowerCase();
+        return (
+          rCode === selectedCode ||
+          rName === selectedName ||
+          rName.includes(selectedCode) ||
+          rName.includes(selectedName)
+        );
+      });
+    }
+    return filtered;
+  }, [unassignedRequestsBase, unassignedSearch, unassignedDocType, unassignedStatus, unassignedCourseFilter]);
 
   // Handlers for Archiving (Move to History) and Restoring
   const handleArchiveRequest = (item) => {
@@ -1502,18 +1510,6 @@ export default function StaffRequestsPage() {
         </div>
       </div>
 
-      <StaffSearchFilter
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        docTypeFilter={docTypeFilter}
-        setDocTypeFilter={setDocTypeFilter}
-        statusFilter={statusFilter}
-        setStatusFilter={setStatusFilter}
-        credentialTypes={credentialTypes}
-        requestStatuses={activeTab === 'history' ? ['Claimed'] : ['Processing', 'Releasing']}
-        showStatusFilter={activeTab !== 'history'}
-      />
-
       {activeTab === 'active' ? (
         <>
           {/* Card 1: My Assigned Requests */}
@@ -1526,6 +1522,20 @@ export default function StaffRequestsPage() {
               error={error}
               filteredRequests={assignedRequests}
               totalRequestsCount={assignedRequests.length}
+              searchControls={
+                <StaffSearchFilter
+                  inline={true}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  docTypeFilter={docTypeFilter}
+                  setDocTypeFilter={setDocTypeFilter}
+                  statusFilter={statusFilter}
+                  setStatusFilter={setStatusFilter}
+                  credentialTypes={credentialTypes}
+                  requestStatuses={['Processing', 'Releasing']}
+                  showStatusFilter={true}
+                />
+              }
               getStatusBadge={getStatusBadge}
               onOpenProcess={handleOpenProcess}
               actionType="view"
@@ -1558,17 +1568,31 @@ export default function StaffRequestsPage() {
             filteredRequests={unassignedRequests}
             totalRequestsCount={unassignedRequestsBase.length}
             searchControls={
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider shrink-0">
-                  Filter by Course:
-                </span>
-                <div className="w-full sm:w-96">
-                  <CourseSelectDropdown
-                    value={unassignedCourseFilter}
-                    onChange={setUnassignedCourseFilter}
-                    allowClear={true}
-                    placeholder={`All Courses (${unassignedRequestsBase.length})`}
-                  />
+              <div className="space-y-3">
+                <StaffSearchFilter
+                  inline={true}
+                  searchQuery={unassignedSearch}
+                  setSearchQuery={setUnassignedSearch}
+                  docTypeFilter={unassignedDocType}
+                  setDocTypeFilter={setUnassignedDocType}
+                  statusFilter={unassignedStatus}
+                  setStatusFilter={setUnassignedStatus}
+                  credentialTypes={credentialTypes}
+                  requestStatuses={['Processing', 'Releasing']}
+                  showStatusFilter={true}
+                />
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                  <span className="text-xs font-bold text-slate-600 uppercase tracking-wider shrink-0">
+                    Filter by Course:
+                  </span>
+                  <div className="w-full sm:w-96">
+                    <CourseSelectDropdown
+                      value={unassignedCourseFilter}
+                      onChange={setUnassignedCourseFilter}
+                      allowClear={true}
+                      placeholder={`All Courses (${unassignedRequestsBase.length})`}
+                    />
+                  </div>
                 </div>
               </div>
             }
@@ -1602,6 +1626,20 @@ export default function StaffRequestsPage() {
           error={error}
           filteredRequests={historyRequests}
           totalRequestsCount={historyRequests.length}
+          searchControls={
+            <StaffSearchFilter
+              inline={true}
+              searchQuery={historySearch}
+              setSearchQuery={setHistorySearch}
+              docTypeFilter={historyDocType}
+              setDocTypeFilter={setHistoryDocType}
+              statusFilter=""
+              setStatusFilter={() => {}}
+              credentialTypes={credentialTypes}
+              requestStatuses={['Claimed']}
+              showStatusFilter={false}
+            />
+          }
           getStatusBadge={getStatusBadge}
           onOpenProcess={handleOpenProcess}
           actionType="history"

@@ -25,7 +25,7 @@ import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
-import { StaffRequestsTable } from '../../components/staff';
+import { StaffRequestsTable, StaffSearchFilter } from '../../components/staff';
 import PredictedInsightCard from '../../components/admin/PredictedInsightCard';
 import useToast from '../../hooks/useToast';
 import {
@@ -68,6 +68,10 @@ export default function StaffDashboard() {
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
 
   const [modalRequest, setModalRequest] = useState(null);
+  const [credentialTypes, setCredentialTypes] = useState([]);
+  const [dashboardSearch, setDashboardSearch] = useState('');
+  const [dashboardDocType, setDashboardDocType] = useState('');
+  const [dashboardStatus, setDashboardStatus] = useState('');
 
   const today = useMemo(() => new Date(), []);
   const todayFormatted = useMemo(() => {
@@ -119,6 +123,7 @@ export default function StaffDashboard() {
       ]);
 
       const combinedRaw = Array.isArray(backendRequests) ? [...backendRequests] : [];
+      setCredentialTypes(Array.isArray(credTypesRes) ? credTypesRes : []);
 
       const userMap = new Map();
       if (Array.isArray(usersRes)) {
@@ -359,6 +364,32 @@ export default function StaffDashboard() {
         return sortRequestsNewestFirst(a, b);
       });
   }, [requestsList, selectedCalendarDate, user, assignments, usersList, assignmentTimestamps, archivedMap]);
+
+  const filteredAssignedRequests = useMemo(() => {
+    const q = dashboardSearch.toLowerCase().trim();
+    const docFilterLow = dashboardDocType.toLowerCase();
+    const statusFilterLow = dashboardStatus.toLowerCase();
+    return assignedRequests.filter((r) => {
+      if (q) {
+        const matches =
+          (r.id && r.id.toLowerCase().includes(q)) ||
+          (r.student_name && r.student_name.toLowerCase().includes(q)) ||
+          (r.student_id && r.student_id.toLowerCase().includes(q)) ||
+          (r.document_type && r.document_type.toLowerCase().includes(q));
+        if (!matches) return false;
+      }
+      if (docFilterLow) {
+        const docLow = (r.document_type || '').toLowerCase();
+        if (!docLow.includes(docFilterLow) && !docFilterLow.includes(docLow)) {
+          return false;
+        }
+      }
+      if (statusFilterLow && (r.status || '').toLowerCase() !== statusFilterLow) {
+        return false;
+      }
+      return true;
+    });
+  }, [assignedRequests, dashboardSearch, dashboardDocType, dashboardStatus]);
 
   const handleArchiveRequest = useCallback((item) => {
     if (!item) return;
@@ -1188,13 +1219,27 @@ export default function StaffDashboard() {
             title="My Assigned Requests"
             subtitle={
               selectedCalendarDate
-                ? `Showing requests matching ${selectedCalendarDate} (${assignedRequests.length} found)`
+                ? `Showing requests matching ${selectedCalendarDate} (${filteredAssignedRequests.length} found)`
                 : 'Requests assigned to you that are ready for processing'
             }
-            badgeCount={assignedRequests.length}
+            badgeCount={filteredAssignedRequests.length}
             loading={loading}
-            filteredRequests={assignedRequests}
+            filteredRequests={filteredAssignedRequests}
             totalRequestsCount={assignedRequests.length}
+            searchControls={
+              <StaffSearchFilter
+                inline={true}
+                searchQuery={dashboardSearch}
+                setSearchQuery={setDashboardSearch}
+                docTypeFilter={dashboardDocType}
+                setDocTypeFilter={setDashboardDocType}
+                statusFilter={dashboardStatus}
+                setStatusFilter={setDashboardStatus}
+                credentialTypes={credentialTypes}
+                requestStatuses={['Processing', 'Releasing']}
+                showStatusFilter={true}
+              />
+            }
             getStatusBadge={getStatusBadge}
             onOpenProcess={handleOpenProcess}
             actionType="view"

@@ -5,6 +5,7 @@ import useToast from '../../hooks/useToast';
 import StudentEditModal from './StudentEditModal';
 import UserDeleteDialog from './UserDeleteDialog';
 import TablePagination from '../common/TablePagination';
+import CourseSelectDropdown, { USTP_COURSE_CODE_MAP } from './CourseSelectDropdown';
 import '../../styles/admin/StudentTableCard.css';
 
 const PAGE_SIZE = 10;
@@ -18,6 +19,7 @@ export default function StudentTableCard({ users = [], onStudentUpdated, onStude
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
+  const [courseFilter, setCourseFilter] = useState('');
 
   // Format student display name
   const formatStudentName = (student) => {
@@ -50,11 +52,24 @@ export default function StudentTableCard({ users = [], onStudentUpdated, onStude
       .join(' ');
   };
 
-  // Filter ONLY student role accounts + search query
+  // Filter ONLY student role accounts + search query + course filter
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const students = users
     .filter((u) => u.role === ROLES.STUDENT)
     .filter((student) => {
+      if (courseFilter) {
+        const selectedCode = (USTP_COURSE_CODE_MAP[courseFilter] || courseFilter).toLowerCase();
+        const selectedName = courseFilter.toLowerCase();
+        const prog = String(student.program || student.course_name || '').toLowerCase();
+        const code = String(student.course_code || '').toLowerCase();
+        const matchesCourse =
+          code === selectedCode ||
+          prog === selectedName ||
+          prog === selectedCode ||
+          prog.includes(selectedCode) ||
+          prog.includes(selectedName);
+        if (!matchesCourse) return false;
+      }
       if (!normalizedQuery) return true;
       const haystacks = [
         formatStudentName(student),
@@ -116,7 +131,7 @@ export default function StudentTableCard({ users = [], onStudentUpdated, onStude
   return (
     <div className="student-table-card" style={{ overflowAnchor: 'none' }}>
       {/* Mint Green Card Header Bar matching reference photo */}
-      <div className="student-table-header-bar">
+      <div className="student-table-header-bar !flex-col !items-stretch gap-3.5">
         <div className="student-table-header-left">
           <div className="student-table-icon-wrap">
             {/* Solid green user/student icon */}
@@ -131,39 +146,55 @@ export default function StudentTableCard({ users = [], onStudentUpdated, onStude
             <p className="student-table-desc">
               View, update, and organize student profiles and registration data.
             </p>
-            <div className="relative mt-2.5 max-w-xs sm:max-w-sm">
-              <svg
-                className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
+          </div>
+        </div>
+
+        {/* Search & Course Dropdown Controls inside header */}
+        <div className="grid grid-cols-1 md:grid-cols-[2.5fr_1fr] gap-3 w-full items-center">
+          <div className="relative w-full flex items-center">
+            <svg
+              className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Search student by name, ID, program, or email..."
+              className="w-full h-[42px] pl-10 pr-8 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 shadow-xs focus:outline-hidden focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
                   setCurrentPage(1);
                 }}
-                placeholder="Search student by name, ID, program, or email..."
-                className="w-full pl-9 pr-8 py-1.5 text-xs bg-white border border-emerald-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setCurrentPage(1);
-                  }}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
-                  aria-label="Clear student search"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                aria-label="Clear student search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <div className="w-full">
+            <CourseSelectDropdown
+              value={courseFilter}
+              onChange={(val) => {
+                setCourseFilter(val);
+                setCurrentPage(1);
+              }}
+              allowClear={true}
+              placeholder="All Courses"
+            />
           </div>
         </div>
       </div>

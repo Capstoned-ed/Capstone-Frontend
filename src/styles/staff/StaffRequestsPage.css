@@ -24,7 +24,7 @@
 .staff-search-controls {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 @media (min-width: 768px) {
@@ -44,47 +44,46 @@
   left: 0.875rem;
   width: 1rem;
   height: 1rem;
-  color: #94a3b8;
+  color: #64748b;
   pointer-events: none;
 }
 
 .staff-search-field {
   width: 100%;
-  padding: 0.625rem 0.875rem 0.625rem 2.5rem;
+  padding: 0.5rem 0.875rem 0.5rem 2.5rem;
   font-size: 0.8125rem;
   color: #1e293b;
-  background-color: #ffffff;
+  background-color: #f8fafc;
   border: 1px solid #cbd5e1;
-  border-radius: 0.625rem;
+  border-radius: 0.5rem;
   outline: none;
+  box-sizing: border-box;
   transition: all 0.15s ease-in-out;
 }
 
 .staff-search-field:focus {
+  background-color: #ffffff;
   border-color: #3b82f6;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
 .staff-dropdown-field {
   width: 100%;
-  padding: 0.625rem 2rem 0.625rem 2.5rem;
+  padding: 0.5rem 0.875rem 0.5rem 2.25rem;
   font-size: 0.8125rem;
   font-weight: 500;
   color: #334155;
-  background-color: #ffffff;
+  background-color: #f8fafc;
   border: 1px solid #cbd5e1;
-  border-radius: 0.625rem;
+  border-radius: 0.5rem;
   outline: none;
   cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  background-size: 1rem;
+  box-sizing: border-box;
   transition: all 0.15s ease-in-out;
 }
 
 .staff-dropdown-field:focus {
+  background-color: #ffffff;
   border-color: #3b82f6;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
