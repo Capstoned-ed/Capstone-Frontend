@@ -1,166 +1,114 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
+import credentialTypesApi, { REQUEST_FORM_CREDENTIAL_TYPES } from '../../api/credentialTypes';
 import ustpBuilding from '../../assets/USTP.png';
+
+// Uniform Document Icon (Transcript of Records style document with lines)
+const UniformDocumentIcon = () => (
+  <svg
+    className="w-6 h-6 text-[#1D4ED8]"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.5}
+    viewBox="0 0 24 24"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+    />
+  </svg>
+);
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const [isExpanded, setIsExpanded] = useState(false);
+  const [credentialTypes, setCredentialTypes] = useState([]);
 
+  useEffect(() => {
+    let isMounted = true;
+    async function loadCredentialTypes() {
+      try {
+        const types = await credentialTypesApi.list();
+        if (isMounted && Array.isArray(types) && types.length > 0) {
+          setCredentialTypes(types);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch dynamic credential types for student dashboard:', err);
+      }
+    }
+    loadCredentialTypes();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleRequestClick = (docName) => {
     navigate(`${ROUTES.STUDENT.NEW_REQUEST}?doc=${encodeURIComponent(docName)}`);
   };
 
-  const FEATURED_CREDENTIALS = [
-    {
-      id: 'tor',
-      code: 'TOR',
-      docName: 'Transcript of Records (P125/pg)',
-      title: 'Transcript of Records',
-      description: 'Complete academic record of all courses taken and grades earned.',
-      fee: '₱ 125/pg',
-      bannerBg: 'bg-[#BAE6FD]',
-      icon: (
-        <svg className="w-9 h-9 text-slate-700" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'hd',
-      code: 'HONORABLE_DISMISSAL',
-      docName: 'Honorable Dismissal (P100)',
-      title: 'Honorable Dismissal',
-      description: 'Transfer clearance document for moving to another institution.',
-      fee: '₱ 100.00',
-      bannerBg: 'bg-[#FED7AA]',
-      icon: (
-        <svg className="w-9 h-9 text-slate-700" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'auth',
-      code: 'AUTHENTICATION',
-      docName: 'Authentication (P5/pg)',
-      title: 'Authentication',
-      description: 'Official verification and authentication of academic documents.',
-      fee: '₱ 5/pg',
-      bannerBg: 'bg-[#94A3B8]/60',
-      icon: (
-        <svg className="w-9 h-9 text-slate-700" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'eval',
-      code: 'EVALUATION',
-      docName: 'Evaluation (P50)',
-      title: 'Evaluation',
-      description: 'Detailed academic assessment and progress evaluation report.',
-      fee: '₱ 75.00',
-      bannerBg: 'bg-[#FBBF24]/80',
-      icon: (
-        <svg className="w-9 h-9 text-slate-700" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-        </svg>
-      ),
-    },
-    {
-      id: 'gpa',
-      code: 'GPA',
-      docName: 'Certification - GPA',
-      title: 'GPA',
-      description: 'Official certification of your overall Grade Point Average and academic standing.',
-      fee: '₱ 50.00',
-      bannerBg: 'bg-[#A7F3D0]',
-      icon: (
-        <svg className="w-9 h-9 text-slate-700" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'car',
-      code: 'CAR',
-      docName: 'Certification - CAR',
-      title: 'CAR',
-      description: 'Cumulative Academic Record summarizing your entire academic history.',
-      fee: '₱ 50.00',
-      bannerBg: 'bg-[#DDD6FE]',
-      icon: (
-        <svg className="w-9 h-9 text-slate-700" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-      ),
-    },
-  ];
+  const activeTypes = useMemo(() => {
+    const source = credentialTypes.length > 0 ? credentialTypes : REQUEST_FORM_CREDENTIAL_TYPES;
+    return source.filter((c) => c && c.is_active !== false);
+  }, [credentialTypes]);
 
-  const EXPANDED_CREDENTIALS = [
-    {
-      id: 'endorsement',
-      code: 'ENDORSEMENT',
-      docName: 'Certification - Endorsement',
-      title: 'Endorsement',
-      description: 'Official university letter of endorsement for employment, OJT, or scholarships.',
-      fee: '₱ 50.00',
-      bannerBg: 'bg-[#FBCFE8]',
-      icon: (
-        <svg className="w-9 h-9 text-slate-700" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-        </svg>
-      ),
-    },
-    {
-      id: 'officially_enrolled',
-      code: 'COE',
-      docName: 'Certification - Officially enrolled',
-      title: 'Officially Enrolled',
-      description: 'Certificate certifying active enrollment and academic load for the current semester.',
-      fee: '₱ 50.00',
-      bannerBg: 'bg-[#BAE6FD]',
-      icon: (
-        <svg className="w-9 h-9 text-slate-700" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'earned_units',
-      code: 'EARNED_UNITS',
-      docName: 'Certification - Earned Units',
-      title: 'Earned Units',
-      description: 'Official certification of cumulative academic units successfully completed.',
-      fee: '₱ 50.00',
-      bannerBg: 'bg-[#FDE68A]',
-      icon: (
-        <svg className="w-9 h-9 text-slate-700" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.438 60.438 0 00-.491 6.347A48.62 48.62 0 0112 20.904a48.62 48.62 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.636 50.636 0 00-2.658-.813A59.906 59.906 0 0112 3.493a59.903 59.903 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-5.25 6.557c0 1.258.91 2.308 2.152 2.455.93.11 1.874.19 2.825.241m0 0a55.808 55.808 0 005.273-.241c1.242-.147 2.152-1.197 2.152-2.455v-3.675" />
-        </svg>
-      ),
-    },
-    {
-      id: 'subjects_grades',
-      code: 'SUBJECTS_GRADES',
-      docName: 'Certification - Subjects w/ grades',
-      title: 'Subjects w/ Grades',
-      description: 'Breakdown and certification of specific subjects completed with earned final grades.',
-      fee: '₱ 50.00',
-      bannerBg: 'bg-[#DDD6FE]',
-      icon: (
-        <svg className="w-9 h-9 text-slate-700" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-        </svg>
-      ),
-    },
-  ];
+  const credentialCards = useMemo(() => {
+    return activeTypes.map((c) => {
+      const codeUpper = String(c.code || '').toUpperCase();
+      const rawName = String(c.name || '').trim();
+
+      // Clean title for display
+      let displayTitle = rawName;
+      if (codeUpper === 'TOR' || rawName.toLowerCase().includes('transcript')) {
+        displayTitle = 'Transcript of Records';
+      } else if (rawName.startsWith('Certification - ')) {
+        displayTitle = rawName.replace(/^Certification - /i, '');
+      } else if (rawName.endsWith(' (TOR)')) {
+        displayTitle = rawName.replace(/ \(TOR\)/i, '');
+      }
+
+      // Format fee
+      let fee = '₱ 50.00';
+      if (codeUpper === 'TOR' || rawName.toLowerCase().includes('transcript')) {
+        fee = '₱ 125/pg';
+      } else if (codeUpper === 'AUTH' || rawName.toLowerCase().includes('authentication')) {
+        fee = '₱ 5/pg';
+      } else if (c.price !== undefined && c.price !== null) {
+        const p = parseFloat(c.price);
+        fee = isNaN(p) ? '₱ 50.00' : `₱ ${p.toFixed(2)}`;
+      }
+
+      const description =
+        c.description ||
+        (codeUpper === 'TOR'
+          ? 'Complete academic record of all courses taken and grades earned.'
+          : codeUpper === 'HD'
+          ? 'Transfer clearance document for moving to another institution.'
+          : codeUpper === 'AUTH'
+          ? 'Official verification and authentication of academic documents.'
+          : codeUpper === 'EVAL'
+          ? 'Detailed academic assessment and progress evaluation report.'
+          : codeUpper === 'GPA'
+          ? 'Official certification of your overall Grade Point Average and academic standing.'
+          : codeUpper === 'CAR'
+          ? 'Cumulative Academic Record summarizing your entire academic history.'
+          : 'Official academic credential requested from the University Registrar.');
+
+      return {
+        id: String(c.id || c.code || rawName),
+        code: c.code || '',
+        docName: rawName,
+        title: displayTitle,
+        description,
+        fee,
+      };
+    });
+  }, [activeTypes]);
 
   const visibleCredentials = isExpanded
-    ? [...FEATURED_CREDENTIALS, ...EXPANDED_CREDENTIALS]
-    : FEATURED_CREDENTIALS;
+    ? credentialCards
+    : credentialCards.slice(0, 6);
 
   return (
     <div className="w-full flex flex-col min-h-screen bg-white">
@@ -245,7 +193,7 @@ export default function StudentDashboard() {
                 <div className="flex-1 flex flex-col justify-between">
                   <div className="flex items-start gap-3.5">
                     <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE] border border-blue-200/70 flex items-center justify-center shrink-0 [&>svg]:w-6 [&>svg]:h-6 [&>svg]:text-[#1D4ED8] group-hover:from-[#1D4ED8] group-hover:to-[#0B0B36] group-hover:border-transparent group-hover:[&>svg]:text-white transition-all duration-200">
-                      {card.icon}
+                      <UniformDocumentIcon />
                     </div>
                     <div className="min-w-0 flex-1">
                       <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#1D4ED8] transition-colors leading-snug">
@@ -285,19 +233,21 @@ export default function StudentDashboard() {
             ))}
           </div>
 
-          {/* See More / See Less Credentials Button */}
-          <div className="mt-12 sm:mt-14 flex justify-center">
-            <button
-              type="button"
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="px-8 py-2.5 rounded-full border-2 border-[#1F1F9B] text-[#1F1F9B] hover:bg-[#1F1F9B] hover:text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-xs active:scale-95"
-            >
-              <span>{isExpanded ? 'See Less Credentials' : 'See More Credentials'}</span>
-              <span className={`text-sm transform transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>
-                {isExpanded ? '↑' : '→'}
-              </span>
-            </button>
-          </div>
+          {/* See More / See Less Credentials Button (only if more than 6 credentials) */}
+          {credentialCards.length > 6 && (
+            <div className="mt-12 sm:mt-14 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="px-8 py-2.5 rounded-full border-2 border-[#1F1F9B] text-[#1F1F9B] hover:bg-[#1F1F9B] hover:text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-xs active:scale-95"
+              >
+                <span>{isExpanded ? 'See Less Credentials' : 'See More Credentials'}</span>
+                <span className={`text-sm transform transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>
+                  {isExpanded ? '↑' : '→'}
+                </span>
+              </button>
+            </div>
+          )}
           </div>
         </div>
       </section>
