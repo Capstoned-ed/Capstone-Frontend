@@ -7,6 +7,7 @@ import ProfileMenu from '../components/layout/ProfileMenu';
 import { useAuth } from '../hooks/useAuth';
 import { ROLES } from '../constants/roles';
 import { ROUTES } from '../constants/routes';
+import ustpBuilding from '../assets/USTP.png';
 
 export default function MainLayout({ children }) {
   const { user } = useAuth();
@@ -105,9 +106,26 @@ export default function MainLayout({ children }) {
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-x-clip">
-        <header className="hidden md:flex sticky top-0 z-30 w-full bg-[#0B0B36] text-white px-6 py-2.5 items-center justify-end gap-3 shadow-sm">
-          <NotificationBell variant="dark" dropdownPositionClass="absolute top-full right-0 mt-2" />
-          <ProfileMenu variant="dark" />
+        <header className="hidden md:flex sticky top-0 z-30 relative w-full bg-[#0B0B36] text-white px-6 py-2.5 items-center justify-end gap-3 shadow-sm">
+          <div className="absolute inset-0 overflow-hidden pointer-events-none select-none">
+            <img
+              src={ustpBuilding}
+              alt=""
+              aria-hidden="true"
+              className="w-full h-full object-cover object-right opacity-20 mix-blend-screen scale-105"
+            />
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  'linear-gradient(to right, rgba(11, 11, 54, 0.96) 0%, rgba(11, 11, 54, 0.88) 45%, rgba(11, 11, 54, 0.65) 100%)',
+              }}
+            />
+          </div>
+          <div className="relative z-10 flex items-center gap-3">
+            <NotificationBell variant="dark" dropdownPositionClass="absolute top-full right-0 mt-2" />
+            <ProfileMenu variant="dark" />
+          </div>
         </header>
 
         <main className={`flex-1 w-full ${isAdminDashboard || isStudentDashboard || isStaffDashboard ? 'p-0 max-w-none' : isStudentView ? 'px-4 sm:px-8 pt-4 sm:pt-6 pb-6 max-w-7xl mx-auto' : 'p-6 sm:p-8 max-w-7xl mx-auto'}`}>
