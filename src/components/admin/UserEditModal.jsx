@@ -535,22 +535,22 @@ export default function UserEditModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="bg-[#2563EB] text-white px-6 py-4 flex items-center justify-between">
+        <div className="bg-[#0B0B36] text-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-white">
+            <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
             </div>
             <div>
               <h3 className="text-base font-bold text-white tracking-tight">Update Staff &amp; Role Profile</h3>
-              <p className="text-xs text-blue-100">Update account information, role, and access for {displayName}</p>
+              <p className="text-xs text-slate-300">Update account information, role, and access for {displayName}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-blue-100 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+            className="text-slate-300 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
