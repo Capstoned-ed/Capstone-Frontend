@@ -44,7 +44,7 @@ const formatStatus = (statusStr) => {
   if (upper === 'FOR_PAYMENT' || upper === 'PENDING PAYMENT') return 'Pending Payment';
   if (upper === 'FOR_PROCESSING' || upper === 'PAYMENT_VERIFIED') return 'Processing';
   if (upper === 'PROCESSING') return 'Processing';
-  if (upper === 'READY_FOR_RELEASE' || upper === 'RELEASING') return 'Releasing';
+  if (upper === 'READY_FOR_RELEASE' || upper === 'RELEASING' || upper === 'FOR RELEASE' || upper === 'FOR_RELEASE') return 'For Release';
   if (upper === 'RELEASED') return 'Released';
   if (upper === 'CLAIMED' || upper === 'COMPLETED') return 'Claimed';
   if (upper === 'ON_HOLD' || upper === 'ON HOLD') return 'On Hold';

@@ -79,6 +79,7 @@ export default function StaffProcessModal({
     if (s === 'For Payment' || s === 'FOR PAYMENT' || s === 'FOR_PAYMENT') return 'Pending Payment';
     if (s === 'FOR_VERIFICATION' || s === 'FOR VERIFICATION') return 'For Verification';
     if (s === 'For Processing' || s === 'FOR PROCESSING' || s === 'FOR_PROCESSING') return 'Processing';
+    if (s === 'Releasing' || s === 'RELEASING' || s === 'Ready for Release' || s === 'READY FOR RELEASE' || s === 'READY_FOR_RELEASE' || s === 'For release') return 'For Release';
     return val;
   };
   const [localStatus, setLocalStatus] = useState(() =>
@@ -120,7 +121,7 @@ export default function StaffProcessModal({
     const defaultStatuses = [
       'For Verification',
       'Processing',
-      'Releasing',
+      'For Release',
       'Claimed',
     ];
     const base = (

@@ -41,7 +41,13 @@ function resolveModalTargetBackendStatus(label) {
   if (upper === 'PENDING REGISTRAR APPROVAL' || upper === 'PENDING_REGISTRAR_APPROVAL') {
     return 'PENDING_REGISTRAR_APPROVAL';
   }
-  if (upper === 'APPROVED / READY FOR RELEASE' || upper === 'APPROVED' || upper === 'READY FOR RELEASE') {
+  if (
+    upper === 'APPROVED / READY FOR RELEASE' ||
+    upper === 'APPROVED / FOR RELEASE' ||
+    upper === 'APPROVED' ||
+    upper === 'READY FOR RELEASE' ||
+    upper === 'FOR RELEASE'
+  ) {
     return REQUEST_STATUS.READY_FOR_RELEASE;
   }
   if (upper === 'RELEASED / COMPLETED' || upper === 'RELEASED') {
@@ -622,7 +628,7 @@ export default function ProcessRequestModal({
         case REQUEST_STATUS.PAYMENT_PENDING:
         case REQUEST_STATUS.FOR_VERIFICATION:
           nextTransitions = [
-            'Approved / Ready for Release',
+            'Approved / For Release',
             'Returned to Staff / Processing',
             'Rejected',
           ];
@@ -630,15 +636,15 @@ export default function ProcessRequestModal({
         case REQUEST_STATUS.PAYMENT_VERIFIED:
         case REQUEST_STATUS.PROCESSING:
           nextTransitions = [
-            'Approved / Ready for Release',
-            'Released / Completed',
+            'Approved / For Release',
+            'Claimed',
             'Returned to Staff / Processing',
             'Rejected',
           ];
           break;
         case REQUEST_STATUS.READY_FOR_RELEASE:
           nextTransitions = [
-            'Released / Completed',
+            'Claimed',
             'Returned to Staff / Processing',
             'Rejected',
           ];
@@ -665,10 +671,10 @@ export default function ProcessRequestModal({
             nextTransitions = ['Processing', 'Rejected'];
             break;
           case REQUEST_STATUS.PAYMENT_VERIFIED:
-            nextTransitions = ['Processing', 'Ready for Release'];
+            nextTransitions = ['Processing', 'For Release'];
             break;
           case REQUEST_STATUS.PROCESSING:
-            nextTransitions = ['Ready for Release'];
+            nextTransitions = ['For Release'];
             break;
           case REQUEST_STATUS.READY_FOR_RELEASE:
             nextTransitions = ['Claimed'];

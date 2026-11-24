@@ -30,7 +30,7 @@ const DEFAULT_TIMELINE_STEPS = [
   { id: 'pending_payment', name: 'For Payment', label: 'Pay at Cashier & Submit OR' },
   { id: 'for_verification', name: 'For Verification', label: 'Staff is verifying your submitted Official Receipt.' },
   { id: 'processing', name: 'Processing', label: 'Document Preparation & Printing' },
-  { id: 'releasing', name: 'Releasing', label: 'Ready for Claiming' },
+  { id: 'releasing', name: 'For Release', label: 'Ready for Claiming' },
 ];
 
 function getStatusPillClass(status) {
