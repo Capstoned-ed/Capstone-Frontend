@@ -754,31 +754,7 @@ export default function ProcessRequestModal({
       };
 
       setDateOfRelease(addBusinessDays(reqDate, fallbackDays));
-      setTurnaroundHint(`Catalog est: ${fallbackDays} operating days`);
-
-      requestsApi
-        .predictTurnaround({
-          credentialType: credCode,
-          dateRequested: reqDate,
-          purpose: requestItem.purpose || 'Employment',
-          numDocuments: Number(requestItem.copies) || 1,
-        })
-        .then((res) => {
-          if (ignore || !res) return;
-          const predDays = res.predicted_processing_time;
-          if (res.estimated_completion_date) {
-            setDateOfRelease(String(res.estimated_completion_date).substring(0, 10));
-          } else if (predDays) {
-            setDateOfRelease(addBusinessDays(reqDate, predDays));
-          }
-          if (predDays) {
-            const label = res.is_fallback ? 'Catalog est' : 'ML est';
-            setTurnaroundHint(`${label}: ~${predDays} operating days`);
-          }
-        })
-        .catch(() => {
-          // Graceful fallback already applied via CredentialType.processing_days
-        });
+      setTurnaroundHint(`Standard processing: ${fallbackDays} operating days`);
     }
     if (requestItem.verified_by_name) {
       setVerifiedByName(requestItem.verified_by_name);

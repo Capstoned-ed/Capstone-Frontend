@@ -76,23 +76,63 @@ export default function PredictedInsightCard() {
   const nextDayName = nextDayObj.weekday || 'Monday';
   const nextDayRequests = nextDayObj.predicted_requests || 30;
 
-  // Monthly workload display
-  const workloadTier = monthlyData?.workload_classification || monthlyData?.workload_level || 'Moderate';
-  const monthlyTotal = monthlyData?.total_predicted_requests || 540;
-  const operatingDays = monthlyData?.operating_days_count || monthlyData?.operating_days || 21;
+  // Dynamically compute exact number of Monday–Friday operating days in a calendar month
+  const getOperatingDaysInMonth = (year, monthIndex) => {
+    const totalDays = new Date(year, monthIndex + 1, 0).getDate();
+    let count = 0;
+    for (let day = 1; day <= totalDays; day++) {
+      const dayOfWeek = new Date(year, monthIndex, day).getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        count++;
+      }
+    }
+    return count;
+  };
 
-  // Workload badge color helper
-  const getWorkloadBadgeClasses = (tier) => {
+  const now = new Date();
+  const currentMonthOperatingDays = getOperatingDaysInMonth(now.getFullYear(), now.getMonth());
+  const operatingDays = Number(monthlyData?.operating_days_count || monthlyData?.operating_days) || currentMonthOperatingDays;
+
+  // Monthly total volume calculation with dynamic fallback
+  const monthlyTotal = monthlyData?.predicted_total_requests ||
+    monthlyData?.total_predicted_requests ||
+    Math.round(dailyAvg * operatingDays);
+
+  // Standardized Workload Severity Classification (Light <= 40, Moderate 41-70, Heavy > 70 req/day)
+  const computeWorkloadTier = (totalRequests, opDays = 1) => {
+    const dailyRate = (Number(totalRequests) || 0) / Math.max(1, Number(opDays) || 1);
+    if (dailyRate <= 40) return 'Light';
+    if (dailyRate <= 70) return 'Moderate';
+    return 'Heavy';
+  };
+
+  const workloadTier = monthlyData?.workload_classification ||
+    monthlyData?.workload_level ||
+    computeWorkloadTier(monthlyTotal, operatingDays);
+
+  // Workload badge color helper (Light: Blue, Moderate: Orange, Heavy: Red)
+  const getWorkloadTierStyle = (tier) => {
     switch (String(tier || '').toLowerCase()) {
       case 'light':
-        return 'bg-emerald-50 text-emerald-800 border-emerald-200';
+        return {
+          badge: 'bg-blue-50 text-blue-700 border-blue-200',
+          dot: 'bg-blue-500',
+          text: 'text-blue-700',
+        };
       case 'heavy':
-        return 'bg-[#FEC956]/25 text-amber-900 border-[#FEC956]/70';
       case 'very heavy':
-        return 'bg-rose-50 text-rose-800 border-rose-200';
+        return {
+          badge: 'bg-red-50 text-red-700 border-red-200',
+          dot: 'bg-red-500',
+          text: 'text-red-700',
+        };
       case 'moderate':
       default:
-        return 'bg-[#00007F]/10 text-[#00007F] border-[#00007F]/20';
+        return {
+          badge: 'bg-orange-50 text-orange-700 border-orange-200',
+          dot: 'bg-orange-500',
+          text: 'text-orange-700',
+        };
     }
   };
 
@@ -132,7 +172,7 @@ export default function PredictedInsightCard() {
                   Historical Baseline
                 </span>
               )}
-              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${getWorkloadBadgeClasses(workloadTier)}`}>
+              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${getWorkloadTierStyle(workloadTier).badge}`}>
                 {workloadTier} Workload
               </span>
               <button
@@ -190,24 +230,48 @@ export default function PredictedInsightCard() {
 
             {/* 5-Day Daily Outlook Chips */}
             {forecastList && forecastList.length > 0 && (
-              <div className="mt-3.5 pt-3 border-t border-slate-200/80 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold text-slate-500 mr-1">5-Day Outlook:</span>
-                {forecastList.slice(0, 5).map((item, idx) => {
-                  const isPeak = item.weekday === peakDayName;
-                  return (
-                    <div
-                      key={idx}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-sm border ${
-                        isPeak
-                          ? 'bg-[#FEC956]/25 border-[#FEC956] text-slate-900'
-                          : 'bg-white border-slate-200 text-slate-700'
-                      }`}
-                    >
-                      <span className="font-bold text-[#00007F]">{item.weekday.slice(0, 3)}:</span>
-                      <span className="font-semibold text-slate-900">~{Math.round(item.predicted_requests)}</span>
-                    </div>
-                  );
-                })}
+              <div className="mt-3.5 pt-3 border-t border-slate-200/80">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-500 mr-1">5-Day Outlook:</span>
+                  {forecastList.slice(0, 5).map((item, idx) => {
+                    const isPeak = item.weekday === peakDayName;
+                    const vol = Math.round(item.predicted_requests || 0);
+                    const dayTier = computeWorkloadTier(vol, 1);
+                    const tierStyle = getWorkloadTierStyle(dayTier);
+
+                    return (
+                      <div
+                        key={idx}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-sm border ${tierStyle.badge}`}
+                      >
+                        <span className="font-bold">{item.weekday.slice(0, 3)}:</span>
+                        <span className="font-semibold">~{vol}</span>
+                        {isPeak && (
+                          <span className="text-[10px] font-bold px-1 rounded bg-black/5 uppercase tracking-wide">
+                            Peak
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Workload Legend */}
+                <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
+                  <span className="font-semibold text-slate-600">Legend:</span>
+                  <div className="inline-flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-500" />
+                    <span className="text-blue-700 font-medium">Light (1–40/day)</span>
+                  </div>
+                  <div className="inline-flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-orange-500" />
+                    <span className="text-orange-700 font-medium">Moderate (41–70/day)</span>
+                  </div>
+                  <div className="inline-flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-red-500" />
+                    <span className="text-red-700 font-medium">Heavy (71+/day)</span>
+                  </div>
+                </div>
               </div>
             )}
 

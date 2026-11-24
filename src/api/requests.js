@@ -1282,23 +1282,6 @@ export const requestsApi = {
   },
 
   /**
-   * ML Turnaround Prediction: Predict estimated turnaround duration for a credential request.
-   * @param {Object} [params] - { credentialType, purpose, dateRequested, numDocuments }
-   * @returns {Promise<Object>}
-   */
-  predictTurnaround: async (params = {}) => {
-    const response = await apiClient.get('/api/credentials/predict-turnaround/', {
-      params: {
-        credential_type: params.credentialType || params.credential_type || 'TOR',
-        purpose: params.purpose || 'Employment',
-        date_requested: params.dateRequested || params.date_requested,
-        num_documents: params.numDocuments || params.num_documents || 1,
-      },
-    });
-    return response.data;
-  },
-
-  /**
    * ML Demand Forecasting: Get daily incoming request forecast for upcoming operating days.
    * @param {Object} [params] - { startDate, operatingDays }
    * @returns {Promise<Object>}
