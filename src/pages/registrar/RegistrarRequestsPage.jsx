@@ -228,6 +228,9 @@ export default function RegistrarRequestsPage() {
 
   const [selectedBatch, setSelectedBatch] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [verificationSearch, setVerificationSearch] = useState('');
+  const [verificationDocType, setVerificationDocType] = useState('');
+  const [verificationStatus, setVerificationStatus] = useState('');
   const [assignmentHistorySearch, setAssignmentHistorySearch] = useState('');
   const [assignmentHistoryDocType, setAssignmentHistoryDocType] = useState('');
   const [docTypeFilter, setDocTypeFilter] = useState('');
@@ -895,15 +898,41 @@ export default function RegistrarRequestsPage() {
     if (selectedBatch !== 'ALL') {
       unv = unv.filter((r) => r.batchId === selectedBatch);
     }
+    if (verificationSearch.trim()) {
+      const q = verificationSearch.toLowerCase().trim();
+      unv = unv.filter(
+        (r) =>
+          (r.id && r.id.toLowerCase().includes(q)) ||
+          (r.tracking_number && r.tracking_number.toLowerCase().includes(q)) ||
+          (r.student_name && r.student_name.toLowerCase().includes(q)) ||
+          (r.student_id && r.student_id.toLowerCase().includes(q)) ||
+          (r.document_type && r.document_type.toLowerCase().includes(q)) ||
+          (r.batch_status && r.batch_status.toLowerCase().includes(q)) ||
+          (r.status && r.status.toLowerCase().includes(q))
+      );
+    }
+    if (verificationDocType) {
+      const filterLow = verificationDocType.toLowerCase();
+      unv = unv.filter((r) => {
+        const docLow = (r.document_type || '').toLowerCase();
+        return docLow.includes(filterLow) || filterLow.includes(docLow);
+      });
+    }
+    if (verificationStatus) {
+      unv = unv.filter((r) => {
+        const itemStatus = (r.batch_status || r.status || '').toLowerCase();
+        return itemStatus === verificationStatus.toLowerCase();
+      });
+    }
     return unv.sort(sortRequestsNewestFirst);
-  }, [requests, selectedBatch, archivedMap]);
+  }, [requests, selectedBatch, archivedMap, verificationSearch, verificationDocType, verificationStatus]);
 
   const [verificationPage, setVerificationPage] = useState(1);
   const VERIFICATION_PAGE_SIZE = 5;
 
   useEffect(() => {
     setVerificationPage(1);
-  }, [selectedBatch]);
+  }, [selectedBatch, verificationSearch, verificationDocType, verificationStatus]);
 
   const totalVerificationPages = Math.max(1, Math.ceil(unverifiedRequests.length / VERIFICATION_PAGE_SIZE));
   const safeVerificationPage = Math.min(verificationPage, totalVerificationPages);
@@ -1561,36 +1590,65 @@ export default function RegistrarRequestsPage() {
       {/* Primary Top Table: Pending Verification Queue */}
       <div className="assign-table-card mb-6" style={{ overflowAnchor: 'none' }}>
         <div className="flex items-center justify-between flex-wrap gap-3 pb-3 mb-3 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 shadow-sm shrink-0">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="assign-table-title !mb-0 text-slate-900 font-bold">
-                  Pending Verification Queue (Clearance &amp; Payment)
-                </h3>
-                {unverifiedRequests.length > 0 ? (
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                    {unverifiedRequests.length} awaiting verification
-                  </span>
-                ) : (
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    Queue Clear
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Review clearance and verify cashier payments to advance requests into processing.
-              </p>
-            </div>
+          <div>
+            <h3 className="assign-table-title !mb-0 text-slate-900 font-bold">
+              Pending Verification Queue (Clearance &amp; Payment)
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Review clearance and verify cashier payments to advance requests into processing.
+            </p>
+          </div>
+        </div>
+
+        <div className="req-search-controls mb-4">
+          <div className="req-input-wrap">
+            <svg className="req-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search by ID, Student Name, Student ID, or Document"
+              value={verificationSearch}
+              onChange={(e) => setVerificationSearch(e.target.value)}
+              className="req-search-field"
+            />
+          </div>
+
+          <div className="req-input-wrap">
+            <svg className="req-input-icon z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <CustomSelectDropdown
+              value={verificationDocType}
+              onChange={setVerificationDocType}
+              buttonClassName="req-dropdown-field"
+              options={[
+                { value: '', label: 'All Document Types' },
+                ...credentialTypes.map((ct) => ({ value: ct.name, label: ct.name })),
+              ]}
+            />
+          </div>
+
+          <div className="req-input-wrap">
+            <svg className="req-input-icon z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            <CustomSelectDropdown
+              value={verificationStatus}
+              onChange={setVerificationStatus}
+              buttonClassName="req-dropdown-field"
+              options={[
+                { value: '', label: 'All Statuses' },
+                { value: 'Pending', label: 'Pending' },
+                { value: 'Pending Payment', label: 'Pending Payment' },
+                { value: 'For Verification', label: 'For Verification' },
+              ]}
+            />
           </div>
         </div>
 
         <div className="table-responsive">
-          <table className="custom-data-table">
+          <table className="custom-data-table compact-assign-table">
             <thead>
               <tr>
                 <th className="whitespace-nowrap">REQUEST ID</th>
@@ -1598,7 +1656,7 @@ export default function RegistrarRequestsPage() {
                 <th className="min-w-[190px] max-w-[260px]">DOCUMENT TYPE</th>
                 <th className="whitespace-nowrap">STATUS</th>
                 <th className="whitespace-nowrap">DATE SUBMITTED</th>
-                <th className="text-right whitespace-nowrap min-w-[100px]">ACTION</th>
+                <th className="text-center whitespace-nowrap">ACTION</th>
               </tr>
             </thead>
             <tbody>
@@ -1611,17 +1669,21 @@ export default function RegistrarRequestsPage() {
               ) : unverifiedRequests.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-sm text-slate-500">
-                    <div className="flex flex-col items-center justify-center gap-1.5 py-2">
-                      <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-1">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
+                    {verificationSearch || verificationDocType || verificationStatus ? (
+                      'No pending verifications match your search or filter.'
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-1.5 py-2">
+                        <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-1">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                        <span className="font-bold text-slate-800 text-sm">All requests are verified!</span>
+                        <span className="text-xs text-slate-400">
+                          There are currently no requests awaiting clearance or payment verification.
+                        </span>
                       </div>
-                      <span className="font-bold text-slate-800 text-sm">All requests are verified!</span>
-                      <span className="text-xs text-slate-400">
-                        There are currently no requests awaiting clearance or payment verification.
-                      </span>
-                    </div>
+                    )}
                   </td>
                 </tr>
               ) : (
@@ -1636,7 +1698,7 @@ export default function RegistrarRequestsPage() {
                     </td>
                     <td>
                       <div className="doc-name-text">
-                        <ExpandableDocList text={item.document_type} maxItems={2} />
+                        <ExpandableDocList text={item.document_type} maxItems={1} />
                       </div>
                       <div className="doc-copies-sub">{item.copies}</div>
                     </td>
@@ -1646,17 +1708,18 @@ export default function RegistrarRequestsPage() {
                         ? item.request_date
                         : (item.created_at ? item.created_at.split('T')[0] : 'N/A')}
                     </td>
-                    <td className="text-right whitespace-nowrap">
+                    <td className="text-center whitespace-nowrap">
                       <button
                         type="button"
                         onClick={() => handleOpenProcess(item)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-[#1e3a8a] hover:bg-[#172554] shadow-sm transition-all cursor-pointer"
+                        className="staff-btn-view"
                         title="Verify clearance & payment"
+                        aria-label="Verify clearance & payment"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                         </svg>
-                        <span>Verify</span>
                       </button>
                     </td>
                   </tr>
@@ -1676,9 +1739,44 @@ export default function RegistrarRequestsPage() {
         )}
       </div>
 
-      <div className="req-search-card">
-        <h4 className="req-search-title">Search</h4>
-        <div className="req-search-controls">
+      <div className="assign-table-card" style={{ overflowAnchor: 'none' }}>
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <h3 className="assign-table-title !mb-0">
+            Requests Assignment - {selectedBatch === 'ALL' ? 'All Batches' : selectedBatch}
+          </h3>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                setIsSelectionMode((prev) => !prev);
+                if (isSelectionMode) setSelectedIds(new Set());
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                isSelectionMode
+                  ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                  : 'bg-indigo-50 text-indigo-950 border border-indigo-200 hover:bg-indigo-100'
+              }`}
+            >
+              {isSelectionMode ? (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span>Cancel Selection</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  <span>Select Multiple</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div className="req-search-controls mb-4">
           <div className="req-input-wrap">
             <svg className="req-input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -1723,44 +1821,6 @@ export default function RegistrarRequestsPage() {
               />
             </div>
           )}
-        </div>
-      </div>
-
-      <div className="assign-table-card" style={{ overflowAnchor: 'none' }}>
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-          <h3 className="assign-table-title !mb-0">
-            Requests Assignment - {selectedBatch === 'ALL' ? 'All Batches' : selectedBatch}
-          </h3>
-          <div className="flex items-center gap-3 flex-wrap">
-            <button
-              type="button"
-              onClick={() => {
-                setIsSelectionMode((prev) => !prev);
-                if (isSelectionMode) setSelectedIds(new Set());
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                isSelectionMode
-                  ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
-                  : 'bg-indigo-50 text-indigo-950 border border-indigo-200 hover:bg-indigo-100'
-              }`}
-            >
-              {isSelectionMode ? (
-                <>
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  <span>Cancel Selection</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                  </svg>
-                  <span>Select Multiple</span>
-                </>
-              )}
-            </button>
-          </div>
         </div>
 
         <div
