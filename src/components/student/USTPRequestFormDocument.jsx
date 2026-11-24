@@ -609,7 +609,7 @@ const USTPRequestFormDocument = forwardRef(function USTPRequestFormDocument(
               {isOtherDoc ? (
                 <div className="ustp-doc-label selected">
                   <span className="ustp-box-check"><CheckMark /></span>
-                  <span className="ustp-dynamic-cred-name">
+                  <span className="ustp-dynamic-cred-name font-normal">
                     {documentType} {rawAmount ? `(${amount})` : ''}
                   </span>
                 </div>

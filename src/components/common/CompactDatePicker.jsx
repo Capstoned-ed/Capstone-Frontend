@@ -44,6 +44,7 @@ function formatDisplayDate(str) {
 export default function CompactDatePicker({
   value = '',
   onChange,
+  min,
   max,
   placeholder = 'mm/dd/yyyy',
   className = '',
@@ -55,9 +56,10 @@ export default function CompactDatePicker({
   const containerRef = useRef(null);
 
   const parsedValue = parseIsoDate(value);
+  const parsedMin = parseIsoDate(min);
   const parsedMax = parseIsoDate(max);
   const today = new Date();
-  const initialDate = parsedValue || parsedMax || today;
+  const initialDate = parsedValue || parsedMin || parsedMax || today;
 
   const [viewYear, setViewYear] = useState(initialDate.getFullYear());
   const [viewMonth, setViewMonth] = useState(initialDate.getMonth());
@@ -67,12 +69,12 @@ export default function CompactDatePicker({
 
   useEffect(() => {
     if (!open) return;
-    const d = parseIsoDate(value) || parseIsoDate(max) || new Date();
+    const d = parseIsoDate(value) || parseIsoDate(min) || parseIsoDate(max) || new Date();
     setViewYear(d.getFullYear());
     setViewMonth(d.getMonth());
     setYearPageStart(Math.floor(d.getFullYear() / 12) * 12);
     setMode('days');
-  }, [open, value, max]);
+  }, [open, value, min, max]);
 
   useEffect(() => {
     if (!open) return;
@@ -89,6 +91,7 @@ export default function CompactDatePicker({
     };
   }, [open]);
 
+  const minIso = parsedMin ? toIsoDate(parsedMin.getFullYear(), parsedMin.getMonth(), parsedMin.getDate()) : null;
   const maxIso = parsedMax ? toIsoDate(parsedMax.getFullYear(), parsedMax.getMonth(), parsedMax.getDate()) : null;
   const todayIso = toIsoDate(today.getFullYear(), today.getMonth(), today.getDate());
 
@@ -114,6 +117,7 @@ export default function CompactDatePicker({
   };
 
   const selectDate = (iso) => {
+    if (minIso && iso < minIso) return;
     if (maxIso && iso > maxIso) return;
     onChange(iso);
     setOpen(false);
@@ -204,7 +208,9 @@ export default function CompactDatePicker({
           {mode === 'years' ? (
             <div className="grid grid-cols-3 gap-1 py-1">
               {Array.from({ length: 12 }, (_, idx) => yearPageStart + idx).map((yr) => {
-                const isDisabled = parsedMax && yr > parsedMax.getFullYear();
+                const isDisabled =
+                  (parsedMax && yr > parsedMax.getFullYear()) ||
+                  (parsedMin && yr < parsedMin.getFullYear());
                 const isSelected = yr === viewYear;
                 return (
                   <button
@@ -232,9 +238,12 @@ export default function CompactDatePicker({
             <div className="grid grid-cols-3 gap-1 py-1">
               {SHORT_MONTHS.map((label, mIdx) => {
                 const isDisabled =
-                  parsedMax &&
-                  (viewYear > parsedMax.getFullYear() ||
-                    (viewYear === parsedMax.getFullYear() && mIdx > parsedMax.getMonth()));
+                  (parsedMax &&
+                    (viewYear > parsedMax.getFullYear() ||
+                      (viewYear === parsedMax.getFullYear() && mIdx > parsedMax.getMonth()))) ||
+                  (parsedMin &&
+                    (viewYear < parsedMin.getFullYear() ||
+                      (viewYear === parsedMin.getFullYear() && mIdx < parsedMin.getMonth())));
                 const isSelected = mIdx === viewMonth;
                 return (
                   <button
@@ -273,7 +282,7 @@ export default function CompactDatePicker({
                 ))}
                 {Array.from({ length: daysInMonth }, (_, idx) => idx + 1).map((day) => {
                   const iso = toIsoDate(viewYear, viewMonth, day);
-                  const isDisabled = Boolean(maxIso && iso > maxIso);
+                  const isDisabled = Boolean((maxIso && iso > maxIso) || (minIso && iso < minIso));
                   const isSelected = value && value.startsWith(iso);
                   const isToday = iso === todayIso;
                   return (
@@ -314,7 +323,7 @@ export default function CompactDatePicker({
             </button>
             <button
               type="button"
-              disabled={Boolean(maxIso && todayIso > maxIso)}
+              disabled={Boolean((maxIso && todayIso > maxIso) || (minIso && todayIso < minIso))}
               onClick={() => selectDate(todayIso)}
               className="px-2 py-0.5 font-semibold text-[#000080] hover:bg-[#000080]/10 rounded cursor-pointer disabled:opacity-40"
             >

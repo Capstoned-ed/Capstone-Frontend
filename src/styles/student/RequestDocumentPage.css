@@ -1350,8 +1350,8 @@
 }
 
 .ustp-dynamic-cred-name {
-  font-weight: 500;
-  color: #1e1b4b;
+  font-weight: 400 !important;
+  color: inherit;
 }
 
 .ustp-cert-subgrid {

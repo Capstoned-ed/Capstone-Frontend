@@ -356,6 +356,15 @@ export default function ProcessRequestModal({
 
   const userRole = String(user?.role || '').trim().toUpperCase();
   const isAdmin = userRole === 'ADMIN';
+  const isStaff = userRole === 'STAFF';
+
+  const todayLocalYYYYMMDD = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }, []);
 
   const [persistedStatus, setPersistedStatus] = useState(() => requestItem?.status || 'PENDING');
   useEffect(() => {
@@ -1020,6 +1029,11 @@ export default function ProcessRequestModal({
       if (isBackendId) {
         const opRemarks = mergeStaffNoteIntoRemarks(requestItem, '');
         const targetRelDate = dateOfRelease || requestItem?.release_date || requestItem?.date_of_release || null;
+        if (targetRelDate && targetRelDate < todayLocalYYYYMMDD) {
+          toast.warning('Release date cannot be in the past.');
+          setLoading(false);
+          return;
+        }
         const targetApprovedBy = localApprovedByName.trim() || 'Jonalin T. Lagrada, MPSM';
         const targetVerifiedBy = verifiedByName || defaultStaffName;
         try {
@@ -1544,6 +1558,16 @@ export default function ProcessRequestModal({
             !isApproved
           ) {
             await requestsApi.approve(targetRawId);
+          }
+          const targetRelDate = dateOfRelease || requestItem?.release_date || requestItem?.date_of_release || null;
+          if (
+            targetRelDate &&
+            targetRelDate < todayLocalYYYYMMDD &&
+            targetRelDate !== (requestItem?.release_date || requestItem?.date_of_release)
+          ) {
+            toast.warning('Release date cannot be in the past.');
+            setLoading(false);
+            return;
           }
           updatedBackend = await requestsApi.transition(
             targetRawId,
@@ -2187,21 +2211,12 @@ export default function ProcessRequestModal({
                       <input
                         type="text"
                         value={assessedAmount}
-                        disabled={isAssessmentLocked}
-                        readOnly={isAssessmentLocked}
-                        tabIndex={isAssessmentLocked ? -1 : undefined}
-                        aria-disabled={isAssessmentLocked ? 'true' : undefined}
-                        onChange={(e) => {
-                          if (isAssessmentLocked) return;
-                          const clean = e.target.value.replace(/[^0-9.]/g, '');
-                          setAssessedAmount(clean);
-                        }}
+                        disabled={true}
+                        readOnly={true}
+                        tabIndex={-1}
+                        aria-disabled="true"
                         placeholder="100.00"
-                        className={`w-full pl-8 pr-3 py-2 text-sm font-bold text-indigo-950 border rounded-lg focus:outline-none ${
-                          isAssessmentLocked
-                            ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed select-text'
-                            : 'border-indigo-200 focus:border-indigo-600 bg-white'
-                        }`}
+                        className="w-full pl-8 pr-3 py-2 text-sm font-bold text-indigo-950 border rounded-lg bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed select-text focus:outline-none"
                       />
                     </div>
                   </div>
@@ -2209,10 +2224,15 @@ export default function ProcessRequestModal({
                     <label className="block font-bold text-slate-700 mb-1">Release Date *</label>
                     <CompactDatePicker
                       value={dateOfRelease}
+                      min={todayLocalYYYYMMDD}
                       disabled={isAssessmentLocked}
                       readOnly={isAssessmentLocked}
                       onChange={(val) => {
                         if (isAssessmentLocked) return;
+                        if (val && val < todayLocalYYYYMMDD) {
+                          toast.warning('Release date cannot be in the past.');
+                          return;
+                        }
                         setDateOfRelease(val);
                         setTurnaroundHint('');
                       }}
@@ -2231,21 +2251,27 @@ export default function ProcessRequestModal({
                     <input
                       type="text"
                       value={verifiedByName}
-                      disabled={isAssessmentLocked}
-                      readOnly={isAssessmentLocked}
-                      tabIndex={isAssessmentLocked ? -1 : undefined}
-                      aria-disabled={isAssessmentLocked ? 'true' : undefined}
-                      onChange={(e) => {
-                        if (isAssessmentLocked) return;
-                        setVerifiedByName(e.target.value);
-                      }}
-                      className={`w-full px-3 py-2 text-xs border rounded-lg focus:outline-none ${
-                        isAssessmentLocked
-                          ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed'
-                          : 'border-slate-300 focus:border-indigo-600 bg-white'
-                      }`}
+                      disabled={true}
+                      readOnly={true}
+                      tabIndex={-1}
+                      aria-disabled="true"
+                      className="w-full px-3 py-2 text-xs border rounded-lg bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed select-text focus:outline-none"
                     />
                   </div>
+                  {(activeOrNumber || requestItem?.or_number || latestPayment?.receipt_reference_number) && (
+                    <div className="sm:col-span-2">
+                      <label className="block font-bold text-slate-700 mb-1">O.R. Number</label>
+                      <input
+                        type="text"
+                        value={activeOrNumber || requestItem?.or_number || latestPayment?.receipt_reference_number || ''}
+                        disabled={true}
+                        readOnly={true}
+                        tabIndex={-1}
+                        aria-disabled="true"
+                        className="w-full px-3 py-2 text-xs border rounded-lg bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed select-text font-mono font-bold focus:outline-none"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-3.5 pt-3 border-t border-indigo-100 flex flex-wrap items-center justify-between gap-2">
@@ -2507,14 +2533,56 @@ export default function ProcessRequestModal({
                       placeholder="O.R. Number *"
                       value={walkinOrNumber}
                       onChange={(e) => {
-                        if (isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal || isPaymentLocked) return;
+                        if (
+                          isAdmin ||
+                          paymentStatus === 'VERIFIED' ||
+                          isPersistedTerminal ||
+                          isPaymentLocked ||
+                          Boolean(requestItem?.or_number || latestPayment?.receipt_reference_number)
+                        ) return;
                         setWalkinOrNumber(e.target.value);
                       }}
-                      disabled={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal || isPaymentLocked}
-                      readOnly={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal || isPaymentLocked}
-                      tabIndex={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal || isPaymentLocked ? -1 : undefined}
-                      aria-disabled={isAdmin || paymentStatus === 'VERIFIED' || isPersistedTerminal || isPaymentLocked ? 'true' : undefined}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-600 font-mono font-bold"
+                      disabled={
+                        isAdmin ||
+                        paymentStatus === 'VERIFIED' ||
+                        isPersistedTerminal ||
+                        isPaymentLocked ||
+                        Boolean(requestItem?.or_number || latestPayment?.receipt_reference_number)
+                      }
+                      readOnly={
+                        isAdmin ||
+                        paymentStatus === 'VERIFIED' ||
+                        isPersistedTerminal ||
+                        isPaymentLocked ||
+                        Boolean(requestItem?.or_number || latestPayment?.receipt_reference_number)
+                      }
+                      tabIndex={
+                        isAdmin ||
+                        paymentStatus === 'VERIFIED' ||
+                        isPersistedTerminal ||
+                        isPaymentLocked ||
+                        Boolean(requestItem?.or_number || latestPayment?.receipt_reference_number)
+                          ? -1
+                          : undefined
+                      }
+                      aria-disabled={
+                        isAdmin ||
+                        paymentStatus === 'VERIFIED' ||
+                        isPersistedTerminal ||
+                        isPaymentLocked ||
+                        Boolean(requestItem?.or_number || latestPayment?.receipt_reference_number)
+                          ? 'true'
+                          : undefined
+                      }
+                      className={`w-full px-3 py-2 text-xs border rounded-lg focus:outline-none font-mono font-bold ${
+                        isAdmin ||
+                        paymentStatus === 'VERIFIED' ||
+                        isPersistedTerminal ||
+                        isPaymentLocked ||
+                        Boolean(requestItem?.or_number || latestPayment?.receipt_reference_number)
+                          ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed select-text'
+                          : 'border-slate-300 focus:border-indigo-600 bg-white'
+                      }`}
                     />
                   </div>
                   {paymentStatus === 'VERIFIED' ? (
@@ -2774,8 +2842,8 @@ export default function ProcessRequestModal({
                   </button>
                 )}
 
-                {/* Print Claim Stub: ONLY when persisted backend status is READY_FOR_RELEASE (and payment verified) OR already released */}
-                {(isPersistedReadyForRelease || isPersistedReleased) && isPaymentVerified && (
+                {/* Print Claim Stub: ONLY when persisted backend status is READY_FOR_RELEASE (and payment verified) OR already released, AND NOT viewed by Staff */}
+                {!isStaff && (isPersistedReadyForRelease || isPersistedReleased) && isPaymentVerified && (
                   <button
                     type="button"
                     onClick={() => setShowClaimStubModal(true)}

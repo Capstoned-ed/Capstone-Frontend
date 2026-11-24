@@ -268,12 +268,18 @@ export default function RequestDocumentPage() {
   });
   const [otherPurpose, setOtherPurpose] = useState(() => initialDraft?.otherPurpose || '');
 
-  // Clear graduation date if user is an enrolled student
+  // Clear graduation date and photo if user is an enrolled student (not alumnus)
   useEffect(() => {
     if (!isAlumnus && dateOfGraduation) {
       setDateOfGraduation('');
     }
-  }, [isAlumnus, dateOfGraduation]);
+    if (!isAlumnus && (photoFile || photoPreview)) {
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      const draftUserId = user?.id || user?.username || 'guest';
+      clearDraftFiles(draftUserId, 'photo');
+    }
+  }, [isAlumnus, dateOfGraduation, photoFile, photoPreview, user]);
 
   // Photo Upload State (Part 3)
   const [photoFile, setPhotoFile] = useState(null);
@@ -315,6 +321,11 @@ export default function RequestDocumentPage() {
   };
 
   const handlePhotoUpload = async (e) => {
+    if (!isAlumnus) {
+      toast.warning('Photo upload is only available for Alumni / Board Exam requests.');
+      if (e?.target) e.target.value = '';
+      return;
+    }
     const rawFile = e.target.files?.[0];
     if (rawFile) {
       const allowedPhotoTypes = ['image/jpeg', 'image/png', 'image/webp'];
@@ -2128,8 +2139,8 @@ export default function RequestDocumentPage() {
                               }}
                               className="ustp-checkbox-input"
                             />
-                            <span className="ustp-dynamic-cred-name flex items-center gap-1.5 flex-wrap">
-                              <span>{ctype.name} (P{parseFloat(ctype.price).toFixed(0)})</span>
+                            <span className="ustp-dynamic-cred-name flex items-center gap-1.5 flex-wrap font-normal text-slate-700">
+                              <span className="font-normal text-slate-700">{ctype.name} (P{parseFloat(ctype.price).toFixed(0)})</span>
                               {!isActive && (
                                 <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase rounded bg-rose-100 text-rose-700 border border-rose-200">
                                   Unavailable
@@ -2359,11 +2370,15 @@ export default function RequestDocumentPage() {
                       </div>
 
                       <div className="ustp-attached-actions">
-                        <label className="ustp-btn-change">
+                        <label
+                          className={`ustp-btn-change ${!isAlumnus ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                          title={!isAlumnus ? 'Photo upload is only available for Alumni (Board Exam requests)' : 'Change Photo'}
+                        >
                           <span>Change Photo</span>
                           <input
                             type="file"
                             accept="image/*"
+                            disabled={!isAlumnus}
                             onChange={handlePhotoUpload}
                             className="ustp-file-input-hidden"
                           />
@@ -2379,8 +2394,18 @@ export default function RequestDocumentPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="ustp-upload-trigger-wrap">
-                      <label className="ustp-upload-btn">
+                    <div
+                      className="ustp-upload-trigger-wrap"
+                      title={!isAlumnus ? 'Photo upload is only available for Alumni (Board Exam requests)' : undefined}
+                    >
+                      <label
+                        className={`ustp-upload-btn ${
+                          !isAlumnus
+                            ? 'opacity-50 cursor-not-allowed pointer-events-none bg-slate-100 text-slate-400 border-slate-200'
+                            : ''
+                        }`}
+                        title={!isAlumnus ? 'Photo upload is only available for Alumni (Board Exam requests)' : 'Upload 2x2 / Passport Photo'}
+                      >
                         <svg className="ustp-upload-btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
@@ -2388,12 +2413,15 @@ export default function RequestDocumentPage() {
                         <input
                           type="file"
                           accept="image/*"
+                          disabled={!isAlumnus}
                           onChange={handlePhotoUpload}
                           className="ustp-file-input-hidden"
                         />
                       </label>
                       <span className="ustp-upload-hint">
-                        No photo attached (Required for Board Exam requests)
+                        {!isAlumnus
+                          ? 'Only available for Alumni / Board Exam requests'
+                          : 'No photo attached (Required for Board Exam requests)'}
                       </span>
                     </div>
                   )}

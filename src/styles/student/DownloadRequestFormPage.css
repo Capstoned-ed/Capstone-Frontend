@@ -430,7 +430,7 @@
 }
 
 .ustp-dynamic-cred-name {
-  font-weight: 700;
+  font-weight: 400 !important;
   color: #000000;
 }
 
