@@ -323,17 +323,6 @@ export default function TrackStatusPage() {
     // Remain in active requests tab
   };
 
-  // Restore request from history back to active
-  const handleRestoreRequest = (req) => {
-    if (!req) return;
-    const reqId = req.id || req.rawId || req.tracking_number;
-    setRequestArchived(reqId, false, user, { fallbackItem: req });
-    setArchivedMap(getArchivedRequestsMap());
-    toast.info(`Request ${req.tracking_number || req.trackingId || reqId} restored to Active Requests.`);
-    setActiveQueueTab('active');
-    setSelectedTrackId(req.tracking_number || req.trackingId || String(reqId));
-  };
-
   // Cancel pending request (Student self-service cancellation)
   const handleCancelRequest = async () => {
     if (!matchedRequest) return;
@@ -746,20 +735,6 @@ export default function TrackStatusPage() {
                             ✓ Done
                           </button>
                         )}
-                        {/* Restore button if in Request History */}
-                        {activeQueueTab === 'history' && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRestoreRequest(req);
-                            }}
-                            className="px-2 py-0.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded transition-colors cursor-pointer"
-                            title="Restore to Active Requests"
-                          >
-                            ↩ Restore
-                          </button>
-                        )}
                       </div>
                     </div>
                   );
@@ -888,13 +863,6 @@ export default function TrackStatusPage() {
                   <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                   <span>This request has been completed and saved in your <strong>Request History</strong>.</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleRestoreRequest(matchedRequest)}
-                  className="text-xs font-bold text-emerald-700 hover:underline cursor-pointer shrink-0 ml-2"
-                >
-                  ↩ Restore to Active
-                </button>
               </div>
             )}
 
@@ -1196,16 +1164,6 @@ export default function TrackStatusPage() {
                   title="Mark request as Done and move to Request History"
                 >
                   <span>✓ Done</span>
-                </button>
-              )}
-              {activeQueueTab === 'history' && (
-                <button
-                  type="button"
-                  onClick={() => handleRestoreRequest(matchedRequest)}
-                  className="px-4 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-                  title="Restore to Active Requests"
-                >
-                  <span>↩ Restore to Active</span>
                 </button>
               )}
             </div>

@@ -5,6 +5,57 @@ import { ROLES } from '../../constants/roles';
 import { useAuth } from '../../hooks/useAuth';
 import ExpandableDocList from '../common/ExpandableDocList';
 
+export function sanitizeNotificationMessage(message) {
+  if (!message || typeof message !== 'string') return message || '';
+
+  // 1. Strip raw internal bracketed metadata payloads
+  let cleaned = message
+    .replace(/\[Items:(\[[\s\S]*?\])\]/gi, '')
+    .replace(/\[Total:[^\]]*\]/gi, '')
+    .replace(/\[Copies:[^\]]*\]/gi, '')
+    .replace(/\[Graduation:[^\]]*\]/gi, '')
+    .replace(/\[Assigned(?:\s+to)?:[^\]]*\]/gi, '')
+    .trim();
+
+  // 2. Check if this is an action-required / rejected message with raw syntax
+  // e.g.: "Your request (BSIT-...) requires action: [Transcript of Records (TOR)] For Evaluation | Note: MALI IMONG CLEARANCE"
+  const actionMatch = cleaned.match(
+    /^Your request\s*\(([^)]+)\)\s*(?:for\s+([^.]+?)\s*)?requires action:?\s*([\s\S]*)$/i
+  );
+
+  if (actionMatch) {
+    const tracking = actionMatch[1].trim();
+    let existingDoc = (actionMatch[2] || '').trim();
+    const rawRest = actionMatch[3].trim();
+
+    // Look for bracketed document name in rawRest if existingDoc is empty
+    const docTagMatch = rawRest.match(/^\[([^\]]+)\]/);
+    if (!existingDoc && docTagMatch) {
+      existingDoc = docTagMatch[1].trim();
+    }
+
+    // Look for "| Note: ..." or "Reason: ..."
+    const noteMatch = rawRest.match(/(?:\|\s*)?(?:Note|Reason):\s*([^|[\n\r]+)/i);
+    let reason = '';
+    if (noteMatch) {
+      reason = noteMatch[1].trim();
+    } else {
+      let leftover = rawRest.replace(/^\[[^\]]+\]\s*/, '').trim();
+      leftover = leftover.replace(/^(?:For\s+[^|;\n\r]+)\s*(?:\|\s*)?/i, '').trim();
+      reason = leftover;
+    }
+
+    const docStr = existingDoc ? ` for ${existingDoc}` : '';
+    if (reason && !reason.toLowerCase().includes('dashboard for details')) {
+      return `Your request (${tracking})${docStr} requires action. Reason/Note: ${reason}`;
+    }
+    return `Your request (${tracking})${docStr} requires action. Please check your dashboard for details.`;
+  }
+
+  cleaned = cleaned.replace(/\s*\|\s*$/, '').trim();
+  return cleaned;
+}
+
 function formatEventTitle(eventType) {
   switch (eventType) {
     case 'ACCOUNT_CREATED':
@@ -194,14 +245,14 @@ export default function NotificationItem({
       }
       return { label: 'Track Request →', path: `${ROUTES.STUDENT.REQUESTS}${trackParam}` };
     }
-    if (related_object_type === 'StudentClearance') {
+    if (related_object_type === 'StudentClearance' || event_type === 'CLEARANCE_APPROVED') {
       if (user?.role === ROLES.REGISTRAR) {
         return { label: 'View Requests →', path: `${ROUTES.REGISTRAR.REQUESTS}${trackParam}` };
       }
       if (user?.role === ROLES.STAFF) {
         return { label: 'View Requests →', path: ROUTES.STAFF.REQUESTS };
       }
-      return { label: 'Request Document →', path: ROUTES.STUDENT.NEW_REQUEST };
+      return { label: 'Track Status →', path: `${ROUTES.STUDENT.REQUESTS}${trackParam}` };
     }
     if (related_object_type === 'Payment') {
       if (user?.role === ROLES.REGISTRAR) {
@@ -274,7 +325,7 @@ export default function NotificationItem({
 
         <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-normal">
           {(() => {
-            const rawMsg = String(message || '');
+            const rawMsg = sanitizeNotificationMessage(String(message || ''));
             const match = rawMsg.match(/(Requested Document:\s*|Document:\s*)([^•]+)/i);
             if (!match || match.index === undefined) return rawMsg;
             const prefixEnd = match.index + match[1].length;

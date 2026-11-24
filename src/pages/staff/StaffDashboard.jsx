@@ -336,7 +336,7 @@ export default function StaffDashboard() {
       : requestsList;
 
     return list
-      .filter((r) => !isRequestArchived(r, archivedMap))
+      .filter((r) => !isClaimedStatus(r.rawStatus || r.status) && !isRequestArchived(r, archivedMap))
       .filter((r) => isRequestAssignedToUser(r, user, assignments, usersList))
       .sort((a, b) => {
         const getAssignTime = (item) => {

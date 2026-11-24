@@ -656,14 +656,14 @@ export default function StaffRequestsPage() {
     });
   };
 
-  // Active requests (not yet moved to History)
+  // Active requests (not yet moved to History, and excluding Claimed / Released)
   const activeRequests = useMemo(() => {
-    return requests.filter((r) => !isRequestArchived(r, archivedMap));
+    return requests.filter((r) => !isClaimedStatus(r.rawStatus || r.status) && !isRequestArchived(r, archivedMap));
   }, [requests, archivedMap]);
 
   // Request History (documents claimed by students and archived)
   const historyRequests = useMemo(() => {
-    const archived = requests.filter((r) => isRequestArchived(r, archivedMap));
+    const archived = requests.filter((r) => isClaimedStatus(r.rawStatus || r.status) || isRequestArchived(r, archivedMap));
     return filterRequestsBySearch(archived, historySearch, historyDocType, '').sort((a, b) => {
       const timeA = archivedMap[a.id]?.archived_at || archivedMap[a.rawId]?.archived_at || a.created_at || 0;
       const timeB = archivedMap[b.id]?.archived_at || archivedMap[b.rawId]?.archived_at || b.created_at || 0;
