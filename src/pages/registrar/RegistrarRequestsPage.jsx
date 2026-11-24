@@ -1393,7 +1393,7 @@ export default function RegistrarRequestsPage() {
       case 'Releasing':
       case 'RELEASING':
       case 'READY_FOR_RELEASE':
-        return <span className="status-pill for-release">For release</span>;
+        return <span className="status-pill for-release">For Release</span>;
       case 'Released':
       case 'RELEASED':
         return <span className="status-pill for-release">Released</span>;
@@ -1825,19 +1825,18 @@ export default function RegistrarRequestsPage() {
                 <th className="whitespace-nowrap">Release Date</th>
                 <th className="text-center whitespace-nowrap">View / Action</th>
                 <th className="w-[115px] whitespace-nowrap">Assigned Staff</th>
-                <th className="whitespace-nowrap">Assignment</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={isSelectionMode ? 9 : 8} className="py-8 text-center text-sm text-slate-400">
+                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
                     Loading requests from server...
                   </td>
                 </tr>
               ) : batchRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={isSelectionMode ? 9 : 8} className="py-8 text-center text-sm text-slate-400">
+                  <td colSpan={isSelectionMode ? 8 : 7} className="py-8 text-center text-sm text-slate-400">
                     {requests.length === 0
                       ? 'No student requests have been submitted yet.'
                       : 'No requests found in this batch.'}
@@ -1930,20 +1929,6 @@ export default function RegistrarRequestsPage() {
                           disabledTooltip="Verify clearance & payment first before assigning staff"
                           onChange={(nextStaff) => handleAssignStaff(item.id, item.rawId, nextStaff)}
                         />
-                      </td>
-                      <td>
-                        {item.assigned_staff ? (
-                          <span className="badge-assigned">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                            </svg>
-                            <span>Assigned</span>
-                          </span>
-                        ) : (
-                          <span className="badge-unassigned">
-                            <span>Unassigned</span>
-                          </span>
-                        )}
                       </td>
                     </tr>
                   );

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { REQUEST_STATUS, normalizeToBackendStatus } from '../../constants/workflowStatuses';
+import TablePagination from '../common/TablePagination';
 import '../../styles/staff/ProcessingCalendar.css';
 
 // Helper to safely convert an ISO string, Date object, or date string into local YYYY-MM-DD
@@ -82,6 +83,9 @@ export default function ProcessCalendarCard({
   className = '',
 }) {
   const [activeDate, setActiveDate] = useState(() => new Date());
+  const [activeBatchesPage, setActiveBatchesPage] = useState(1);
+  const [batchViewMode, setBatchViewMode] = useState('active'); // 'active' | 'history'
+  const ACTIVE_BATCHES_PAGE_SIZE = 5;
 
   // 1. Group requests into batches by request_date and compute daily processing schedule
   const batchSchedule = useMemo(() => {
@@ -603,60 +607,112 @@ export default function ProcessCalendarCard({
       </div>
 
       {/* 3. All Active Batches Section matching reference design */}
-      {showActiveBatches && (
-        <div className="active-batches-card">
-          <h3 className="active-batches-title">
-            All Active Batches
-          </h3>
+      {showActiveBatches && (() => {
+        const isHistoryView = batchViewMode === 'history';
+        const activeBatches = batchSchedule.allBatchesList.filter(
+          (b) => b.completionPercentage < 100
+        );
+        const completedBatches = batchSchedule.allBatchesList.filter(
+          (b) => b.completionPercentage >= 100
+        );
+        const visibleBatches = isHistoryView ? completedBatches : activeBatches;
+        const totalBatches = visibleBatches.length;
+        const totalBatchPages = Math.max(1, Math.ceil(totalBatches / ACTIVE_BATCHES_PAGE_SIZE));
+        const safeBatchPage = Math.min(activeBatchesPage, totalBatchPages);
+        const paginatedBatches = visibleBatches.slice(
+          (safeBatchPage - 1) * ACTIVE_BATCHES_PAGE_SIZE,
+          safeBatchPage * ACTIVE_BATCHES_PAGE_SIZE
+        );
 
-          {batchSchedule.allBatchesList.length > 0 ? (
-            <div className="active-batches-list">
-              {batchSchedule.allBatchesList.map((batch) => (
-                <div
-                  key={batch.batchId}
-                  onClick={() =>
-                    onDateClick(
-                      batch.requestDate,
-                      {
-                        toProcess: batch.requests || [],
-                        releasing: batch.allBatchRequests || batch.requests || [],
-                        newRequests: batch.allBatchRequests || batch.requests || [],
-                      },
-                      {
-                        isBatch: true,
-                        batch,
-                        preferredTab: 'toProcess',
+        return (
+          <div className="active-batches-card">
+            <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+              <h3 className="active-batches-title !mb-0">
+                {isHistoryView ? 'Completed Batches History' : 'All Active Batches'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setBatchViewMode((prev) => (prev === 'active' ? 'history' : 'active'));
+                  setActiveBatchesPage(1);
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                  isHistoryView
+                    ? 'bg-[#0B0B36] text-white border-[#0B0B36] hover:bg-[#161654]'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>
+                  {isHistoryView
+                    ? `Active Batches (${activeBatches.length})`
+                    : `History${completedBatches.length > 0 ? ` (${completedBatches.length})` : ''}`}
+                </span>
+              </button>
+            </div>
+
+            {totalBatches > 0 ? (
+              <>
+                <div className="active-batches-list">
+                  {paginatedBatches.map((batch) => (
+                    <div
+                      key={batch.batchId}
+                      onClick={() =>
+                        onDateClick(
+                          batch.requestDate,
+                          {
+                            toProcess: batch.requests || [],
+                            releasing: batch.allBatchRequests || batch.requests || [],
+                            newRequests: batch.allBatchRequests || batch.requests || [],
+                          },
+                          {
+                            isBatch: true,
+                            batch,
+                            preferredTab: 'toProcess',
+                          }
+                        )
                       }
-                    )
-                  }
-                  className="batch-item-card"
-                >
-                  <div>
-                    <h4 className="batch-item-title">
-                      {batch.requestDateFormatted} Requests
-                    </h4>
-                    <p className="batch-item-subtitle">
-                      Releases: {batch.releaseDateFormatted}
-                    </p>
-                  </div>
-                  <div className="batch-item-stats">
-                    <span className="batch-item-ratio">
-                      {batch.processedCount} / {batch.totalRequests}
-                    </span>
-                    <p className="batch-item-percentage">
-                      {batch.completionPercentage}% Complete
-                    </p>
-                  </div>
+                      className="batch-item-card"
+                    >
+                      <div>
+                        <h4 className="batch-item-title">
+                          {batch.requestDateFormatted} Requests
+                        </h4>
+                        <p className="batch-item-subtitle">
+                          Releases: {batch.releaseDateFormatted}
+                        </p>
+                      </div>
+                      <div className="batch-item-stats">
+                        <span className="batch-item-ratio">
+                          {batch.processedCount} / {batch.totalRequests}
+                        </span>
+                        <p className="batch-item-percentage">
+                          {batch.completionPercentage}% Complete
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="batch-empty-state">
-              No active request batches currently in progress.
-            </div>
-          )}
-        </div>
-      )}
+                <TablePagination
+                  currentPage={safeBatchPage}
+                  totalItems={totalBatches}
+                  pageSize={ACTIVE_BATCHES_PAGE_SIZE}
+                  onPageChange={setActiveBatchesPage}
+                  accentColor="blue"
+                />
+              </>
+            ) : (
+              <div className="batch-empty-state">
+                {isHistoryView
+                  ? 'No completed request batches yet.'
+                  : 'No active request batches currently in progress.'}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
