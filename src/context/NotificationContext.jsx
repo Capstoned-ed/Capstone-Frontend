@@ -70,7 +70,20 @@ export function NotificationProvider({ children }) {
         // Sort chronologically (newest first)
         combined.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
-        setNotifications(combined);
+        setNotifications((prev) => {
+          if (
+            prev.length === combined.length &&
+            prev.every(
+              (p, idx) =>
+                p.id === combined[idx]?.id &&
+                p.is_read === combined[idx]?.is_read &&
+                p.updated_at === combined[idx]?.updated_at
+            )
+          ) {
+            return prev;
+          }
+          return combined;
+        });
       } catch (err) {
         console.warn('Failed to load notifications:', err);
         setError('Unable to load notifications.');
@@ -96,12 +109,12 @@ export function NotificationProvider({ children }) {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    // Fast polling every 4 seconds when active tab is visible
+    // Smart silent background polling every 12 seconds when active tab is visible
     const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
+      if (!document.hidden && document.visibilityState === 'visible') {
         fetchNotifications(true);
       }
-    }, 4000);
+    }, 12000);
 
     const handleSync = () => {
       fetchNotifications(true);

@@ -45,6 +45,16 @@ async function detectBlobMimeType(blob, headerType) {
  */
 export const clearancesApi = {
   /**
+   * Return cached clearances from memory if available.
+   */
+  getCachedList(params = {}) {
+    const raw = apiClient.getCached('/api/clearances/', { params });
+    if (Array.isArray(raw)) return raw;
+    if (Array.isArray(raw?.results)) return raw.results;
+    return null;
+  },
+
+  /**
    * List clearances.
    * - Students receive only their own clearance.
    * - Staff / Registrar / Admin receive all clearances.

@@ -23,7 +23,9 @@ import requestsApi, {
   mergeStaffNoteIntoRemarks,
   formatCleanPurpose,
   extractStaffRemark,
+  areRequestListsEqual,
 } from '../../api/requests';
+import useSilentSync from '../../hooks/useSilentSync';
 import { useAuth } from '../../hooks/useAuth';
 import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
 import useToast from '../../hooks/useToast';
@@ -83,17 +85,22 @@ export default function StaffRequestsPage() {
   const { user } = useAuth();
   const myAssignedRef = useRef(null);
 
-  const [rawRequests, setRawRequests] = useState([]);
+  const cachedInitialRequests = requestsApi.getCachedList();
+  const cachedInitialCredTypes = requestsApi.getCachedCredentialTypes();
+  const cachedInitialClearances = clearancesApi.getCachedList();
+  const hasInitialCache = Boolean(cachedInitialRequests && cachedInitialRequests.length > 0);
+
+  const [rawRequests, setRawRequests] = useState(() => cachedInitialRequests || []);
   const [users, setUsers] = useState([]);
-  const [credentialTypes, setCredentialTypes] = useState([]);
-  const [clearances, setClearances] = useState([]);
+  const [credentialTypes, setCredentialTypes] = useState(() => cachedInitialCredTypes || []);
+  const [clearances, setClearances] = useState(() => cachedInitialClearances || []);
   const [assignments, setAssignments] = useState(getStaffAssignments);
   const [assignmentTimestamps, setAssignmentTimestamps] = useState(getStaffAssignmentTimestamps);
   const [activityTimestamps, setActivityTimestamps] = useState(getRequestActivityTimestamps);
   const [archivedMap, setArchivedMap] = useState(getArchivedRequestsMap);
   const [activeTab, setActiveTab] = useState('active'); // 'active' | 'history'
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !hasInitialCache);
   const [error, setError] = useState(null);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -153,8 +160,11 @@ export default function StaffRequestsPage() {
     });
   };
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (isSilent = false) => {
     try {
+      if (!isSilent && !requestsApi.getCachedList()?.length) {
+        setLoading(true);
+      }
       const [requestsRes, credTypesRes, clearancesRes] = await Promise.all([
         requestsApi.list().catch((err) => {
           console.error('Failed requestsApi.list:', err);
@@ -170,16 +180,19 @@ export default function StaffRequestsPage() {
         }),
       ]);
 
-      setRawRequests(Array.isArray(requestsRes) ? requestsRes : []);
-      setCredentialTypes(Array.isArray(credTypesRes) ? credTypesRes : []);
-      setClearances(Array.isArray(clearancesRes) ? clearancesRes : []);
-      setLoading(false);
+      const fresh = Array.isArray(requestsRes) ? requestsRes : [];
+      setRawRequests((prev) => (areRequestListsEqual(prev, fresh) ? prev : fresh));
+      setCredentialTypes((prev) => (prev.length === credTypesRes.length ? prev : credTypesRes));
+      setClearances((prev) => (prev.length === clearancesRes.length ? prev : clearancesRes));
     } catch (err) {
       console.error('Failed to load staff requests data:', err);
       setError('Unable to load document requests from server.');
+    } finally {
       setLoading(false);
     }
   }, []);
+
+  useSilentSync(loadData, { intervalMs: 12000 });
 
   useEffect(() => {
     loadData();

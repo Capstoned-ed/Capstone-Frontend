@@ -1144,15 +1144,56 @@ function normalizeBackendRequest(b) {
   };
 }
 
+export function areRequestListsEqual(prevList = [], nextList = []) {
+  if (prevList === nextList) return true;
+  if (!Array.isArray(prevList) || !Array.isArray(nextList)) return false;
+  if (prevList.length !== nextList.length) return false;
+  for (let i = 0; i < prevList.length; i++) {
+    const a = prevList[i];
+    const b = nextList[i];
+    if (
+      !a || !b ||
+      a.id !== b.id ||
+      a.status !== b.status ||
+      a.updated_at !== b.updated_at ||
+      a.assigned_to !== b.assigned_to ||
+      a.assigned_staff !== b.assigned_staff ||
+      a.remarks !== b.remarks
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+let latestNormalizedRequestsCache = null;
+
 export const requestsApi = {
   /**
+   * Return in-memory cached normalized request list if available (0ms instant render).
+   */
+  getCachedList: () => {
+    return latestNormalizedRequestsCache;
+  },
+
+  /**
+   * Return in-memory cached credential types if available.
+   */
+  getCachedCredentialTypes: () => {
+    const raw = apiClient.getCached('/api/credential-types/');
+    if (Array.isArray(raw)) return raw;
+    if (Array.isArray(raw?.results)) return raw.results;
+    return null;
+  },
+
+  /**
    * Fetch list of all credential requests directly from Django REST API.
-   * Completely live and never relies on localStorage caching.
+   * Completely live with in-flight deduplication and SWR caching.
    */
   list: async (params = {}, user = null) => {
     let backendResults = [];
     try {
-      const requestParams = { page_size: 1000, ...params };
+      const requestParams = { page_size: 250, ...params };
       const response = await apiClient.get('/api/requests/', { params: requestParams });
       const rawList = Array.isArray(response.data) ? [...response.data] : [...(response.data?.results || [])];
 
@@ -1179,9 +1220,11 @@ export const requestsApi = {
       }
     }
 
-    return backendResults
+    const sorted = backendResults
       .filter(isValidRequest)
       .sort(sortRequestsNewestFirst);
+    latestNormalizedRequestsCache = sorted;
+    return sorted;
   },
 
   /**

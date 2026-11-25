@@ -121,7 +121,8 @@ function getDocTypeKey(req, credTypes = []) {
 
 export default function useDashboardData() {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
+  const hasCachedRequests = Boolean(requestsApi.getCachedList()?.length);
+  const [loading, setLoading] = useState(!hasCachedRequests);
   const [error, setError] = useState(null);
 
   const [statusDistribution, setStatusDistribution] = useState([]);
@@ -146,8 +147,11 @@ export default function useDashboardData() {
     if (!user) return;
     let ignore = false;
 
-    async function loadDashboardData() {
+    async function loadDashboardData(isSilent = false) {
       try {
+        if (!isSilent && !requestsApi.getCachedList()?.length) {
+          setLoading(true);
+        }
         setError(null);
         const shouldFetchStaff = user?.role === ROLES.ADMIN || user?.role === ROLES.REGISTRAR;
         const [requestsRes, typesRes, usersRes] = await Promise.all([
@@ -557,9 +561,24 @@ export default function useDashboardData() {
 
     loadDashboardData();
 
+    // 12-second background polling
+    const pollInterval = setInterval(() => {
+      if (!document.hidden && document.visibilityState === 'visible') {
+        loadDashboardData(true);
+      }
+    }, 12000);
+
     const handleSync = () => {
-      loadDashboardData();
+      loadDashboardData(true);
     };
+    const handleFocus = () => {
+      if (!document.hidden && document.visibilityState === 'visible') {
+        loadDashboardData(true);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
     window.addEventListener('regquest_requests_updated', handleSync);
     window.addEventListener('regquest_users_updated', handleSync);
     window.addEventListener('regquest_assignments_updated', handleSync);
@@ -568,6 +587,9 @@ export default function useDashboardData() {
 
     return () => {
       ignore = true;
+      clearInterval(pollInterval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
       window.removeEventListener('regquest_requests_updated', handleSync);
       window.removeEventListener('regquest_users_updated', handleSync);
       window.removeEventListener('regquest_assignments_updated', handleSync);

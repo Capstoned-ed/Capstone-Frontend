@@ -16,6 +16,7 @@ import ProcessCalendarCard, { isForProcessingStatus } from '../../components/cal
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
 import ExpandableDocList, { DocumentItemsList } from '../../components/common/ExpandableDocList';
 import ExpandableRequestId from '../../components/common/ExpandableRequestId';
+import useSilentSync from '../../hooks/useSilentSync';
 import {
   REQUEST_STATUS,
   normalizeToBackendStatus,
@@ -99,7 +100,8 @@ export default function ProcessingCalendarPage() {
   const { user } = useAuth();
   const isAdmin = String(user?.role || '').trim().toUpperCase() === 'ADMIN';
   const [requestsList, setRequestsList] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const hasInitialCache = Boolean(requestsApi.getCachedList()?.length);
+  const [loading, setLoading] = useState(!hasInitialCache);
   const [selectedDate, setSelectedDate] = useState(null);
   const [activeCategory, setActiveCategory] = useState('toProcess'); // 'toProcess' | 'releasing' | 'newRequests'
   const [dayCategories, setDayCategories] = useState({
@@ -110,8 +112,11 @@ export default function ProcessingCalendarPage() {
   const [selectedMeta, setSelectedMeta] = useState(null);
   const [selectedRequest, setSelectedRequest] = useState(null);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (isSilent = false) => {
     try {
+      if (!isSilent && !requestsApi.getCachedList()?.length) {
+        setLoading(true);
+      }
       const [backendRequests, credTypesRes, clearancesRes] = await Promise.all([
         requestsApi.list().catch(() => []),
         requestsApi.getCredentialTypes().catch(() => []),
@@ -119,6 +124,7 @@ export default function ProcessingCalendarPage() {
       ]);
 
       const combinedRaw = Array.isArray(backendRequests) ? [...backendRequests] : [];
+      const usersRes = [];
 
       const userMap = new Map();
       if (Array.isArray(usersRes)) {
@@ -232,22 +238,7 @@ export default function ProcessingCalendarPage() {
     }
   }, [user]);
 
-  useEffect(() => {
-    loadData();
-
-    const handleSync = () => {
-      loadData();
-    };
-
-    window.addEventListener('regquest_requests_updated', handleSync);
-    window.addEventListener('regquest_profile_updated', handleSync);
-    window.addEventListener('regquest_assignments_updated', handleSync);
-    return () => {
-      window.removeEventListener('regquest_requests_updated', handleSync);
-      window.removeEventListener('regquest_profile_updated', handleSync);
-      window.removeEventListener('regquest_assignments_updated', handleSync);
-    };
-  }, [loadData]);
+  useSilentSync(loadData, { intervalMs: 12000 });
 
   // Re-synchronize selected documents with the latest requestsList state
   const syncedCategories = useMemo(() => {
