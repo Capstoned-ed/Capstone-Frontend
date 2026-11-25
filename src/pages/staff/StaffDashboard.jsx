@@ -22,7 +22,6 @@ import requestsApi, {
   extractStaffRemark,
 } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
-import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
 import { StaffRequestsTable, StaffSearchFilter } from '../../components/staff';
@@ -116,10 +115,9 @@ export default function StaffDashboard() {
       const requestsParam = isStaffUser
         ? { assigned_to: user?.id || user?.username || 'me' }
         : {};
-      const [backendRequests, credTypesRes, usersRes, clearancesRes] = await Promise.all([
+      const [backendRequests, credTypesRes, clearancesRes] = await Promise.all([
         requestsApi.list(requestsParam).catch(() => []),
         requestsApi.getCredentialTypes().catch(() => []),
-        usersApi.getStaffDirectory().catch(() => []),
         clearancesApi.list().catch(() => []),
       ]);
 

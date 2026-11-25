@@ -25,7 +25,6 @@ import requestsApi, {
   extractStaffRemark,
 } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
-import usersApi from '../../api/users';
 import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
 import useToast from '../../hooks/useToast';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
@@ -171,15 +170,7 @@ export default function StaffRequestsPage() {
         }),
       ]);
 
-      let usersRes = [];
-      try {
-        usersRes = await usersApi.getStaffDirectory();
-      } catch {
-        usersRes = [];
-      }
-
       setRawRequests(Array.isArray(requestsRes) ? requestsRes : []);
-      setUsers(Array.isArray(usersRes) ? usersRes : []);
       setCredentialTypes(Array.isArray(credTypesRes) ? credTypesRes : []);
       setClearances(Array.isArray(clearancesRes) ? clearancesRes : []);
       setLoading(false);
@@ -1749,6 +1740,7 @@ export default function StaffRequestsPage() {
         onClose={() => setBatchModalOpen(false)}
         selectedRequests={selectedRequestsList}
         onConfirm={handleBatchUpdate}
+        role="staff"
       />
     </div>
   );

@@ -71,10 +71,59 @@ export default function PredictedInsightCard() {
     forecastList.reduce((sum, d) => sum + (d.predicted_requests || 0), 0);
   const dailyAvg = Math.round(weeklyTotal / Math.max(1, forecastList.length));
 
-  // Next operating day
-  const nextDayObj = forecastList[0] || { weekday: 'Monday', predicted_requests: 30 };
-  const nextDayName = nextDayObj.weekday || 'Monday';
-  const nextDayRequests = nextDayObj.predicted_requests || 30;
+  // Next operating day: compute strictly in Asia/Manila, advancing at least +1 day and skipping weekends
+  const getTodayManila = () => {
+    try {
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Manila',
+        weekday: 'long',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+      const parts = formatter.formatToParts(new Date());
+      const partMap = {};
+      parts.forEach((p) => { partMap[p.type] = p.value; });
+      return {
+        weekday: partMap.weekday || 'Monday',
+        iso: `${partMap.year}-${partMap.month}-${partMap.day}`,
+      };
+    } catch {
+      const d = new Date();
+      const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      return {
+        weekday: weekdays[d.getDay()],
+        iso: d.toISOString().split('T')[0],
+      };
+    }
+  };
+
+  const getNextOperatingDay = (todayWeekday) => {
+    switch (todayWeekday) {
+      case 'Monday': return 'Tuesday';
+      case 'Tuesday': return 'Wednesday';
+      case 'Wednesday': return 'Thursday';
+      case 'Thursday': return 'Friday';
+      case 'Friday':
+      case 'Saturday':
+      case 'Sunday':
+      default:
+        return 'Monday';
+    }
+  };
+
+  const todayManila = getTodayManila();
+  const targetNextWeekday = getNextOperatingDay(todayManila.weekday);
+
+  // Match the forecast item for the target next operating day
+  const nextDayObj =
+    forecastList.find((item) => item.weekday === targetNextWeekday) ||
+    forecastList.find((item) => item.date && item.date > todayManila.iso) ||
+    forecastList[0] ||
+    { weekday: targetNextWeekday, predicted_requests: 26 };
+
+  const nextDayName = targetNextWeekday;
+  const nextDayRequests = nextDayObj.predicted_requests || 26;
 
   // Dynamically compute exact number of Monday–Friday operating days in a calendar month
   const getOperatingDaysInMonth = (year, monthIndex) => {

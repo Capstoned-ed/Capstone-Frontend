@@ -11,7 +11,6 @@ import requestsApi, {
   isRequestAssignedToUser,
 } from '../../api/requests';
 import { useAuth } from '../../hooks/useAuth';
-import usersApi from '../../api/users';
 import clearancesApi from '../../api/clearances';
 import ProcessCalendarCard, { isForProcessingStatus } from '../../components/calendar/ProcessCalendarCard';
 import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
@@ -113,10 +112,9 @@ export default function ProcessingCalendarPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [backendRequests, credTypesRes, usersRes, clearancesRes] = await Promise.all([
+      const [backendRequests, credTypesRes, clearancesRes] = await Promise.all([
         requestsApi.list().catch(() => []),
         requestsApi.getCredentialTypes().catch(() => []),
-        usersApi.getStaffDirectory().catch(() => []),
         clearancesApi.list().catch(() => []),
       ]);
 

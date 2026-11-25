@@ -149,6 +149,7 @@ export default function useDashboardData() {
     async function loadDashboardData() {
       try {
         setError(null);
+        const shouldFetchStaff = user?.role === ROLES.ADMIN || user?.role === ROLES.REGISTRAR;
         const [requestsRes, typesRes, usersRes] = await Promise.all([
           requestsApi.list().catch((err) => {
             console.warn('Dashboard requestsApi.list error:', err);
@@ -158,10 +159,12 @@ export default function useDashboardData() {
             console.warn('Dashboard getCredentialTypes error:', err);
             return [];
           }),
-          usersApi.getStaffDirectory().catch((err) => {
-            console.warn('Dashboard getStaffDirectory error:', err);
-            return [];
-          }),
+          shouldFetchStaff
+            ? usersApi.getStaffDirectory().catch((err) => {
+                console.warn('Dashboard getStaffDirectory error:', err);
+                return [];
+              })
+            : Promise.resolve([]),
         ]);
 
         if (ignore) return;
