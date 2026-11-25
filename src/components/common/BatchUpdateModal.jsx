@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import CompactDatePicker from './CompactDatePicker';
 
-const STATUS_OPTIONS = [
+const STAFF_STATUS_OPTIONS = [
+  { value: '', label: '-- No change (Keep current status) --' },
+  { value: 'Processing', label: 'Processing' },
+  { value: 'For Releasing', label: 'For Releasing' },
+  { value: 'Claimed', label: 'Claimed' },
+];
+
+const DEFAULT_STATUS_OPTIONS = [
   { value: '', label: '-- No change (Keep current status) --' },
   { value: 'Pending', label: 'Pending' },
   { value: 'Payment Pending', label: 'Payment Pending' },
@@ -13,21 +20,44 @@ const STATUS_OPTIONS = [
   { value: 'Rejected', label: 'Rejected' },
 ];
 
+function getTodayManilaYYYYMMDD() {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Manila',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    const d = new Date();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${mm}-${dd}`;
+  }
+}
+
 export default function BatchUpdateModal({
   isOpen,
   onClose,
   selectedRequests = [],
   onConfirm,
+  statusOptions,
+  role = 'staff',
 }) {
   const [newStatus, setNewStatus] = useState('');
   const [releasingDate, setReleasingDate] = useState('');
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [dateError, setDateError] = useState('');
+
+  const minDate = getTodayManilaYYYYMMDD();
+  const options = statusOptions || (role === 'staff' ? STAFF_STATUS_OPTIONS : DEFAULT_STATUS_OPTIONS);
 
   useEffect(() => {
     if (!isOpen) return;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    setDateError('');
     return () => {
       document.body.style.overflow = prevOverflow;
     };
@@ -40,6 +70,11 @@ export default function BatchUpdateModal({
     if (!newStatus && !releasingDate && !note.trim()) {
       return;
     }
+    if (releasingDate && releasingDate < minDate) {
+      setDateError('Releasing date cannot be in the past.');
+      return;
+    }
+    setDateError('');
     setIsSubmitting(true);
     try {
       await onConfirm({
@@ -131,7 +166,7 @@ export default function BatchUpdateModal({
                 aria-disabled={isSubmitting ? 'true' : undefined}
                 className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-950/20 focus:border-indigo-950 transition-all font-medium text-slate-800 disabled:bg-slate-100 disabled:cursor-not-allowed"
               >
-                {STATUS_OPTIONS.map((opt) => (
+                {options.map((opt) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
                   </option>
@@ -151,8 +186,10 @@ export default function BatchUpdateModal({
             <div className="relative">
               <CompactDatePicker
                 value={releasingDate}
+                min={minDate}
                 onChange={(val) => {
                   if (isSubmitting) return;
+                  setDateError('');
                   setReleasingDate(val);
                 }}
                 disabled={isSubmitting}
@@ -160,9 +197,15 @@ export default function BatchUpdateModal({
                 className="px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-950/20 focus:border-indigo-950 transition-all font-medium text-slate-800"
               />
             </div>
-            <p className="text-[11px] text-slate-500 mt-1">
-              Set the estimated or scheduled releasing date for these requests.
-            </p>
+            {dateError ? (
+              <p className="text-[11px] text-rose-600 font-semibold mt-1">
+                {dateError}
+              </p>
+            ) : (
+              <p className="text-[11px] text-slate-500 mt-1">
+                Set the estimated or scheduled releasing date for these requests.
+              </p>
+            )}
           </div>
 
           {/* Field 3: Note / Remarks */}
