@@ -35,15 +35,16 @@ test.describe('Fresh Incognito Context Verification (Login -> All 4 Dashboards)'
         body: JSON.stringify({ access: accessToken, refresh: 'mock_refresh_token' }),
       })
     );
-    await page.route('**/api/users/me/**', (route: any) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(loginUser) })
-    );
-    await page.route('**/api/users/staff-directory/**', (route: any) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(sampleUsers) })
-    );
-    await page.route('**/api/users/**', (route: any) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: sampleUsers, count: sampleUsers.length }) })
-    );
+    await page.route('**/api/users/**', (route: any) => {
+      const url = route.request().url();
+      if (url.includes('/api/users/me/')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(loginUser) });
+      }
+      if (url.includes('/api/users/staff-directory/')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(sampleUsers) });
+      }
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: sampleUsers, count: sampleUsers.length }) });
+    });
     await page.route('**/api/requests/**', (route: any) => {
       const url = route.request().url();
       // Simulate a 2-page DRF paginated response where RELEASED requests live on Page 2

@@ -5,6 +5,8 @@ import usersApi from '../api/users';
 import { ROLES } from '../constants/roles';
 import { AuthContext } from './AuthContextDefinition';
 import { clearAllDraftStorage } from '../utils/draftStorage';
+import apiCache from '../api/cache';
+import requestsApi from '../api/requests';
 
 export { AuthContext };
 
@@ -16,6 +18,18 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const lastFocusRefreshRef = useRef(0);
+  const prevUserIdRef = useRef(null);
+
+  useEffect(() => {
+    const currentUid = user?.userId || user?.id || null;
+    if (prevUserIdRef.current && currentUid && prevUserIdRef.current !== currentUid) {
+      try {
+        apiCache.clear();
+        requestsApi.clearCache();
+      } catch {}
+    }
+    prevUserIdRef.current = currentUid;
+  }, [user]);
 
   const parseToken = useCallback((token) => {
     try {
@@ -157,6 +171,10 @@ export function AuthProvider({ children }) {
       } catch (e) {
         console.warn('Failed to clear sessionStorage on logout:', e);
       }
+      try {
+        apiCache.clear();
+        requestsApi.clearCache();
+      } catch {}
       setUser(null);
     }
   }, []);
@@ -328,6 +346,11 @@ export function AuthProvider({ children }) {
   }, [refreshProfile]);
 
   const login = useCallback(async (username, password) => {
+    try {
+      apiCache.clear();
+      requestsApi.clearCache();
+    } catch {}
+
     const data = await authApi.login(username, password);
     const { access, refresh } = data;
 
