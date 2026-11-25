@@ -196,7 +196,7 @@ export default function PredictedInsightCard() {
             </svg>
           </div>
           <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
-            Predicted Insight this week
+            5-Day Operating Outlook
           </h2>
         </div>
 
@@ -260,13 +260,13 @@ export default function PredictedInsightCard() {
               <li className="flex items-start gap-2.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#00007F] mt-2 flex-shrink-0" />
                 <span>
-                  Daily request forecast: expected average of <span className="font-bold text-slate-900">~{dailyAvg} requests/day</span> (Next operating day: <span className="font-bold text-slate-900">{nextDayName}</span> with <span className="font-bold text-slate-900">~{Math.round(nextDayRequests)} requests</span>)
+                  Daily request forecast: expected average of <span className="font-bold text-slate-900">~{dailyAvg} requests/day</span> across the next 5 operating days (Next operating day: <span className="font-bold text-slate-900">{nextDayName}</span> with <span className="font-bold text-slate-900">~{Math.round(nextDayRequests)} requests</span>)
                 </span>
               </li>
               <li className="flex items-start gap-2.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#00007F] mt-2 flex-shrink-0" />
                 <span>
-                  Request volume is expected to peak on <span className="font-bold text-slate-900">{peakDayName}</span> with approximately <span className="font-bold text-slate-900">{Math.round(peakRequests)} requests</span> (~{Math.round(weeklyTotal)} total this week)
+                  Request volume is expected to peak on <span className="font-bold text-slate-900">{peakDayName}</span> with approximately <span className="font-bold text-slate-900">{Math.round(peakRequests)} requests</span> (~{Math.round(weeklyTotal)} total over 5 operating days)
                 </span>
               </li>
               <li className="flex items-start gap-2.5">
@@ -277,25 +277,34 @@ export default function PredictedInsightCard() {
               </li>
             </ul>
 
-            {/* 5-Day Daily Outlook Chips (Fixed Monday–Friday Order) */}
+            {/* 5-Day Daily Outlook Chips (Rolling Chronological Order Starting From Next Operating Day) */}
             {forecastList && forecastList.length > 0 && (
               <div className="mt-3.5 pt-3 border-t border-slate-200/80">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-semibold text-slate-500 mr-1">5-Day Outlook:</span>
                   {(() => {
-                    const FIXED_WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+                    const OPERATING_WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+                    const startIndex = OPERATING_WEEKDAYS.indexOf(targetNextWeekday);
+                    const safeStartIndex = startIndex !== -1 ? startIndex : 0;
+                    const rollingWeekdays = Array.from(
+                      { length: 5 },
+                      (_, i) => OPERATING_WEEKDAYS[(safeStartIndex + i) % 5]
+                    );
+
                     const dayMap = new Map();
                     forecastList.forEach((item) => {
                       if (item?.weekday) {
-                        const found = FIXED_WEEKDAYS.find(
+                        const found = OPERATING_WEEKDAYS.find(
                           (w) => w.toLowerCase() === item.weekday.toLowerCase() ||
                             item.weekday.toLowerCase().startsWith(w.slice(0, 3).toLowerCase())
                         );
-                        if (found) dayMap.set(found, item);
+                        if (found && !dayMap.has(found)) {
+                          dayMap.set(found, item);
+                        }
                       }
                     });
 
-                    return FIXED_WEEKDAYS.map((wName, idx) => {
+                    return rollingWeekdays.map((wName, idx) => {
                       const matchedItem = dayMap.get(wName) || {
                         weekday: wName,
                         predicted_requests: dailyAvg,

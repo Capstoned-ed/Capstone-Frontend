@@ -777,9 +777,7 @@ export default function StaffRequestsPage() {
         status: restored?.status || 'Pending',
       });
 
-      if (typeof fetchAll === 'function') {
-        await fetchAll();
-      }
+      await loadData();
       toast.success(`Request ${item.tracking_number || reqId} restored to Active Queue (${formatStatusDisplay(restored?.status)}).`);
     } catch (err) {
       console.error('Failed to restore request:', err);

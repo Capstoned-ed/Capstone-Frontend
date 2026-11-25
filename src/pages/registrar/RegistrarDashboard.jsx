@@ -435,7 +435,7 @@ export default function RegistrarDashboard() {
 
       {/* Main Dashboard Content Stream */}
       <div className="admin-dashboard-content">
-        {/* Section 1: Predicted Insight this week */}
+        {/* Section 1: 5-Day Operating Outlook */}
         <PredictedInsightCard />
 
         {/* Section 2: Request Logs & Reports */}

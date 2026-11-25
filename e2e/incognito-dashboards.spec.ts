@@ -175,7 +175,7 @@ test.describe('Fresh Incognito Context Verification (Login -> All 4 Dashboards)'
 
     await page.waitForURL('**/admin/dashboard', { timeout: 10000 });
     await expect(page.locator('header.hidden.md\\:flex')).toHaveCount(0);
-    await expect(page.getByText('Predicted Insight this week')).toBeVisible();
+    await expect(page.getByText('5-Day Operating Outlook')).toBeVisible();
     await expect(page.getByText('1 (20%)').first()).toBeVisible({ timeout: 10000 });
     await expect(page.locator('.staff-table').getByText('Maria Santos')).toBeVisible();
 
@@ -200,7 +200,7 @@ test.describe('Fresh Incognito Context Verification (Login -> All 4 Dashboards)'
 
     await page.waitForURL('**/registrar/dashboard', { timeout: 10000 });
     await expect(page.locator('header.hidden.md\\:flex')).toHaveCount(0);
-    await expect(page.getByText('Predicted Insight this week')).toBeVisible();
+    await expect(page.getByText('5-Day Operating Outlook')).toBeVisible();
     await expect(page.getByText('1 (20%)').first()).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('auto-approve-toggle')).toHaveCount(0);
 
