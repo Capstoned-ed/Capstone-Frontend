@@ -12,7 +12,9 @@ import requestsApi, {
   setRequestArchived,
   sanitizeRemarks,
   extractStaffRemark,
+  areRequestListsEqual,
 } from '../../api/requests';
+import useSilentSync from '../../hooks/useSilentSync';
 import { useAuth } from '../../hooks/useAuth';
 import { ROUTES } from '../../constants/routes';
 import useToast from '../../hooks/useToast';
@@ -116,9 +118,13 @@ export default function TrackStatusPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTrackId = searchParams.get('trackId') || '';
 
-  const [rawRequests, setRawRequests] = useState([]);
-  const [credentialTypes, setCredentialTypes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cachedInitialRequests = requestsApi.getCachedList();
+  const cachedInitialCredTypes = requestsApi.getCachedCredentialTypes();
+  const hasInitialCache = Boolean(cachedInitialRequests && cachedInitialRequests.length > 0);
+
+  const [rawRequests, setRawRequests] = useState(() => cachedInitialRequests || []);
+  const [credentialTypes, setCredentialTypes] = useState(() => cachedInitialCredTypes || []);
+  const [loading, setLoading] = useState(() => !hasInitialCache);
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showClaimStubModal, setShowClaimStubModal] = useState(false);
@@ -157,14 +163,18 @@ export default function TrackStatusPage() {
   const [selectedTrackId, setSelectedTrackId] = useState(urlTrackId);
 
   // Load requests and credential types
-  const fetchData = async (isManualRefresh = false) => {
+  const fetchData = async (isManualRefresh = false, isSilent = false) => {
     if (isManualRefresh) setRefreshing(true);
+    if (!isManualRefresh && !isSilent && !requestsApi.getCachedList()?.length) {
+      setLoading(true);
+    }
     try {
       const [requestsRes, credTypesRes] = await Promise.all([
         requestsApi.list().catch(() => []),
         requestsApi.getCredentialTypes().catch(() => []),
       ]);
-      setRawRequests(Array.isArray(requestsRes) ? requestsRes : []);
+      const fresh = Array.isArray(requestsRes) ? requestsRes : [];
+      setRawRequests((prev) => (areRequestListsEqual(prev, fresh) ? prev : fresh));
       setCredentialTypes(Array.isArray(credTypesRes) ? credTypesRes : []);
     } catch (err) {
       console.warn('Failed to fetch requests in TrackStatusPage:', err);
@@ -176,6 +186,8 @@ export default function TrackStatusPage() {
       }
     }
   };
+
+  useSilentSync((silent) => fetchData(false, silent), { intervalMs: 12000 });
 
   useEffect(() => {
     fetchData();

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, getStaffAssignmentTimestamps, recordStaffAssignmentTimestamp, getRequestActivityTimestamps, recordRequestActivityTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived, preserveDocTagInRemarks, mergeReleaseDateIntoRemarks, formatCleanPurpose } from '../../api/requests';
+import requestsApi, { isValidRequest, sortRequestsNewestFirst, resolveRequestDocType, updateStoredRequest, logProcessedAction, getStaffAssignments, saveStaffAssignments, getStaffAssignmentTimestamps, recordStaffAssignmentTimestamp, getRequestActivityTimestamps, recordRequestActivityTimestamp, ASSIGNMENTS_KEY, setRequestArchived, getArchivedRequestsMap, isRequestArchived, preserveDocTagInRemarks, mergeReleaseDateIntoRemarks, formatCleanPurpose, areRequestListsEqual } from '../../api/requests';
+import useSilentSync from '../../hooks/useSilentSync';
 import { useAuth } from '../../hooks/useAuth';
 import usersApi from '../../api/users';
 import clearancesApi, { getClearanceAttachment } from '../../api/clearances';
@@ -218,14 +219,19 @@ export default function RegistrarRequestsPage() {
   const { user: currentUser } = useAuth();
   const isStaff = currentUser?.role === 'staff';
 
-  const [rawRequests, setRawRequests] = useState([]);
+  const cachedInitialRequests = requestsApi.getCachedList();
+  const cachedInitialCredTypes = requestsApi.getCachedCredentialTypes();
+  const cachedInitialClearances = clearancesApi.getCachedList();
+  const hasInitialCache = Boolean(cachedInitialRequests && cachedInitialRequests.length > 0);
+
+  const [rawRequests, setRawRequests] = useState(() => cachedInitialRequests || []);
   const [users, setUsers] = useState([]);
-  const [credentialTypes, setCredentialTypes] = useState([]);
+  const [credentialTypes, setCredentialTypes] = useState(() => cachedInitialCredTypes || []);
   const [assignments, setAssignments] = useState(loadStoredAssignments);
   const [activityTimestamps, setActivityTimestamps] = useState(getRequestActivityTimestamps);
   const [assignmentTimestamps, setAssignmentTimestamps] = useState(getStaffAssignmentTimestamps);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !hasInitialCache);
   const [error, setError] = useState(null);
 
   const [selectedBatch, setSelectedBatch] = useState('ALL');
@@ -240,7 +246,7 @@ export default function RegistrarRequestsPage() {
 
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [processModalOpen, setProcessModalOpen] = useState(false);
-  const [clearances, setClearances] = useState([]);
+  const [clearances, setClearances] = useState(() => cachedInitialClearances || []);
   const [batchPage, setBatchPage] = useState(1);
   const BATCH_PAGE_SIZE = 10;
   const [staffWorkloadPage, setStaffWorkloadPage] = useState(1);
@@ -405,8 +411,11 @@ export default function RegistrarRequestsPage() {
     }
   };
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (isSilent = false) => {
     try {
+      if (!isSilent && !requestsApi.getCachedList()?.length) {
+        setLoading(true);
+      }
       const [requestsRes, credTypesRes, clearancesRes] = await Promise.all([
         requestsApi.list().catch((err) => {
           console.error('Failed requestsApi.list:', err);
@@ -436,17 +445,20 @@ export default function RegistrarRequestsPage() {
         }
       }
 
-      setRawRequests(Array.isArray(requestsRes) ? requestsRes : []);
-      setUsers(Array.isArray(usersRes) ? usersRes : []);
-      setCredentialTypes(Array.isArray(credTypesRes) ? credTypesRes : []);
-      setClearances(Array.isArray(clearancesRes) ? clearancesRes : []);
-      setLoading(false);
+      const freshRequests = Array.isArray(requestsRes) ? requestsRes : [];
+      setRawRequests((prev) => (areRequestListsEqual(prev, freshRequests) ? prev : freshRequests));
+      setUsers((prev) => (prev.length === usersRes.length && prev.every((u, i) => u.id === usersRes[i]?.id) ? prev : usersRes));
+      setCredentialTypes((prev) => (prev.length === credTypesRes.length ? prev : credTypesRes));
+      setClearances((prev) => (prev.length === clearancesRes.length ? prev : clearancesRes));
     } catch (err) {
       console.error('Failed to load requests data:', err);
       setError('Unable to load document requests from server.');
+    } finally {
       setLoading(false);
     }
   }, []);
+
+  useSilentSync(loadData, { intervalMs: 12000 });
 
   useEffect(() => {
     loadData();

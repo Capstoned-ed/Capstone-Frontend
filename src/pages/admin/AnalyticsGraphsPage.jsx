@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import requestsApi, { isValidRequest, resolveRequestDocType, extractDocumentItems } from '../../api/requests';
+import useSilentSync from '../../hooks/useSilentSync';
 import useToast from '../../hooks/useToast';
 import '../../styles/admin/AnalyticsGraphsPage.css';
 
@@ -88,13 +89,20 @@ export default function AnalyticsGraphsPage() {
   const [hoveredItem, setHoveredItem] = useState(null);
   const [lineHoveredItem, setLineHoveredItem] = useState(null);
 
-  const [requestsList, setRequestsList] = useState([]);
-  const [credTypes, setCredTypes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cachedInitialRequests = requestsApi.getCachedList();
+  const cachedInitialCredTypes = requestsApi.getCachedCredentialTypes();
+  const hasInitialCache = Boolean(cachedInitialRequests && cachedInitialRequests.length > 0);
+
+  const [requestsList, setRequestsList] = useState(() => (cachedInitialRequests ? cachedInitialRequests.filter(isValidRequest) : []));
+  const [credTypes, setCredTypes] = useState(() => cachedInitialCredTypes || []);
+  const [loading, setLoading] = useState(!hasInitialCache);
 
   // Load real-time dynamic requests and credential types
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (isSilent = false) => {
     try {
+      if (!isSilent && !requestsApi.getCachedList()?.length) {
+        setLoading(true);
+      }
       const [backendRequests, typesRes] = await Promise.all([
         requestsApi.list().catch(() => []),
         requestsApi.getCredentialTypes().catch(() => []),
@@ -111,15 +119,7 @@ export default function AnalyticsGraphsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    loadData();
-
-    const handleSync = () => loadData();
-    window.addEventListener('regquest_requests_updated', handleSync);
-    return () => {
-      window.removeEventListener('regquest_requests_updated', handleSync);
-    };
-  }, [loadData]);
+  useSilentSync(loadData, { intervalMs: 12000 });
 
   // Resolve EVERY requested document item inside a request (supports multi-document requests + copies)
   const resolveRequestDocItems = useCallback(

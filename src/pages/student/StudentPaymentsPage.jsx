@@ -5,7 +5,9 @@ import requestsApi, {
   isConfirmedForPayment,
   extractTotalAmount,
   extractRequestedCopies,
+  areRequestListsEqual,
 } from '../../api/requests';
+import useSilentSync from '../../hooks/useSilentSync';
 import paymentsApi, { getStoredPaymentProof } from '../../api/payments';
 import apiClient from '../../api/client';
 import { useAuth } from '../../hooks/useAuth';
@@ -145,9 +147,13 @@ export default function StudentPaymentsPage() {
   const navigate = useNavigate();
   const toast = useToast();
 
-  const [rawRequests, setRawRequests] = useState([]);
-  const [credentialTypes, setCredentialTypes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cachedInitialRequests = requestsApi.getCachedList();
+  const cachedInitialCredTypes = requestsApi.getCachedCredentialTypes();
+  const hasInitialCache = Boolean(cachedInitialRequests && cachedInitialRequests.length > 0);
+
+  const [rawRequests, setRawRequests] = useState(() => cachedInitialRequests || []);
+  const [credentialTypes, setCredentialTypes] = useState(() => cachedInitialCredTypes || []);
+  const [loading, setLoading] = useState(!hasInitialCache);
   const [refreshing, setRefreshing] = useState(false);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [copiedId, setCopiedId] = useState('');
@@ -178,14 +184,18 @@ export default function StudentPaymentsPage() {
   }, []);
 
   // Fetch Requests & Credential Types
-  const fetchData = async (isManual = false) => {
+  const fetchData = async (isManual = false, isSilent = false) => {
     if (isManual) setRefreshing(true);
+    if (!isManual && !isSilent && !requestsApi.getCachedList()?.length) {
+      setLoading(true);
+    }
     try {
       const [requestsRes, credRes] = await Promise.all([
         requestsApi.list().catch(() => []),
         requestsApi.getCredentialTypes().catch(() => []),
       ]);
-      setRawRequests(Array.isArray(requestsRes) ? requestsRes : []);
+      const fresh = Array.isArray(requestsRes) ? requestsRes : [];
+      setRawRequests((prev) => (areRequestListsEqual(prev, fresh) ? prev : fresh));
       setCredentialTypes(Array.isArray(credRes) ? credRes : []);
     } catch (err) {
       console.warn('Failed to load student payments:', err);
@@ -197,6 +207,8 @@ export default function StudentPaymentsPage() {
       }
     }
   };
+
+  useSilentSync((silent) => fetchData(false, silent), { intervalMs: 12000 });
 
   useEffect(() => {
     fetchData();

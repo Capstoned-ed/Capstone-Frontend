@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { API_URL } from '../config/env';
 import { ROUTES } from '../constants/routes';
+import apiCache from './cache';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -8,6 +9,35 @@ export const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// SWR In-Memory Cache & In-Flight Request Deduplication for GET requests
+const originalGet = apiClient.get.bind(apiClient);
+
+apiClient.get = function (url, config = {}) {
+  if (config?.skipCache) {
+    return originalGet(url, config);
+  }
+
+  const key = apiCache.generateKey('GET', url, config?.params);
+
+  // In-flight deduplication: simultaneous identical calls share the pending promise
+  return apiCache.deduplicate(key, async () => {
+    const response = await originalGet(url, config);
+    if (response && response.status >= 200 && response.status < 300) {
+      apiCache.set(key, response.data);
+    }
+    return response;
+  });
+};
+
+apiClient.getCached = function (url, config = {}) {
+  const key = apiCache.generateKey('GET', url, config?.params);
+  return apiCache.get(key);
+};
+
+apiClient.invalidateCache = function (prefix) {
+  apiCache.invalidate(prefix);
+};
 
 let isRefreshing = false;
 let failedQueue = [];
@@ -38,7 +68,32 @@ apiClient.interceptors.request.use(
 
 // Response Interceptor: Handle 401 with Silent Refresh & Request Queuing
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Invalidate relevant cache namespaces on successful mutations
+    const method = String(response.config?.method || '').toUpperCase();
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      const url = String(response.config?.url || '');
+      if (url.includes('/requests') || url.includes('/credentials')) {
+        apiCache.invalidate('/requests');
+        apiCache.invalidate('/credentials');
+      }
+      if (url.includes('/notifications')) {
+        apiCache.invalidate('/notifications');
+      }
+      if (url.includes('/clearances')) {
+        apiCache.invalidate('/clearances');
+        apiCache.invalidate('/requests');
+      }
+      if (url.includes('/payments')) {
+        apiCache.invalidate('/payments');
+        apiCache.invalidate('/requests');
+      }
+      if (url.includes('/users')) {
+        apiCache.invalidate('/users');
+      }
+    }
+    return response;
+  },
   async (error) => {
     // Sanitize any raw HTML 500 error pages to clean user-friendly object
     if (

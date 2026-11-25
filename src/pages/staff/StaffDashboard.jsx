@@ -27,6 +27,7 @@ import ProcessRequestModal from '../../components/admin/ProcessRequestModal';
 import { StaffRequestsTable, StaffSearchFilter } from '../../components/staff';
 import PredictedInsightCard from '../../components/admin/PredictedInsightCard';
 import useToast from '../../hooks/useToast';
+import useSilentSync from '../../hooks/useSilentSync';
 import {
   REQUEST_STATUS,
   normalizeToBackendStatus,
@@ -62,7 +63,8 @@ export default function StaffDashboard() {
   const [assignments, setAssignments] = useState(getStaffAssignments);
   const [assignmentTimestamps, setAssignmentTimestamps] = useState(getStaffAssignmentTimestamps);
   const [archivedMap, setArchivedMap] = useState(getArchivedRequestsMap);
-  const [loading, setLoading] = useState(true);
+  const hasInitialCache = Boolean(requestsApi.getCachedList()?.length);
+  const [loading, setLoading] = useState(!hasInitialCache);
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(false);
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
@@ -108,8 +110,9 @@ export default function StaffDashboard() {
     }
   }, [selectedCalendarDate]);
 
-  const loadDashboardData = useCallback(async () => {
+  const loadDashboardData = useCallback(async (isSilent = false) => {
     if (!user) return;
+    if (!isSilent && !requestsApi.getCachedList()?.length) setLoading(true);
     try {
       const isStaffUser = String(user?.role || '').toLowerCase() === 'staff';
       const requestsParam = isStaffUser
@@ -123,6 +126,7 @@ export default function StaffDashboard() {
 
       const combinedRaw = Array.isArray(backendRequests) ? [...backendRequests] : [];
       setCredentialTypes(Array.isArray(credTypesRes) ? credTypesRes : []);
+      const usersRes = [];
 
       const userMap = new Map();
       if (Array.isArray(usersRes)) {
@@ -291,35 +295,7 @@ export default function StaffDashboard() {
     }
   }, [user]);
 
-  useEffect(() => {
-    loadDashboardData();
-
-    const handleSync = () => {
-      loadDashboardData();
-    };
-    const handleAssignmentsSync = () => {
-      setAssignments(getStaffAssignments());
-      setAssignmentTimestamps(getStaffAssignmentTimestamps());
-    };
-    const handleArchivedSync = () => {
-      setArchivedMap(getArchivedRequestsMap());
-    };
-
-    window.addEventListener('regquest_requests_updated', handleSync);
-    window.addEventListener('regquest_profile_updated', handleSync);
-    window.addEventListener('regquest_assignments_updated', handleAssignmentsSync);
-    window.addEventListener('regquest_archived_updated', handleArchivedSync);
-    window.addEventListener('storage', handleAssignmentsSync);
-    window.addEventListener('storage', handleArchivedSync);
-    return () => {
-      window.removeEventListener('regquest_requests_updated', handleSync);
-      window.removeEventListener('regquest_profile_updated', handleSync);
-      window.removeEventListener('regquest_assignments_updated', handleAssignmentsSync);
-      window.removeEventListener('regquest_archived_updated', handleArchivedSync);
-      window.removeEventListener('storage', handleAssignmentsSync);
-      window.removeEventListener('storage', handleArchivedSync);
-    };
-  }, [loadDashboardData]);
+  useSilentSync(loadDashboardData, { intervalMs: 12000 });
 
   // Card 1: Requests assigned to this staff member (excluding archived history)
   // Sorted by: MOST RECENTLY ACCEPTED / ASSIGNED AT THE VERY TOP (REGARDLESS OF REQUEST DATE)!
