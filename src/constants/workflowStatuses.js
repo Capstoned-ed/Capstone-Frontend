@@ -271,9 +271,13 @@ export function formatStatusDisplay(rawStatus, options = {}) {
 export function isClaimedStatus(status) {
   if (!status) return false;
   const raw = typeof status === 'object' ? (status.batch_status || status.status || status.rawStatus || status.raw_status) : status;
-  const s = String(raw || '').trim().toUpperCase();
   const norm = normalizeToBackendStatus(raw);
-  return norm === REQUEST_STATUS.RELEASED || ['CLAIMED', 'COMPLETED', 'RELEASED'].includes(s) || s.includes('CLAIM') || s.includes('RELEASE');
+  if (norm === REQUEST_STATUS.READY_FOR_RELEASE) return false;
+  const s = String(raw || '').trim().toUpperCase();
+  if (s.includes('READY') || s.includes('FOR RELEASE') || s.includes('FOR_RELEASE') || s.includes('RELEASING')) {
+    return false;
+  }
+  return norm === REQUEST_STATUS.RELEASED || ['CLAIMED', 'COMPLETED', 'RELEASED'].includes(s) || s.includes('CLAIM');
 }
 
 /**

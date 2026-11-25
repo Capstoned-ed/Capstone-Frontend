@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { API_URL } from '../config/env';
 import { ROUTES } from '../constants/routes';
-import apiCache from './cache';
+import apiCache, { isNonFallbackSuccessResponse } from './cache';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -22,11 +22,20 @@ apiClient.get = function (url, config = {}) {
 
   // In-flight deduplication: simultaneous identical calls share the pending promise
   return apiCache.deduplicate(key, async () => {
-    const response = await originalGet(url, config);
-    if (response && response.status >= 200 && response.status < 300) {
-      apiCache.set(key, response.data);
+    try {
+      const response = await originalGet(url, config);
+      if (isNonFallbackSuccessResponse(response, url)) {
+        apiCache.set(key, response.data);
+      } else {
+        // Never cache error or fallback responses
+        apiCache.delete(key);
+      }
+      return response;
+    } catch (err) {
+      // Purge on error
+      apiCache.delete(key);
+      throw err;
     }
-    return response;
   });
 };
 
@@ -134,6 +143,7 @@ apiClient.interceptors.response.use(
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         sessionStorage.clear();
+        apiCache.clear();
       } catch {}
       if (window.location.pathname !== ROUTES.LOGIN) {
         window.location.href = ROUTES.LOGIN;
@@ -179,6 +189,7 @@ apiClient.interceptors.response.use(
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         sessionStorage.clear();
+        apiCache.clear();
       } catch {}
       if (window.location.pathname !== ROUTES.LOGIN) {
         window.location.href = ROUTES.LOGIN;

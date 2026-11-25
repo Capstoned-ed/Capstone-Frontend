@@ -171,7 +171,7 @@ export function compareCredentialCodes(a, b) {
   return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
 }
 
-function mergeCredentialCatalog(backendList = []) {
+export function mergeCredentialCatalog(backendList = []) {
   const isStandaloneCertification = (item) => {
     const codeUpper = String(item?.code || '').trim().toUpperCase();
     const nameLower = String(item?.name || '').trim().toLowerCase();

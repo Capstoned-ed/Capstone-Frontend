@@ -1,6 +1,6 @@
 import { jwtDecode } from 'jwt-decode';
 import apiClient from './client';
-import credentialTypesApi from './credentialTypes';
+import credentialTypesApi, { mergeCredentialCatalog } from './credentialTypes';
 import { saveClearanceAttachment, getClearanceAttachment } from './clearances';
 import { getStoredPaymentProof } from './payments';
 import {
@@ -1166,23 +1166,39 @@ export function areRequestListsEqual(prevList = [], nextList = []) {
   return true;
 }
 
-let latestNormalizedRequestsCache = null;
+const userNormalizedRequestsCache = new Map();
+
+export function clearNormalizedRequestsCache() {
+  userNormalizedRequestsCache.clear();
+}
 
 export const requestsApi = {
   /**
-   * Return in-memory cached normalized request list if available (0ms instant render).
+   * Clear in-memory cached requests for all scopes (called on logout/login/role switch).
    */
-  getCachedList: () => {
-    return latestNormalizedRequestsCache;
+  clearCache: () => {
+    clearNormalizedRequestsCache();
   },
 
   /**
-   * Return in-memory cached credential types if available.
+   * Return in-memory cached normalized request list strictly scoped to active authenticated user.
+   */
+  getCachedList: (user = null) => {
+    const scope = getActiveUserId(user);
+    if (!scope || scope === 'anon') return null;
+    const cached = userNormalizedRequestsCache.get(scope);
+    return Array.isArray(cached) && cached.length > 0 ? cached : null;
+  },
+
+  /**
+   * Return in-memory cached credential types if available (merged with live DB prices and codes).
    */
   getCachedCredentialTypes: () => {
     const raw = apiClient.getCached('/api/credential-types/');
-    if (Array.isArray(raw)) return raw;
-    if (Array.isArray(raw?.results)) return raw.results;
+    const list = Array.isArray(raw) ? raw : (raw?.results || null);
+    if (list && list.length > 0) {
+      return mergeCredentialCatalog(list);
+    }
     return null;
   },
 
@@ -1203,7 +1219,14 @@ export const requestsApi = {
       while (nextUrl && pageGuard < 20) {
         pageGuard += 1;
         try {
-          const nextRes = await apiClient.get(nextUrl);
+          let requestUrl = nextUrl;
+          try {
+            if (nextUrl.startsWith('http://') || nextUrl.startsWith('https://')) {
+              const parsed = new URL(nextUrl);
+              requestUrl = `${parsed.pathname}${parsed.search}`;
+            }
+          } catch {}
+          const nextRes = await apiClient.get(requestUrl);
           const nextItems = Array.isArray(nextRes.data) ? nextRes.data : (nextRes.data?.results || []);
           rawList.push(...nextItems);
           nextUrl = !Array.isArray(nextRes.data) ? nextRes.data?.next : null;
@@ -1223,7 +1246,12 @@ export const requestsApi = {
     const sorted = backendResults
       .filter(isValidRequest)
       .sort(sortRequestsNewestFirst);
-    latestNormalizedRequestsCache = sorted;
+
+    // Only cache full unfiltered request lists for the active authenticated user
+    const scope = getActiveUserId(user);
+    if (scope && scope !== 'anon' && sorted.length > 0 && (!params || Object.keys(params).length === 0)) {
+      userNormalizedRequestsCache.set(scope, sorted);
+    }
     return sorted;
   },
 
